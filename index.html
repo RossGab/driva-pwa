@@ -8,11 +8,7 @@
 
   <style>
     body { font-family: Arial; padding: 10px; }
-    .version {
-      font-size: 12px;
-      color: #666;
-      margin-bottom: 10px;
-    }
+    .version { font-size: 12px; color: #666; margin-bottom: 10px; }
     .task {
       border: 1px solid #ccc;
       padding: 10px;
@@ -30,10 +26,9 @@
       padding: 10px;
       margin-top: 8px;
     }
-    .timestamp {
-      font-size: 12px;
-      color: #444;
-      margin-top: 4px;
+    .loading {
+      color: #888;
+      font-style: italic;
     }
   </style>
 
@@ -48,18 +43,16 @@
 
 <div class="version">Driver PWA — <b id="version"></b></div>
 <h2>📋 Driver Task List</h2>
-
-<div id="tasks"></div>
+<div id="tasks" class="loading">Loading tasks…</div>
 
 <script>
-// ===================== APP VERSION =====================
-const APP_VERSION = "v1.0.4"; // 🔥 CHANGE THIS WHEN YOU UPDATE CODE
+// ===================== VERSION =====================
+const APP_VERSION = "v1.0.5";
 document.getElementById("version").innerText = APP_VERSION;
 
 // ===================== DB CONFIG =====================
 const DB_NAME = "driver-pwa-db";
 const STORE = "tasks";
-
 let tasks = [];
 
 // ===================== INDEXED DB =====================
@@ -73,32 +66,48 @@ function openDB() {
   });
 }
 
-// ===================== LOAD / SAVE =====================
-async function saveTask(task) {
+// ===================== SEED DATA =====================
+async function seedTasks() {
   const db = await openDB();
   const tx = db.transaction(STORE, "readwrite");
-  tx.objectStore(STORE).put(task);
+  const store = tx.objectStore(STORE);
+
+  await store.put({
+    id: "1",
+    name: "Juan Dela Cruz",
+    address: "123 Rizal St",
+    status: "PENDING",
+    lat: null,
+    lng: null,
+    remarks: "",
+    capturedAt: null,
+    uploadedAt: null
+  });
+
+  await store.put({
+    id: "2",
+    name: "Maria Santos",
+    address: "45 Del Pilar Ave",
+    status: "PENDING",
+    lat: null,
+    lng: null,
+    remarks: "",
+    capturedAt: null,
+    uploadedAt: null
+  });
 }
 
+// ===================== LOAD TASKS =====================
 async function loadTasks() {
   const db = await openDB();
   const tx = db.transaction(STORE, "readonly");
   const store = tx.objectStore(STORE);
   const req = store.getAll();
 
-  req.onsuccess = () => {
+  req.onsuccess = async () => {
     if (req.result.length === 0) {
-      saveTask({
-        id:"1", name:"Juan Dela Cruz", address:"123 Rizal St",
-        status:"PENDING", lat:null, lng:null, remarks:"",
-        capturedAt:null, uploadedAt:null
-      });
-      saveTask({
-        id:"2", name:"Maria Santos", address:"45 Del Pilar Ave",
-        status:"PENDING", lat:null, lng:null, remarks:"",
-        capturedAt:null, uploadedAt:null
-      });
-      setTimeout(loadTasks, 200);
+      await seedTasks();
+      loadTasks(); // reload after seeding
     } else {
       tasks = req.result;
       render();
@@ -108,33 +117,29 @@ async function loadTasks() {
 
 // ===================== UI =====================
 function formatTime(ts) {
-  if (!ts) return "—";
-  return new Date(ts).toLocaleString();
+  return ts ? new Date(ts).toLocaleString() : "—";
 }
 
 function render() {
   const el = document.getElementById("tasks");
+  el.classList.remove("loading");
   el.innerHTML = "";
 
   tasks.forEach(task => {
-    const loc = task.lat && task.lng
-      ? `📍 ${task.lat.toFixed(6)}, ${task.lng.toFixed(6)}`
-      : `📍 Location not available`;
-
     el.innerHTML += `
       <div class="task">
         <b>${task.name}</b><br/>
         ${task.address}<br/>
         Status: <span class="status">${task.status}</span><br/>
-        <div>${loc}</div>
+        <div>📍 ${task.lat && task.lng ? `${task.lat.toFixed(6)}, ${task.lng.toFixed(6)}` : "Location not available"}</div>
 
-        <div class="timestamp">📸 Captured: ${formatTime(task.capturedAt)}</div>
-        <div class="timestamp">☁️ Uploaded: ${formatTime(task.uploadedAt)}</div>
+        <div>📸 Captured: ${formatTime(task.capturedAt)}</div>
+        <div>☁️ Uploaded: ${formatTime(task.uploadedAt)}</div>
 
         <textarea placeholder="Remarks..."
           ${task.status === "DONE" ? "disabled" : ""}
           oninput="updateRemarks('${task.id}', this.value)"
-        >${task.remarks || ""}</textarea>
+        >${task.remarks}</textarea>
 
         <button ${task.status !== "PENDING" ? "disabled" : ""}
           onclick="capture('${task.id}')">
@@ -145,86 +150,69 @@ function render() {
   });
 }
 
-function updateRemarks(id, value) {
+async function updateRemarks(id, value) {
   const task = tasks.find(t => t.id === id);
   task.remarks = value;
-  saveTask(task);
+  const db = await openDB();
+  db.transaction(STORE, "readwrite").objectStore(STORE).put(task);
 }
 
 // ===================== CAPTURE =====================
 function capture(id) {
   const task = tasks.find(t => t.id === id);
-  task.status = "CAPTURING";
-  saveTask(task);
-  render();
+  task.status = "QUEUED";
+  task.capturedAt = Date.now();
+  save(task);
 
   const input = document.createElement("input");
   input.type = "file";
   input.accept = "image/*";
   input.capture = "environment";
 
-  input.onchange = e => {
-    if (!e.target.files.length) {
-      task.status = "PENDING";
-      saveTask(task);
-      render();
-      return;
-    }
-
-    task.capturedAt = Date.now();
-    task.status = "QUEUED";
-    saveTask(task);
-    render();
-
-    // GPS (best-effort)
+  input.onchange = () => {
     navigator.geolocation.getCurrentPosition(
       pos => {
         task.lat = pos.coords.latitude;
         task.lng = pos.coords.longitude;
-        saveTask(task);
-        render();
+        save(task);
       },
       () => console.warn("GPS unavailable"),
-      { enableHighAccuracy:false, timeout:4000 }
+      { enableHighAccuracy: false, timeout: 4000 }
     );
   };
 
   input.click();
 }
 
-// ===================== SYNC ENGINE =====================
+// ===================== SAVE + SYNC =====================
+async function save(task) {
+  const db = await openDB();
+  db.transaction(STORE, "readwrite").objectStore(STORE).put(task);
+  render();
+}
+
 async function sync() {
   if (!navigator.onLine) return;
 
   const db = await openDB();
-  const tx = db.transaction(STORE, "readwrite");
-  const store = tx.objectStore(STORE);
+  const store = db.transaction(STORE, "readwrite").objectStore(STORE);
   const req = store.getAll();
 
   req.onsuccess = () => {
     req.result.forEach(task => {
       if (task.status === "QUEUED") {
-        task.status = "UPLOADING";
+        task.status = "DONE";
+        task.uploadedAt = Date.now();
         store.put(task);
         render();
-
-        setTimeout(() => {
-          task.status = "DONE";
-          task.uploadedAt = Date.now();
-          store.put(task);
-          render();
-        }, 1200);
       }
     });
   };
 }
 
 setInterval(sync, 4000);
+window.addEventListener("load", loadTasks);
 window.addEventListener("online", sync);
-window.addEventListener("load", () => {
-  loadTasks();
-  sync();
-});
 </script>
 
 </body>
