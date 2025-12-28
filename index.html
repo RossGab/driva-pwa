@@ -1,10 +1,9 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <meta charset="UTF-8" />
+  <meta charset="UTF-8">
   <title>Driver PWA</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <link rel="manifest" href="manifest.json">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
 
   <style>
     body { font-family: Arial; padding: 10px; }
@@ -16,61 +15,52 @@
       border-radius: 6px;
     }
     .status { font-weight: bold; }
-    textarea { width: 100%; min-height: 60px; margin-top: 6px; }
+    textarea { width: 100%; min-height: 50px; }
     button { width: 100%; padding: 10px; margin-top: 8px; }
   </style>
-
-  <script>
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('service-worker.js');
-    }
-  </script>
 </head>
 
 <body>
 
-<div class="version">Driver PWA — <b id="version"></b></div>
+<div class="version">Driver PWA — <b>v1.0.7 (RESET)</b></div>
 <h2>📋 Driver Task List</h2>
+
 <div id="tasks">Loading tasks…</div>
 
 <script>
-// ================= VERSION =================
-const APP_VERSION = "v1.0.6";
-document.getElementById("version").innerText = APP_VERSION;
-
-// ================= DB CONFIG =================
+// ================== DB CONFIG ==================
 const DB_NAME = "driver-pwa-db";
 const STORE = "tasks";
-let tasks = [];
 
-// ================= INDEXED DB =================
-function openDB() {
-  return new Promise(resolve => {
-    const req = indexedDB.open(DB_NAME, 1);
-    req.onupgradeneeded = e => {
-      e.target.result.createObjectStore(STORE, { keyPath: "id" });
-    };
-    req.onsuccess = e => resolve(e.target.result);
-  });
+// ================== OPEN DB ==================
+function openDB(callback) {
+  const req = indexedDB.open(DB_NAME, 1);
+
+  req.onupgradeneeded = e => {
+    e.target.result.createObjectStore(STORE, { keyPath: "id" });
+  };
+
+  req.onsuccess = e => callback(e.target.result);
 }
 
-// ================= SEED TASKS =================
-async function seedTasksIfEmpty() {
-  const db = await openDB();
+// ================== INIT ==================
+openDB(db => {
   const tx = db.transaction(STORE, "readwrite");
   const store = tx.objectStore(STORE);
 
-  const countReq = store.count();
-  countReq.onsuccess = () => {
-    if (countReq.result === 0) {
+  const getAllReq = store.getAll();
+
+  getAllReq.onsuccess = () => {
+    if (getAllReq.result.length === 0) {
+      // 🔥 FORCE SEED (NO ASYNC MAGIC)
       store.put({
         id: "1",
         name: "Juan Dela Cruz",
         address: "123 Rizal St",
         status: "PENDING",
+        remarks: "",
         lat: null,
         lng: null,
-        remarks: "",
         capturedAt: null,
         uploadedAt: null
       });
@@ -80,57 +70,46 @@ async function seedTasksIfEmpty() {
         name: "Maria Santos",
         address: "45 Del Pilar Ave",
         status: "PENDING",
+        remarks: "",
         lat: null,
         lng: null,
-        remarks: "",
         capturedAt: null,
         uploadedAt: null
       });
     }
   };
 
-  tx.oncomplete = loadTasks;
+  tx.oncomplete = () => loadTasks();
+});
+
+// ================== LOAD TASKS ==================
+function loadTasks() {
+  openDB(db => {
+    const tx = db.transaction(STORE, "readonly");
+    const store = tx.objectStore(STORE);
+    const req = store.getAll();
+
+    req.onsuccess = () => render(req.result);
+  });
 }
 
-// ================= LOAD TASKS =================
-async function loadTasks() {
-  const db = await openDB();
-  const tx = db.transaction(STORE, "readonly");
-  const store = tx.objectStore(STORE);
-  const req = store.getAll();
-
-  req.onsuccess = () => {
-    tasks = req.result;
-    render();
-  };
-}
-
-// ================= UI =================
-function formatTime(ts) {
-  return ts ? new Date(ts).toLocaleString() : "—";
-}
-
-function render() {
+// ================== RENDER ==================
+function render(tasks) {
   const el = document.getElementById("tasks");
   el.innerHTML = "";
 
   tasks.forEach(task => {
     el.innerHTML += `
       <div class="task">
-        <b>${task.name}</b><br/>
-        ${task.address}<br/>
-        Status: <span class="status">${task.status}</span><br/>
-        <div>📍 ${task.lat && task.lng ? `${task.lat.toFixed(6)}, ${task.lng.toFixed(6)}` : "Location not available"}</div>
-        <div>📸 Captured: ${formatTime(task.capturedAt)}</div>
-        <div>☁️ Uploaded: ${formatTime(task.uploadedAt)}</div>
+        <b>${task.name}</b><br>
+        ${task.address}<br>
+        Status: <span class="status">${task.status}</span><br>
+        📸 Captured: ${task.capturedAt ? new Date(task.capturedAt).toLocaleString() : "—"}<br>
+        ☁️ Uploaded: ${task.uploadedAt ? new Date(task.uploadedAt).toLocaleString() : "—"}<br>
 
-        <textarea placeholder="Remarks..."
-          ${task.status === "DONE" ? "disabled" : ""}
-          oninput="updateRemarks('${task.id}', this.value)"
-        >${task.remarks}</textarea>
+        <textarea placeholder="Remarks...">${task.remarks}</textarea>
 
-        <button ${task.status !== "PENDING" ? "disabled" : ""}
-          onclick="capture('${task.id}')">
+        <button onclick="capture('${task.id}')">
           📷 Upload Picture
         </button>
       </div>
@@ -138,76 +117,26 @@ function render() {
   });
 }
 
-// ================= UPDATE REMARKS =================
-async function updateRemarks(id, value) {
-  const task = tasks.find(t => t.id === id);
-  task.remarks = value;
-  const db = await openDB();
-  db.transaction(STORE, "readwrite").objectStore(STORE).put(task);
+// ================== CAPTURE (SIMPLIFIED) ==================
+function capture(id) {
+  openDB(db => {
+    const tx = db.transaction(STORE, "readwrite");
+    const store = tx.objectStore(STORE);
+    const req = store.get(id);
+
+    req.onsuccess = () => {
+      const task = req.result;
+      task.status = "DONE";
+      task.capturedAt = Date.now();
+      task.uploadedAt = Date.now();
+      store.put(task);
+    };
+
+    tx.oncomplete = loadTasks;
+  });
 }
-
-// ================= CAPTURE =================
-async function capture(id) {
-  const task = tasks.find(t => t.id === id);
-  task.status = "QUEUED";
-  task.capturedAt = Date.now();
-  save(task);
-
-  const input = document.createElement("input");
-  input.type = "file";
-  input.accept = "image/*";
-  input.capture = "environment";
-
-  input.onchange = () => {
-    navigator.geolocation.getCurrentPosition(
-      pos => {
-        task.lat = pos.coords.latitude;
-        task.lng = pos.coords.longitude;
-        save(task);
-      },
-      () => console.warn("GPS unavailable"),
-      { enableHighAccuracy: false, timeout: 4000 }
-    );
-  };
-
-  input.click();
-}
-
-// ================= SAVE =================
-async function save(task) {
-  const db = await openDB();
-  db.transaction(STORE, "readwrite").objectStore(STORE).put(task);
-  render();
-}
-
-// ================= SYNC =================
-async function sync() {
-  if (!navigator.onLine) return;
-
-  const db = await openDB();
-  const store = db.transaction(STORE, "readwrite").objectStore(STORE);
-  const req = store.getAll();
-
-  req.onsuccess = () => {
-    req.result.forEach(task => {
-      if (task.status === "QUEUED") {
-        task.status = "DONE";
-        task.uploadedAt = Date.now();
-        store.put(task);
-        render();
-      }
-    });
-  };
-}
-
-// ================= START =================
-window.addEventListener("load", () => {
-  seedTasksIfEmpty();
-  sync();
-});
-setInterval(sync, 4000);
-window.addEventListener("online", sync);
 </script>
 
 </body>
 </html>
+
