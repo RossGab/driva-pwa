@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>Driver PWA</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <link rel="manifest" href="manifest.json" />
+
+  <style>
+    body { font-family: Arial; padding: 10px; }
+    .task { border: 1px solid #ccc; padding: 10px; margin-bottom: 10px; }
+    .status { font-weight: bold; }
+    button { padding: 8px; width: 100%; }
+  </style>
+
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('service-worker.js');
+    }
+  </script>
+</head>
+
+<body>
+<h2>Driver Task List</h2>
+
+<div id="tasks"></div>
+
+<script>
+const tasks = [
+  { id: "1", name: "Juan Dela Cruz", address: "123 Rizal St", status: "PENDING" },
+  { id: "2", name: "Maria Santos", address: "45 Del Pilar Ave", status: "PENDING" }
+];
+
+const dbName = "driver-pwa-db";
+
+// ---------------- IndexedDB ----------------
+function openDB() {
+  return new Promise((resolve) => {
+    const req = indexedDB.open(dbName, 1);
+    req.onupgradeneeded = e => {
+      e.target.result.createObjectStore("queue", { keyPath: "id" });
+    };
+    req.onsuccess = e => resolve(e.target.result);
+  });
+}
+
+// ---------------- UI ----------------
+function render() {
+  const el = document.getElementById("tasks");
+  el.innerHTML = "";
+
+  tasks.forEach(t => {
+    const div = document.createElement("div");
+    div.className = "task";
+    div.innerHTML = `
+      <b>${t.name}</b><br/>
+      ${t.address}<br/>
+      Status: <span class="status">${t.status}</span><br/><br/>
+      <button ${t.status !== "PENDING" ? "disabled" : ""}>Upload Picture</button>
+    `;
+    div.querySelector("button").onclick = () => capture(t);
+    el.appendChild(div);
+  });
+}
+
+// ---------------- Capture ----------------
+function capture(task) {
+  navigator.geolocation.getCurrentPosition(pos => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "image/*";
+    input.capture = "environment";
+
+    input.onchange = async e => {
+      const db = await openDB();
+      const tx = db.transaction("queue", "readwrite");
+      tx.objectStore("queue").put({
+        id: task.id,
+        photo: e.target.files[0],
+        lat: pos.coords.latitude,
+        lng: pos.coords.longitude,
+        time: Date.now()
+      });
+
+      task.status = "QUEUED";
+      render();
+      sync();
+    };
+
+    input.click();
+  });
+}
+
+// ---------------- Sync (mock) ----------------
+async function sync() {
+  if (!navigator.onLine) return;
+
+  const db = await openDB();
+  const tx = db.transaction("queue", "readwrite");
+  const store = tx.objectStore("queue");
+  const req = store.getAll();
+
+  req.onsuccess = () => {
+    req.result.forEach(item => {
+      setTimeout(() => {
+        store.delete(item.id);
+        const t = tasks.find(x => x.id === item.id);
+        t.status = "DONE";
+        render();
+      }, 800);
+    });
+  };
+}
+
+window.addEventListener("online", sync);
+render();
+</script>
+</body>
+</html>
