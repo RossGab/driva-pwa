@@ -16,20 +16,8 @@
       border-radius: 6px;
     }
     .status { font-weight: bold; }
-    textarea {
-      width: 100%;
-      min-height: 60px;
-      margin-top: 6px;
-    }
-    button {
-      width: 100%;
-      padding: 10px;
-      margin-top: 8px;
-    }
-    .loading {
-      color: #888;
-      font-style: italic;
-    }
+    textarea { width: 100%; min-height: 60px; margin-top: 6px; }
+    button { width: 100%; padding: 10px; margin-top: 8px; }
   </style>
 
   <script>
@@ -43,19 +31,19 @@
 
 <div class="version">Driver PWA — <b id="version"></b></div>
 <h2>📋 Driver Task List</h2>
-<div id="tasks" class="loading">Loading tasks…</div>
+<div id="tasks">Loading tasks…</div>
 
 <script>
-// ===================== VERSION =====================
-const APP_VERSION = "v1.0.5";
+// ================= VERSION =================
+const APP_VERSION = "v1.0.6";
 document.getElementById("version").innerText = APP_VERSION;
 
-// ===================== DB CONFIG =====================
+// ================= DB CONFIG =================
 const DB_NAME = "driver-pwa-db";
 const STORE = "tasks";
 let tasks = [];
 
-// ===================== INDEXED DB =====================
+// ================= INDEXED DB =================
 function openDB() {
   return new Promise(resolve => {
     const req = indexedDB.open(DB_NAME, 1);
@@ -66,63 +54,64 @@ function openDB() {
   });
 }
 
-// ===================== SEED DATA =====================
-async function seedTasks() {
+// ================= SEED TASKS =================
+async function seedTasksIfEmpty() {
   const db = await openDB();
   const tx = db.transaction(STORE, "readwrite");
   const store = tx.objectStore(STORE);
 
-  await store.put({
-    id: "1",
-    name: "Juan Dela Cruz",
-    address: "123 Rizal St",
-    status: "PENDING",
-    lat: null,
-    lng: null,
-    remarks: "",
-    capturedAt: null,
-    uploadedAt: null
-  });
+  const countReq = store.count();
+  countReq.onsuccess = () => {
+    if (countReq.result === 0) {
+      store.put({
+        id: "1",
+        name: "Juan Dela Cruz",
+        address: "123 Rizal St",
+        status: "PENDING",
+        lat: null,
+        lng: null,
+        remarks: "",
+        capturedAt: null,
+        uploadedAt: null
+      });
 
-  await store.put({
-    id: "2",
-    name: "Maria Santos",
-    address: "45 Del Pilar Ave",
-    status: "PENDING",
-    lat: null,
-    lng: null,
-    remarks: "",
-    capturedAt: null,
-    uploadedAt: null
-  });
+      store.put({
+        id: "2",
+        name: "Maria Santos",
+        address: "45 Del Pilar Ave",
+        status: "PENDING",
+        lat: null,
+        lng: null,
+        remarks: "",
+        capturedAt: null,
+        uploadedAt: null
+      });
+    }
+  };
+
+  tx.oncomplete = loadTasks;
 }
 
-// ===================== LOAD TASKS =====================
+// ================= LOAD TASKS =================
 async function loadTasks() {
   const db = await openDB();
   const tx = db.transaction(STORE, "readonly");
   const store = tx.objectStore(STORE);
   const req = store.getAll();
 
-  req.onsuccess = async () => {
-    if (req.result.length === 0) {
-      await seedTasks();
-      loadTasks(); // reload after seeding
-    } else {
-      tasks = req.result;
-      render();
-    }
+  req.onsuccess = () => {
+    tasks = req.result;
+    render();
   };
 }
 
-// ===================== UI =====================
+// ================= UI =================
 function formatTime(ts) {
   return ts ? new Date(ts).toLocaleString() : "—";
 }
 
 function render() {
   const el = document.getElementById("tasks");
-  el.classList.remove("loading");
   el.innerHTML = "";
 
   tasks.forEach(task => {
@@ -132,7 +121,6 @@ function render() {
         ${task.address}<br/>
         Status: <span class="status">${task.status}</span><br/>
         <div>📍 ${task.lat && task.lng ? `${task.lat.toFixed(6)}, ${task.lng.toFixed(6)}` : "Location not available"}</div>
-
         <div>📸 Captured: ${formatTime(task.capturedAt)}</div>
         <div>☁️ Uploaded: ${formatTime(task.uploadedAt)}</div>
 
@@ -150,6 +138,7 @@ function render() {
   });
 }
 
+// ================= UPDATE REMARKS =================
 async function updateRemarks(id, value) {
   const task = tasks.find(t => t.id === id);
   task.remarks = value;
@@ -157,8 +146,8 @@ async function updateRemarks(id, value) {
   db.transaction(STORE, "readwrite").objectStore(STORE).put(task);
 }
 
-// ===================== CAPTURE =====================
-function capture(id) {
+// ================= CAPTURE =================
+async function capture(id) {
   const task = tasks.find(t => t.id === id);
   task.status = "QUEUED";
   task.capturedAt = Date.now();
@@ -184,13 +173,14 @@ function capture(id) {
   input.click();
 }
 
-// ===================== SAVE + SYNC =====================
+// ================= SAVE =================
 async function save(task) {
   const db = await openDB();
   db.transaction(STORE, "readwrite").objectStore(STORE).put(task);
   render();
 }
 
+// ================= SYNC =================
 async function sync() {
   if (!navigator.onLine) return;
 
@@ -210,8 +200,12 @@ async function sync() {
   };
 }
 
+// ================= START =================
+window.addEventListener("load", () => {
+  seedTasksIfEmpty();
+  sync();
+});
 setInterval(sync, 4000);
-window.addEventListener("load", loadTasks);
 window.addEventListener("online", sync);
 </script>
 
