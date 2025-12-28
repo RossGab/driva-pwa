@@ -1,32 +1,29 @@
-
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
   <meta charset="UTF-8" />
   <title>Driver PWA</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-
-  <link rel="manifest" href="manifest.json" />
+  <link rel="manifest" href="manifest.json">
 
   <style>
-    body {
-      font-family: Arial, sans-serif;
-      padding: 10px;
-    }
+    body { font-family: Arial; padding: 10px; }
     .task {
       border: 1px solid #ccc;
       padding: 10px;
       margin-bottom: 12px;
       border-radius: 6px;
     }
-    .status {
-      font-weight: bold;
+    .status { font-weight: bold; }
+    textarea {
+      width: 100%;
+      min-height: 60px;
+      margin-top: 6px;
     }
     button {
       width: 100%;
       padding: 10px;
       margin-top: 8px;
-      font-size: 16px;
     }
   </style>
 
@@ -40,142 +37,158 @@
 <body>
 
 <h2>📋 Driver Task List</h2>
-
 <div id="tasks"></div>
 
 <script>
-// ===================== SAMPLE TASKS =====================
-const tasks = [
-  { id: "1", name: "Juan Dela Cruz", address: "123 Rizal St", status: "PENDING", lat: null, lng: null },
-  { id: "2", name: "Maria Santos", address: "45 Del Pilar Ave", status: "PENDING", lat: null, lng: null }
-];
-
 const DB_NAME = "driver-pwa-db";
+const STORE = "tasks";
 
-// ===================== INDEXED DB =====================
+// ---------- IndexedDB ----------
 function openDB() {
-  return new Promise((resolve, reject) => {
+  return new Promise(resolve => {
     const req = indexedDB.open(DB_NAME, 1);
     req.onupgradeneeded = e => {
-      e.target.result.createObjectStore("queue", { keyPath: "id" });
+      e.target.result.createObjectStore(STORE, { keyPath: "id" });
     };
     req.onsuccess = e => resolve(e.target.result);
-    req.onerror = () => reject("IndexedDB error");
   });
 }
 
-// ===================== RENDER UI =====================
+// ---------- Load / Save ----------
+async function loadTasks() {
+  const db = await openDB();
+  const tx = db.transaction(STORE, "readonly");
+  const store = tx.objectStore(STORE);
+  const req = store.getAll();
+
+  req.onsuccess = () => {
+    if (req.result.length === 0) {
+      // Seed data
+      saveTask({ id:"1", name:"Juan Dela Cruz", address:"123 Rizal St", status:"PENDING", lat:null, lng:null, remarks:"" });
+      saveTask({ id:"2", name:"Maria Santos", address:"45 Del Pilar Ave", status:"PENDING", lat:null, lng:null, remarks:"" });
+      setTimeout(loadTasks, 200);
+    } else {
+      tasks = req.result;
+      render();
+    }
+  };
+}
+
+async function saveTask(task) {
+  const db = await openDB();
+  const tx = db.transaction(STORE, "readwrite");
+  tx.objectStore(STORE).put(task);
+}
+
+let tasks = [];
+
+// ---------- UI ----------
 function render() {
-  const container = document.getElementById("tasks");
-  container.innerHTML = "";
+  const el = document.getElementById("tasks");
+  el.innerHTML = "";
 
   tasks.forEach(task => {
-    const div = document.createElement("div");
-    div.className = "task";
+    const loc = task.lat && task.lng
+      ? `<div>📍 ${task.lat.toFixed(6)}, ${task.lng.toFixed(6)}</div>`
+      : `<div>📍 Location not available</div>`;
 
-    const locationInfo = (task.lat && task.lng)
-      ? `<div>📍 Lat: ${task.lat.toFixed(6)}<br/>📍 Lng: ${task.lng.toFixed(6)}</div>`
-      : "";
-
-    div.innerHTML = `
-      <div><strong>${task.name}</strong></div>
-      <div>${task.address}</div>
-      <div>Status: <span class="status">${task.status}</span></div>
-      ${locationInfo}
-      <button ${task.status !== "PENDING" ? "disabled" : ""}>
-        📷 Upload Picture
-      </button>
+    el.innerHTML += `
+      <div class="task">
+        <b>${task.name}</b><br/>
+        ${task.address}<br/>
+        Status: <span class="status">${task.status}</span><br/>
+        ${loc}
+        <textarea placeholder="Remarks..."
+          ${task.status === "DONE" ? "disabled" : ""}
+          oninput="updateRemarks('${task.id}', this.value)"
+        >${task.remarks || ""}</textarea>
+        <button ${task.status !== "PENDING" ? "disabled" : ""} onclick="capture('${task.id}')">
+          📷 Upload Picture
+        </button>
+      </div>
     `;
-
-    div.querySelector("button").onclick = () => capture(task);
-    container.appendChild(div);
   });
 }
 
-// ===================== CAPTURE PHOTO (FAST UX) =====================
-function capture(task) {
-  task.status = "OPENING CAMERA...";
+function updateRemarks(id, value) {
+  const task = tasks.find(t => t.id === id);
+  task.remarks = value;
+  saveTask(task);
+}
+
+// ---------- Capture ----------
+function capture(id) {
+  const task = tasks.find(t => t.id === id);
+  task.status = "CAPTURING";
+  saveTask(task);
   render();
 
-  // 📷 Open camera immediately
   const input = document.createElement("input");
   input.type = "file";
   input.accept = "image/*";
   input.capture = "environment";
 
-  input.onchange = async e => {
+  input.onchange = e => {
     if (!e.target.files.length) {
       task.status = "PENDING";
+      saveTask(task);
       render();
       return;
     }
 
-    task.status = "GETTING LOCATION...";
+    task.status = "QUEUED";
+    saveTask(task);
     render();
 
-    // 📍 Get GPS AFTER photo
+    // GPS is best-effort, not blocking
     navigator.geolocation.getCurrentPosition(
-      async pos => {
-        const lat = pos.coords.latitude;
-        const lng = pos.coords.longitude;
-
-        task.lat = lat;
-        task.lng = lng;
-
-        const db = await openDB();
-        const tx = db.transaction("queue", "readwrite");
-        tx.objectStore("queue").put({
-          id: task.id,
-          photo: e.target.files[0],
-          lat,
-          lng,
-          createdAt: Date.now()
-        });
-
-        task.status = navigator.onLine ? "UPLOADING" : "QUEUED";
+      pos => {
+        task.lat = pos.coords.latitude;
+        task.lng = pos.coords.longitude;
+        saveTask(task);
         render();
-        sync();
       },
       () => {
-        alert("Location permission is required.");
-        task.status = "PENDING";
-        render();
+        // GPS failed – continue anyway
+        console.warn("GPS unavailable, continuing");
       },
-      {
-        enableHighAccuracy: false, // ⚡ faster
-        timeout: 5000              // ⚡ no long freeze
-      }
+      { enableHighAccuracy:false, timeout:4000 }
     );
   };
 
   input.click();
 }
 
-// ===================== SYNC ENGINE (MOCK SERVER) =====================
+// ---------- Sync Engine ----------
 async function sync() {
-  if (!navigator.onLine) return;
-
   const db = await openDB();
-  const tx = db.transaction("queue", "readwrite");
-  const store = tx.objectStore("queue");
+  const tx = db.transaction(STORE, "readwrite");
+  const store = tx.objectStore(STORE);
   const req = store.getAll();
 
   req.onsuccess = () => {
-    req.result.forEach(item => {
-      setTimeout(() => {
-        store.delete(item.id);
-        const t = tasks.find(x => x.id === item.id);
-        if (t) t.status = "DONE";
+    req.result.forEach(task => {
+      if (task.status === "QUEUED" && navigator.onLine) {
+        task.status = "UPLOADING";
+        store.put(task);
         render();
-      }, 800);
+
+        setTimeout(() => {
+          task.status = "DONE";
+          store.put(task);
+          render();
+        }, 1200);
+      }
     });
   };
 }
 
+setInterval(sync, 4000);
 window.addEventListener("online", sync);
-
-// ===================== START APP =====================
-render();
+window.addEventListener("load", () => {
+  loadTasks();
+  sync();
+});
 </script>
 
 </body>
