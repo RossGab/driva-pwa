@@ -92,27 +92,32 @@ function render() {
   });
 }
 
-// ===================== CAPTURE PHOTO + GPS =====================
+// ===================== CAPTURE PHOTO (FAST UX) =====================
 function capture(task) {
-  task.status = "CAPTURING";
+  task.status = "OPENING CAMERA...";
   render();
 
-  navigator.geolocation.getCurrentPosition(
-    pos => {
-      const lat = pos.coords.latitude;
-      const lng = pos.coords.longitude;
+  // 📷 Open camera immediately
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = "image/*";
+  input.capture = "environment";
 
-      const input = document.createElement("input");
-      input.type = "file";
-      input.accept = "image/*";
-      input.capture = "environment";
+  input.onchange = async e => {
+    if (!e.target.files.length) {
+      task.status = "PENDING";
+      render();
+      return;
+    }
 
-      input.onchange = async e => {
-        if (!e.target.files.length) {
-          task.status = "PENDING";
-          render();
-          return;
-        }
+    task.status = "GETTING LOCATION...";
+    render();
+
+    // 📍 Get GPS AFTER photo
+    navigator.geolocation.getCurrentPosition(
+      async pos => {
+        const lat = pos.coords.latitude;
+        const lng = pos.coords.longitude;
 
         task.lat = lat;
         task.lng = lng;
@@ -130,17 +135,20 @@ function capture(task) {
         task.status = navigator.onLine ? "UPLOADING" : "QUEUED";
         render();
         sync();
-      };
+      },
+      () => {
+        alert("Location permission is required.");
+        task.status = "PENDING";
+        render();
+      },
+      {
+        enableHighAccuracy: false, // ⚡ faster
+        timeout: 5000              // ⚡ no long freeze
+      }
+    );
+  };
 
-      input.click();
-    },
-    () => {
-      alert("Location permission is required.");
-      task.status = "PENDING";
-      render();
-    },
-    { enableHighAccuracy: true, timeout: 10000 }
-  );
+  input.click();
 }
 
 // ===================== SYNC ENGINE (MOCK SERVER) =====================
@@ -159,14 +167,14 @@ async function sync() {
         const t = tasks.find(x => x.id === item.id);
         if (t) t.status = "DONE";
         render();
-      }, 1000);
+      }, 800);
     });
   };
 }
 
 window.addEventListener("online", sync);
 
-// ===================== START =====================
+// ===================== START APP =====================
 render();
 </script>
 
