@@ -22,79 +22,61 @@
 
 <body>
 
-<div class="version">Driver PWA — <b>v1.0.7 (RESET)</b></div>
+<div class="version">Driver PWA — <b>v1.0.8 (NO DB)</b></div>
 <h2>📋 Driver Task List</h2>
 
-<div id="tasks">Loading tasks…</div>
+<div id="tasks"></div>
 
 <script>
-// ================== DB CONFIG ==================
-const DB_NAME = "driver-pwa-db";
-const STORE = "tasks";
+// ================= STORAGE =================
+const STORAGE_KEY = "driver_tasks_v1";
 
-// ================== OPEN DB ==================
-function openDB(callback) {
-  const req = indexedDB.open(DB_NAME, 1);
-
-  req.onupgradeneeded = e => {
-    e.target.result.createObjectStore(STORE, { keyPath: "id" });
-  };
-
-  req.onsuccess = e => callback(e.target.result);
-}
-
-// ================== INIT ==================
-openDB(db => {
-  const tx = db.transaction(STORE, "readwrite");
-  const store = tx.objectStore(STORE);
-
-  const getAllReq = store.getAll();
-
-  getAllReq.onsuccess = () => {
-    if (getAllReq.result.length === 0) {
-      // 🔥 FORCE SEED (NO ASYNC MAGIC)
-      store.put({
-        id: "1",
-        name: "Juan Dela Cruz",
-        address: "123 Rizal St",
-        status: "PENDING",
-        remarks: "",
-        lat: null,
-        lng: null,
-        capturedAt: null,
-        uploadedAt: null
-      });
-
-      store.put({
-        id: "2",
-        name: "Maria Santos",
-        address: "45 Del Pilar Ave",
-        status: "PENDING",
-        remarks: "",
-        lat: null,
-        lng: null,
-        capturedAt: null,
-        uploadedAt: null
-      });
-    }
-  };
-
-  tx.oncomplete = () => loadTasks();
-});
-
-// ================== LOAD TASKS ==================
+// ================= LOAD =================
 function loadTasks() {
-  openDB(db => {
-    const tx = db.transaction(STORE, "readonly");
-    const store = tx.objectStore(STORE);
-    const req = store.getAll();
+  const saved = localStorage.getItem(STORAGE_KEY);
+  if (saved) {
+    return JSON.parse(saved);
+  }
 
-    req.onsuccess = () => render(req.result);
-  });
+  // Seed tasks
+  const tasks = [
+    {
+      id: "1",
+      name: "Juan Dela Cruz",
+      address: "123 Rizal St",
+      status: "PENDING",
+      remarks: "",
+      capturedAt: null,
+      uploadedAt: null
+    },
+    {
+      id: "2",
+      name: "Maria Santos",
+      address: "45 Del Pilar Ave",
+      status: "PENDING",
+      remarks: "",
+      capturedAt: null,
+      uploadedAt: null
+    }
+  ];
+
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
+  return tasks;
 }
 
-// ================== RENDER ==================
-function render(tasks) {
+// ================= SAVE =================
+function saveTasks() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
+}
+
+// ================= UI =================
+function format(ts) {
+  return ts ? new Date(ts).toLocaleString() : "—";
+}
+
+let tasks = loadTasks();
+
+function render() {
   const el = document.getElementById("tasks");
   el.innerHTML = "";
 
@@ -104,12 +86,16 @@ function render(tasks) {
         <b>${task.name}</b><br>
         ${task.address}<br>
         Status: <span class="status">${task.status}</span><br>
-        📸 Captured: ${task.capturedAt ? new Date(task.capturedAt).toLocaleString() : "—"}<br>
-        ☁️ Uploaded: ${task.uploadedAt ? new Date(task.uploadedAt).toLocaleString() : "—"}<br>
+        📸 Captured: ${format(task.capturedAt)}<br>
+        ☁️ Uploaded: ${format(task.uploadedAt)}<br>
 
-        <textarea placeholder="Remarks...">${task.remarks}</textarea>
+        <textarea placeholder="Remarks..."
+          ${task.status === "DONE" ? "disabled" : ""}
+          oninput="updateRemarks('${task.id}', this.value)"
+        >${task.remarks}</textarea>
 
-        <button onclick="capture('${task.id}')">
+        <button ${task.status !== "PENDING" ? "disabled" : ""}
+          onclick="capture('${task.id}')">
           📷 Upload Picture
         </button>
       </div>
@@ -117,26 +103,25 @@ function render(tasks) {
   });
 }
 
-// ================== CAPTURE (SIMPLIFIED) ==================
-function capture(id) {
-  openDB(db => {
-    const tx = db.transaction(STORE, "readwrite");
-    const store = tx.objectStore(STORE);
-    const req = store.get(id);
-
-    req.onsuccess = () => {
-      const task = req.result;
-      task.status = "DONE";
-      task.capturedAt = Date.now();
-      task.uploadedAt = Date.now();
-      store.put(task);
-    };
-
-    tx.oncomplete = loadTasks;
-  });
+// ================= ACTIONS =================
+function updateRemarks(id, value) {
+  const t = tasks.find(x => x.id === id);
+  t.remarks = value;
+  saveTasks();
 }
+
+function capture(id) {
+  const t = tasks.find(x => x.id === id);
+  t.status = "DONE";
+  t.capturedAt = Date.now();
+  t.uploadedAt = Date.now();
+  saveTasks();
+  render();
+}
+
+// ================= START =================
+render();
 </script>
 
 </body>
 </html>
-
