@@ -52,6 +52,13 @@ button {
 }
 
 .capture { background:#007bff; color:#fff; }
+.toggle { background:#0069d9; color:#fff; }
+
+img {
+  width:100%;
+  margin-top:8px;
+  border-radius:6px;
+}
 
 .small {
   font-size:13px;
@@ -63,22 +70,20 @@ button {
 <body>
 
 <div id="appVersion"></div>
-<div id="offlineBanner">⚠ Offline — photos saved locally</div>
+<div id="offlineBanner">⚠ Offline — photos will sync automatically</div>
 <div id="taskList">Loading tasks...</div>
 
 <input type="file" id="cameraInput" accept="image/*" capture="environment" hidden>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import {
-  getDatabase, ref, get, update, query, orderByChild, equalTo
-} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
-import {
-  getStorage, ref as sRef, uploadBytes, getDownloadURL
-} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
+import { getDatabase, ref, get, update, query, orderByChild, equalTo } 
+  from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+import { getStorage, ref as sRef, uploadBytes, getDownloadURL } 
+  from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
 /* ================= CONFIG ================= */
-const VERSION = "v1.8.0";
+const VERSION = "v1.9.0";
 
 const firebaseConfig = {
   apiKey: "AIzaSyDFW61pnwLvh6HGKWt10zLYNr860fI8vkg",
@@ -106,7 +111,7 @@ const QUEUE_KEY = "offlineQueue";
 const getQueue = () => JSON.parse(localStorage.getItem(QUEUE_KEY) || "[]");
 const setQueue = q => localStorage.setItem(QUEUE_KEY, JSON.stringify(q));
 
-/* ================= ONLINE / OFFLINE ================= */
+/* ================= NETWORK ================= */
 function updateNet() {
   offlineBanner.style.display = navigator.onLine ? "none" : "block";
 }
@@ -114,18 +119,7 @@ window.addEventListener("online", updateNet);
 window.addEventListener("offline", updateNet);
 updateNet();
 
-/* ================= LOCATION ================= */
-function getLocation() {
-  return new Promise((res, rej) => {
-    navigator.geolocation.getCurrentPosition(
-      p => res(p.coords),
-      () => rej("Location required"),
-      { enableHighAccuracy:true, timeout:10000 }
-    );
-  });
-}
-
-/* ================= IMAGE COMPRESS ================= */
+/* ================= IMAGE HELPERS ================= */
 function compress(file) {
   return new Promise(res => {
     const img = new Image();
@@ -143,71 +137,61 @@ function compress(file) {
   });
 }
 
-/* ================= CAMERA ================= */
-let CURRENT_TASK = null;
-const cam = document.getElementById("cameraInput");
-
-window.takePicture = id => {
-  CURRENT_TASK = id;
-  cam.value = "";            // ✅ FIX: reset input
-  cam.click();
-};
-
-cam.addEventListener("change", async e => {
-  if (!e.target.files[0] || !CURRENT_TASK) return;
-
-  const coords = await getLocation();
-  const blob = await compress(e.target.files[0]);
-
-  if (!navigator.onLine) {
-    const q = getQueue();
-    q.push({
-      taskId: CURRENT_TASK,
-      image: await toBase64(blob),
-      latitude: coords.latitude,
-      longitude: coords.longitude,
-      capturedAt: new Date().toISOString()
-    });
-    setQueue(q);
-    alert("Saved offline");
-    CURRENT_TASK = null;
-    loadTasks();
-    return;
-  }
-
-  await upload(CURRENT_TASK, blob, coords);
-});
-
-/* ================= UPLOAD ================= */
-async function upload(taskId, blob, coords) {
-  const tRef = ref(db, `tasks/${taskId}`);
-  await update(tRef, {
-    status: "UPLOADING",
-    latitude: coords.latitude,
-    longitude: coords.longitude,
-    capturedAt: new Date().toISOString()
-  });
-
-  const imgRef = sRef(storage, `tasks/${taskId}/${Date.now()}.jpg`);
-  await uploadBytes(imgRef, blob);
-  const url = await getDownloadURL(imgRef);
-
-  await update(tRef, {
-    status: "COMPLETED",
-    uploadedAt: new Date().toISOString(),
-    imageUrl: url
-  });
-
-  loadTasks();
-}
-
-/* ================= BASE64 ================= */
 function toBase64(blob) {
   return new Promise(r => {
     const fr = new FileReader();
     fr.onloadend = () => r(fr.result);
     fr.readAsDataURL(blob);
   });
+}
+
+/* ================= CAMERA ================= */
+let CURRENT_TASK = null;
+const cam = document.getElementById("cameraInput");
+
+window.takePicture = id => {
+  CURRENT_TASK = id;
+  cam.value = "";
+  cam.click();
+};
+
+cam.addEventListener("change", async e => {
+  if (!e.target.files[0] || !CURRENT_TASK) return;
+
+  const blob = await compress(e.target.files[0]);
+
+  if (!navigator.onLine) {
+    const q = getQueue();
+    q.push({
+      taskId: CURRENT_TASK,
+      image: await toBase64(blob)
+    });
+    setQueue(q);
+    CURRENT_TASK = null;
+    loadTasks();
+    return;
+  }
+
+  await upload(CURRENT_TASK, blob);
+});
+
+/* ================= UPLOAD ================= */
+async function upload(taskId, blob) {
+  const tRef = ref(db, `tasks/${taskId}`);
+
+  await update(tRef, { status:"UPLOADING" });
+
+  const imgRef = sRef(storage, `tasks/${taskId}/${Date.now()}.jpg`);
+  await uploadBytes(imgRef, blob);
+  const url = await getDownloadURL(imgRef);
+
+  await update(tRef, {
+    status:"COMPLETED",
+    imageUrl:url,
+    uploadedAt:new Date().toISOString()
+  });
+
+  loadTasks();
 }
 
 /* ================= SYNC ================= */
@@ -218,7 +202,7 @@ setInterval(async () => {
 
   for (const i of q) {
     const blob = await (await fetch(i.image)).blob();
-    await upload(i.taskId, blob, i);
+    await upload(i.taskId, blob);
   }
   setQueue([]);
 }, 5000);
@@ -230,11 +214,13 @@ async function loadTasks() {
   );
 
   const tasks = Object.values(snap.val() || {});
-  const offlineIds = getQueue().map(i => i.taskId);
+  const offlineMap = Object.fromEntries(
+    getQueue().map(i => [i.taskId, i.image])
+  );
 
   tasks.sort((a,b)=>{
-    if (offlineIds.includes(a.id)) return -1;
-    if (offlineIds.includes(b.id)) return 1;
+    if (offlineMap[a.id]) return -1;
+    if (offlineMap[b.id]) return 1;
     if (a.status==="COMPLETED") return 1;
     if (b.status==="COMPLETED") return -1;
     return 0;
@@ -243,19 +229,42 @@ async function loadTasks() {
   taskList.innerHTML = tasks.length ? "" : "No tasks";
 
   tasks.forEach(t=>{
-    const offline = offlineIds.includes(t.id);
+    const offline = offlineMap[t.id];
     const div = document.createElement("div");
     div.className = `task ${offline?"offline":""} ${t.status==="COMPLETED"?"completed":""}`;
+
     div.innerHTML = `
       <b>${t.name}</b>
       <div class="small">${t.address}</div>
       <div class="small">
-        Status: ${offline ? "OFFLINE – WAITING TO SYNC" : t.status}
+        Status: ${offline ? "OFFLINE – PHOTO SAVED" : t.status}
       </div>
-      <button class="capture" onclick="takePicture('${t.id}')">
-        📸 Take / Retake Picture
-      </button>
+
+      ${
+        offline ? `
+          <button class="toggle" onclick="this.nextElementSibling.style.display =
+            this.nextElementSibling.style.display==='none'?'block':'none'">
+            👁 Show / Hide Photo
+          </button>
+          <img src="${offline}" style="display:none">
+        ` : ""
+      }
+
+      ${
+        t.status === "COMPLETED" ? `
+          <button class="toggle" onclick="this.nextElementSibling.style.display =
+            this.nextElementSibling.style.display==='none'?'block':'none'">
+            👁 Show / Hide Photo
+          </button>
+          <img src="${t.imageUrl}" style="display:none">
+        ` : `
+          <button class="capture" onclick="takePicture('${t.id}')">
+            📸 Take Picture
+          </button>
+        `
+      }
     `;
+
     taskList.appendChild(div);
   });
 }
