@@ -3,64 +3,87 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Admin – Task Management</title>
+<title>Admin Dashboard</title>
 
 <style>
 body {
   font-family: Arial, sans-serif;
-  background: #f2f2f2;
+  background: #f3f3f3;
   margin: 0;
   padding: 10px;
 }
 
 h2 {
   text-align: center;
+  margin-bottom: 10px;
 }
+
+.dashboard {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.gauge {
+  flex: 1;
+  background: #fff;
+  padding: 16px;
+  border-radius: 10px;
+  text-align: center;
+  box-shadow: 0 0 4px rgba(0,0,0,.1);
+}
+
+.gauge.open { border-top: 5px solid orange; }
+.gauge.done { border-top: 5px solid green; }
+
+.big {
+  font-size: 32px;
+  font-weight: bold;
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+button {
+  flex: 1;
+  padding: 12px;
+  font-size: 14px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.assign { background: #007bff; color: #fff; }
+.openBtn { background: orange; color: #fff; }
+.doneBtn { background: green; color: #fff; }
+.refresh { background: #444; color: #fff; }
 
 .card {
   background: #fff;
   padding: 12px;
-  margin-bottom: 12px;
+  margin-bottom: 10px;
   border-radius: 8px;
   box-shadow: 0 0 4px rgba(0,0,0,.1);
+  border-left: 5px solid #ccc;
 }
 
-input, button {
-  width: 100%;
-  padding: 10px;
-  margin-top: 6px;
-  font-size: 14px;
-}
-
-button {
-  border: none;
-  border-radius: 5px;
-  cursor: pointer;
-}
-
-.create {
-  background: #007bff;
-  color: #fff;
-}
-
-.refresh {
-  background: #28a745;
-  color: #fff;
-}
-
-.task {
-  border-left: 5px solid orange;
-}
-
-.task.completed {
-  border-left-color: green;
-}
+.card.completed { border-left-color: green; }
+.card.pending { border-left-color: orange; }
 
 img {
   width: 100%;
   margin-top: 8px;
   border-radius: 6px;
-  border: 1px solid #ddd;
+}
+
+input {
+  width: 100%;
+  padding: 10px;
+  margin-top: 6px;
+  font-size: 14px;
 }
 
 .small {
@@ -72,26 +95,39 @@ img {
 
 <body>
 
-<h2>🧑‍💼 Admin – Task Management</h2>
+<h2>🧑‍💼 Admin Dashboard</h2>
 
-<!-- ================= TASK INPUT ================= -->
-<div class="card">
-  <b>Create / Assign Task</b>
+<!-- ===== DASHBOARD ===== -->
+<div class="dashboard">
+  <div class="gauge open">
+    <div class="big" id="openCount">0</div>
+    Open Tasks (Today)
+  </div>
+  <div class="gauge done">
+    <div class="big" id="doneCount">0</div>
+    Completed (Today)
+  </div>
+</div>
+
+<!-- ===== ACTIONS ===== -->
+<div class="actions">
+  <button class="assign" onclick="toggleAssign()">➕ Assign Task</button>
+  <button class="openBtn" onclick="loadTasks('PENDING')">📂 Open</button>
+  <button class="doneBtn" onclick="loadTasks('COMPLETED')">✅ Completed</button>
+  <button class="refresh" onclick="refreshDashboard()">🔄</button>
+</div>
+
+<!-- ===== ASSIGN TASK ===== -->
+<div class="card" id="assignBox" style="display:none">
+  <b>Assign New Task</b>
   <input id="name" placeholder="Name" />
   <input id="address" placeholder="Address" />
   <input id="driverId" placeholder="Driver ID (e.g. driver_001)" />
-  <button class="create" onclick="createTask()">➕ Create Task</button>
+  <button class="assign" onclick="createTask()">Create Task</button>
 </div>
 
-<!-- ================= TASK REVIEW ================= -->
-<div class="card">
-  <div style="display:flex; justify-content:space-between; align-items:center">
-    <b>Task Review (Manual Refresh)</b>
-    <button class="refresh" onclick="loadTasks()">🔄 Refresh</button>
-  </div>
-  <div class="small">Admin refreshes every ~30 minutes</div>
-  <div id="taskList" style="margin-top:10px">Click refresh to load tasks</div>
-</div>
+<!-- ===== TASK LIST ===== -->
+<div id="taskList">Select Open or Completed</div>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
@@ -99,11 +135,10 @@ import {
   getDatabase,
   ref,
   push,
-  get,
-  update
+  get
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
-/* 🔥 FIREBASE CONFIG */
+/* FIREBASE CONFIG */
 const firebaseConfig = {
   apiKey: "AIzaSyDFW61pnwLvh6HGKWt10zLYNr860fI8vkg",
   authDomain: "driva-pwa.firebaseapp.com",
@@ -117,88 +152,101 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 
-/* ================= CREATE TASK ================= */
+const today = new Date().toISOString().slice(0, 10);
+
+/* ===== DASHBOARD ===== */
+async function refreshDashboard() {
+  const snap = await get(ref(db, "tasks"));
+  const tasks = Object.values(snap.val() || {});
+
+  let open = 0, done = 0;
+
+  tasks.forEach(t => {
+    if (!t.createdAt) return;
+    if (!t.createdAt.startsWith(today)) return;
+
+    if (t.status === "COMPLETED") done++;
+    else open++;
+  });
+
+  document.getElementById("openCount").innerText = open;
+  document.getElementById("doneCount").innerText = done;
+}
+
+window.refreshDashboard = refreshDashboard;
+
+/* ===== TOGGLE ASSIGN ===== */
+window.toggleAssign = function () {
+  const box = document.getElementById("assignBox");
+  box.style.display = box.style.display === "none" ? "block" : "none";
+};
+
+/* ===== CREATE TASK ===== */
 window.createTask = async function () {
   const name = document.getElementById("name").value.trim();
   const address = document.getElementById("address").value.trim();
   const driverId = document.getElementById("driverId").value.trim();
 
   if (!name || !address || !driverId) {
-    alert("Please fill in all fields");
+    alert("Fill all fields");
     return;
   }
 
-  const taskRef = push(ref(db, "tasks"));
-  const taskId = taskRef.key;
+  const refTask = push(ref(db, "tasks"));
 
-  await update(taskRef, {
-    id: taskId,
+  await refTask.set({
+    id: refTask.key,
     name,
     address,
     driverId,
     status: "PENDING",
-    latitude: null,
-    longitude: null,
-    capturedAt: null,
-    uploadedAt: null,
+    createdAt: new Date().toISOString(),
     imageUrl: null
   });
 
-  document.getElementById("name").value = "";
-  document.getElementById("address").value = "";
-  document.getElementById("driverId").value = "";
-
-  alert("Task created and assigned");
+  document.getElementById("assignBox").style.display = "none";
+  alert("Task assigned");
+  refreshDashboard();
 };
 
-/* ================= LOAD TASKS (MANUAL) ================= */
-window.loadTasks = async function () {
+/* ===== LOAD TASKS ===== */
+window.loadTasks = async function (status) {
   const list = document.getElementById("taskList");
-  list.innerHTML = "Loading tasks...";
+  list.innerHTML = "Loading...";
 
   const snap = await get(ref(db, "tasks"));
-  const tasks = Object.values(snap.val() || {});
+  const tasks = Object.values(snap.val() || {})
+    .filter(t =>
+      t.status === status &&
+      t.createdAt &&
+      t.createdAt.startsWith(today)
+    );
 
   if (!tasks.length) {
-    list.innerHTML = "No tasks found";
+    list.innerHTML = "No tasks";
     return;
   }
-
-  /* 🔥 Pending first, Completed last */
-  tasks.sort((a, b) => {
-    if (a.status === "COMPLETED" && b.status !== "COMPLETED") return 1;
-    if (a.status !== "COMPLETED" && b.status === "COMPLETED") return -1;
-    return 0;
-  });
 
   list.innerHTML = "";
 
   tasks.forEach(t => {
     const div = document.createElement("div");
-    div.className = `card task ${t.status === "COMPLETED" ? "completed" : ""}`;
+    div.className = `card ${status === "COMPLETED" ? "completed" : "pending"}`;
 
     div.innerHTML = `
-      <b>${t.name}</b><br>
+      <b>${t.name}</b>
       <div class="small">${t.address}</div>
       <div class="small">Driver: ${t.driverId}</div>
-      <div class="small">Status: ${t.status}</div>
 
-      ${t.latitude ? `
-        <div class="small">📍 ${t.latitude}, ${t.longitude}</div>
-        <div class="small">📸 Captured: ${new Date(t.capturedAt).toLocaleString()}</div>
-        <div class="small">☁️ Uploaded: ${new Date(t.uploadedAt).toLocaleString()}</div>
-      ` : ""}
-
-      ${t.imageUrl ? `
-        <img src="${t.imageUrl}" alt="Proof photo" />
-      ` : `
-        <div class="small">No photo uploaded</div>
-      `}
+      ${t.imageUrl ? `<img src="${t.imageUrl}">` : ""}
     `;
 
     list.appendChild(div);
   });
 };
+
+/* INIT */
+refreshDashboard();
 </script>
 
 </body>
