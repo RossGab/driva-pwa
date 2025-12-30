@@ -6,10 +6,22 @@
 <title>Admin Dashboard</title>
 
 <style>
-body { font-family: Arial, sans-serif; background:#f3f3f3; padding:10px; }
-h2 { text-align:center; }
+body {
+  font-family: Arial, sans-serif;
+  background:#f3f3f3;
+  padding:10px;
+}
 
-.dashboard { display:flex; gap:10px; margin-bottom:12px; }
+h2 {
+  text-align:center;
+}
+
+.dashboard {
+  display:flex;
+  gap:10px;
+  margin-bottom:12px;
+}
+
 .card {
   flex:1;
   background:#fff;
@@ -18,12 +30,21 @@ h2 { text-align:center; }
   text-align:center;
   box-shadow:0 0 4px rgba(0,0,0,.1);
 }
+
 .open { border-top:5px solid orange; }
 .done { border-top:5px solid green; }
 
-.big { font-size:32px; font-weight:bold; }
+.big {
+  font-size:32px;
+  font-weight:bold;
+}
 
-.actions { display:flex; gap:8px; margin-bottom:12px; }
+.actions {
+  display:flex;
+  gap:8px;
+  margin-bottom:12px;
+}
+
 button {
   flex:1;
   padding:12px;
@@ -46,11 +67,30 @@ button {
   box-shadow:0 0 4px rgba(0,0,0,.1);
   border-left:5px solid #ccc;
 }
+
 .task.completed { border-left-color:green; }
 .task.pending { border-left-color:orange; }
 
-img { width:100%; margin-top:8px; border-radius:6px; }
-.small { font-size:13px; color:#555; }
+.small {
+  font-size:13px;
+  color:#555;
+}
+
+img {
+  width:100%;
+  margin-top:8px;
+  border-radius:6px;
+}
+
+.toggleBtn {
+  margin-top:8px;
+  background:#0069d9;
+  color:#fff;
+  padding:8px;
+  width:100%;
+  border-radius:5px;
+  font-size:13px;
+}
 </style>
 </head>
 
@@ -58,6 +98,7 @@ img { width:100%; margin-top:8px; border-radius:6px; }
 
 <h2>🧑‍💼 Admin Dashboard</h2>
 
+<!-- ===== DASHBOARD ===== -->
 <div class="dashboard">
   <div class="card open">
     <div class="big" id="openCount">0</div>
@@ -69,6 +110,7 @@ img { width:100%; margin-top:8px; border-radius:6px; }
   </div>
 </div>
 
+<!-- ===== ACTIONS ===== -->
 <div class="actions">
   <button class="assign" onclick="location.href='assign.html'">➕ Assign Task</button>
   <button class="openBtn" onclick="loadTasks('PENDING')">📂 Open</button>
@@ -76,12 +118,20 @@ img { width:100%; margin-top:8px; border-radius:6px; }
   <button class="refresh" onclick="refreshDashboard()">🔄</button>
 </div>
 
+<!-- ===== TASK LIST ===== -->
 <div id="taskList">Select Open or Completed</div>
 
 <script type="module">
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import { getDatabase, ref, get } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+import { initializeApp } from
+  "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import {
+  getDatabase,
+  ref,
+  get
+} from
+  "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
+/* FIREBASE CONFIG */
 const firebaseConfig = {
   apiKey: "AIzaSyDFW61pnwLvh6HGKWt10zLYNr860fI8vkg",
   authDomain: "driva-pwa.firebaseapp.com",
@@ -96,6 +146,7 @@ const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 const today = new Date().toISOString().slice(0,10);
 
+/* ===== DASHBOARD COUNTS ===== */
 window.refreshDashboard = async function () {
   const snap = await get(ref(db, "tasks"));
   const tasks = Object.values(snap.val() || {});
@@ -110,6 +161,7 @@ window.refreshDashboard = async function () {
   doneCount.innerText = done;
 };
 
+/* ===== LOAD TASKS ===== */
 window.loadTasks = async function (status) {
   const list = document.getElementById("taskList");
   list.innerHTML = "Loading...";
@@ -118,21 +170,54 @@ window.loadTasks = async function (status) {
   const tasks = Object.values(snap.val() || {})
     .filter(t => t.status === status && t.createdAt?.startsWith(today));
 
-  list.innerHTML = tasks.length ? "" : "No tasks";
+  if (!tasks.length) {
+    list.innerHTML = "No tasks";
+    return;
+  }
+
+  list.innerHTML = "";
 
   tasks.forEach(t => {
+    const imgId = `img_${t.id}`;
+
     const div = document.createElement("div");
     div.className = `task ${status === "COMPLETED" ? "completed" : "pending"}`;
+
     div.innerHTML = `
       <b>${t.name}</b>
       <div class="small">${t.address}</div>
       <div class="small">Driver: ${t.driverId}</div>
-      ${t.imageUrl ? `<img src="${t.imageUrl}">` : ""}
+
+      ${t.imageUrl ? `
+        <button class="toggleBtn"
+          onclick="toggleImage('${imgId}', this)">
+          👁 Show Picture
+        </button>
+        <img id="${imgId}" src="${t.imageUrl}" style="display:none">
+      ` : `
+        <div class="small">No photo uploaded</div>
+      `}
     `;
+
     list.appendChild(div);
   });
 };
 
+/* ===== TOGGLE IMAGE ===== */
+window.toggleImage = function (imgId, btn) {
+  const img = document.getElementById(imgId);
+  if (!img) return;
+
+  if (img.style.display === "none") {
+    img.style.display = "block";
+    btn.innerText = "🙈 Hide Picture";
+  } else {
+    img.style.display = "none";
+    btn.innerText = "👁 Show Picture";
+  }
+};
+
+/* INIT */
 refreshDashboard();
 </script>
 
