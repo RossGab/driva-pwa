@@ -18,7 +18,7 @@ body {
   color: #fff;
   padding: 8px;
   text-align: center;
-  margin-bottom: 10px;
+  margin-bottom: 6px;
   font-size: 14px;
 }
 
@@ -27,8 +27,8 @@ body {
   color: #fff;
   padding: 6px;
   text-align: center;
-  display: none;
   margin-bottom: 10px;
+  display: none;
 }
 
 .task {
@@ -40,7 +40,9 @@ body {
   border-left: 5px solid orange;
 }
 
-.task.completed { border-left-color: green; }
+.task.completed {
+  border-left-color: green;
+}
 
 button {
   padding: 10px;
@@ -77,16 +79,32 @@ img {
 <input type="file" id="cameraInput" accept="image/*" capture="environment" hidden />
 
 <script type="module">
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import {
-  getDatabase, ref, get, update, query, orderByChild, equalTo
-} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
-import {
-  getStorage, ref as sRef, uploadBytes, getDownloadURL
-} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
+/* ================= FIREBASE IMPORTS ================= */
+import { initializeApp } from
+  "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 
-/* ===== CONFIG ===== */
-const APP_VERSION = "v1.5.0";
+import {
+  getDatabase,
+  ref,
+  get,
+  update,
+  query,
+  orderByChild,
+  equalTo
+} from
+  "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+
+import {
+  getStorage,
+  ref as sRef,
+  uploadBytes,
+  getDownloadURL
+} from
+  "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
+
+/* ================= CONFIG ================= */
+const APP_VERSION = "v1.6.0";
+
 const firebaseConfig = {
   apiKey: "AIzaSyDFW61pnwLvh6HGKWt10zLYNr860fI8vkg",
   authDomain: "driva-pwa.firebaseapp.com",
@@ -101,29 +119,36 @@ const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 const storage = getStorage(app);
 
-/* ===== DRIVER ID ===== */
+/* ================= DRIVER ID ================= */
 let DRIVER_ID = localStorage.getItem("driverId");
-while (!DRIVER_ID) DRIVER_ID = prompt("Enter Driver ID");
+while (!DRIVER_ID) {
+  DRIVER_ID = prompt("Enter Driver ID (e.g. driver_001)");
+}
 localStorage.setItem("driverId", DRIVER_ID);
 
 document.getElementById("appVersion").innerText =
   `Driver: ${DRIVER_ID} | Version: ${APP_VERSION}`;
 
-/* ===== OFFLINE QUEUE ===== */
+/* ================= OFFLINE QUEUE ================= */
 const QUEUE_KEY = "offlineQueue";
-const getQueue = () => JSON.parse(localStorage.getItem(QUEUE_KEY) || "[]");
-const setQueue = q => localStorage.setItem(QUEUE_KEY, JSON.stringify(q));
 
-/* ===== CONNECTIVITY ===== */
+const getQueue = () =>
+  JSON.parse(localStorage.getItem(QUEUE_KEY) || "[]");
+
+const setQueue = q =>
+  localStorage.setItem(QUEUE_KEY, JSON.stringify(q));
+
+/* ================= CONNECTIVITY ================= */
 function updateOnlineStatus() {
   document.getElementById("offlineBanner").style.display =
     navigator.onLine ? "none" : "block";
 }
+
 window.addEventListener("online", updateOnlineStatus);
 window.addEventListener("offline", updateOnlineStatus);
 updateOnlineStatus();
 
-/* ===== LOCATION ===== */
+/* ================= LOCATION ================= */
 function getLocation() {
   return new Promise((resolve, reject) => {
     navigator.geolocation.getCurrentPosition(
@@ -134,26 +159,43 @@ function getLocation() {
   });
 }
 
-/* ===== IMAGE COMPRESSION ===== */
+/* ================= IMAGE COMPRESSION ================= */
 function compressImage(file) {
   return new Promise(resolve => {
     const img = new Image();
     const reader = new FileReader();
+
     reader.onload = e => img.src = e.target.result;
+
     img.onload = () => {
-      const c = document.createElement("canvas");
-      const ctx = c.getContext("2d");
-      let w = img.width, h = img.height;
-      if (w > 1280) { h *= 1280 / w; w = 1280; }
-      c.width = w; c.height = h;
-      ctx.drawImage(img, 0, 0, w, h);
-      resolve(c.toDataURL("image/jpeg", 0.65));
+      const canvas = document.createElement("canvas");
+      const ctx = canvas.getContext("2d");
+
+      let width = img.width;
+      let height = img.height;
+      const MAX_WIDTH = 1280;
+
+      if (width > MAX_WIDTH) {
+        height *= MAX_WIDTH / width;
+        width = MAX_WIDTH;
+      }
+
+      canvas.width = width;
+      canvas.height = height;
+      ctx.drawImage(img, 0, 0, width, height);
+
+      canvas.toBlob(
+        blob => resolve(blob),
+        "image/jpeg",
+        0.65
+      );
     };
+
     reader.readAsDataURL(file);
   });
 }
 
-/* ===== CAMERA ===== */
+/* ================= CAMERA ================= */
 let CURRENT_TASK_ID = null;
 const cameraInput = document.getElementById("cameraInput");
 
@@ -164,16 +206,23 @@ window.takePicture = taskId => {
 
 cameraInput.addEventListener("change", async e => {
   const file = e.target.files[0];
-  if (!file) return;
+  if (!file || !CURRENT_TASK_ID) return;
 
-  const coords = await getLocation();
-  const imageBase64 = await compressImage(file);
+  let coords;
+  try {
+    coords = await getLocation();
+  } catch (err) {
+    alert(err);
+    return;
+  }
+
+  const compressedBlob = await compressImage(file);
 
   if (!navigator.onLine) {
     const q = getQueue();
     q.push({
       taskId: CURRENT_TASK_ID,
-      imageBase64,
+      imageBase64: await blobToBase64(compressedBlob),
       latitude: coords.latitude,
       longitude: coords.longitude,
       capturedAt: new Date().toISOString()
@@ -184,67 +233,129 @@ cameraInput.addEventListener("change", async e => {
     return;
   }
 
-  await uploadTask(CURRENT_TASK_ID, imageBase64, coords);
+  await uploadTask(CURRENT_TASK_ID, compressedBlob, coords);
 });
 
-/* ===== UPLOAD ===== */
-async function uploadTask(taskId, imageBase64, coords) {
-  const blob = await (await fetch(imageBase64)).blob();
-  const imgRef = sRef(storage, `tasks/${taskId}/${Date.now()}.jpg`);
-  await uploadBytes(imgRef, blob);
-  const url = await getDownloadURL(imgRef);
+/* ================= UPLOAD ================= */
+async function uploadTask(taskId, blob, coords) {
+  const taskRef = ref(db, `tasks/${taskId}`);
 
-  await update(ref(db, `tasks/${taskId}`), {
-    status: "COMPLETED",
+  await update(taskRef, {
+    status: "UPLOADING",
     latitude: coords.latitude,
     longitude: coords.longitude,
-    capturedAt: new Date().toISOString(),
+    capturedAt: new Date().toISOString()
+  });
+
+  const imgRef = sRef(storage, `tasks/${taskId}/${Date.now()}.jpg`);
+  await uploadBytes(imgRef, blob);
+  const imageUrl = await getDownloadURL(imgRef);
+
+  await update(taskRef, {
+    status: "COMPLETED",
     uploadedAt: new Date().toISOString(),
-    imageUrl: url
+    imageUrl
   });
 
   loadTasks();
 }
 
-/* ===== SYNC OFFLINE QUEUE ===== */
+/* ================= BASE64 HELPER ================= */
+function blobToBase64(blob) {
+  return new Promise(resolve => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(reader.result);
+    reader.readAsDataURL(blob);
+  });
+}
+
+/* ================= SYNC OFFLINE QUEUE ================= */
 async function syncQueue() {
   if (!navigator.onLine) return;
   const q = getQueue();
   if (!q.length) return;
 
   for (const item of q) {
-    await uploadTask(item.taskId, item.imageBase64, item);
+    const blob = await (await fetch(item.imageBase64)).blob();
+    await uploadTask(item.taskId, blob, item);
   }
+
   setQueue([]);
 }
+
 setInterval(syncQueue, 5000);
 
-/* ===== LOAD TASKS ===== */
+/* ================= LOAD TASKS (SORT FIXED) ================= */
 async function loadTasks() {
-  const q = query(ref(db, "tasks"), orderByChild("driverId"), equalTo(DRIVER_ID));
+  const list = document.getElementById("taskList");
+
+  const q = query(
+    ref(db, "tasks"),
+    orderByChild("driverId"),
+    equalTo(DRIVER_ID)
+  );
+
   const snap = await get(q);
+  const tasks = Object.values(snap.val() || {});
+
+  /* ✅ FIX: PENDING ON TOP, COMPLETED AT BOTTOM */
   tasks.sort((a, b) => {
-  if (a.status === "COMPLETED" && b.status !== "COMPLETED") return 1;
-  if (a.status !== "COMPLETED" && b.status === "COMPLETED") return -1;
-  return 0;
-});
-  taskList.innerHTML = tasks.length ? "" : "No tasks";
+    if (a.status === "COMPLETED" && b.status !== "COMPLETED") return 1;
+    if (a.status !== "COMPLETED" && b.status === "COMPLETED") return -1;
+    return 0;
+  });
+
+  list.innerHTML = tasks.length ? "" : "No tasks assigned";
 
   tasks.forEach(t => {
+    const imgId = `img_${t.id}`;
+
     const div = document.createElement("div");
     div.className = `task ${t.status === "COMPLETED" ? "completed" : ""}`;
+
     div.innerHTML = `
       <b>${t.name}</b>
       <div class="small">${t.address}</div>
       <div class="small">Status: ${t.status}</div>
-      <button class="capture" onclick="takePicture('${t.id}')">
-        📸 Take / Retake Picture
+
+      ${
+        t.status === "COMPLETED" ? `
+          <div class="small">📍 ${t.latitude}, ${t.longitude}</div>
+          <div class="small">📸 ${new Date(t.capturedAt).toLocaleString()}</div>
+          <div class="small">☁️ ${new Date(t.uploadedAt).toLocaleString()}</div>
+          <button class="toggle"
+            onclick="toggleImage('${imgId}', this)">
+            👁 Show Photo
+          </button>
+          <img id="${imgId}" src="${t.imageUrl}" style="display:none">
+        ` : ""
+      }
+
+      <button class="capture"
+        onclick="takePicture('${t.id}')">
+        ${t.status === "COMPLETED" ? "🔁 Retake Picture" : "📸 Take Picture"}
       </button>
     `;
-    taskList.appendChild(div);
+
+    list.appendChild(div);
   });
 }
 
+/* ================= TOGGLE IMAGE ================= */
+window.toggleImage = function (imgId, btn) {
+  const img = document.getElementById(imgId);
+  if (!img) return;
+
+  if (img.style.display === "none") {
+    img.style.display = "block";
+    btn.innerText = "🙈 Hide Photo";
+  } else {
+    img.style.display = "none";
+    btn.innerText = "👁 Show Photo";
+  }
+};
+
+/* INIT */
 loadTasks();
 </script>
 
