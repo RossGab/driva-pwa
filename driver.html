@@ -22,6 +22,15 @@ body {
   font-size: 14px;
 }
 
+#offlineBanner {
+  background: #c0392b;
+  color: #fff;
+  padding: 6px;
+  text-align: center;
+  display: none;
+  margin-bottom: 10px;
+}
+
 .task {
   background: #fff;
   padding: 12px;
@@ -31,9 +40,7 @@ body {
   border-left: 5px solid orange;
 }
 
-.task.completed {
-  border-left-color: green;
-}
+.task.completed { border-left-color: green; }
 
 button {
   padding: 10px;
@@ -64,39 +71,22 @@ img {
 <body>
 
 <div id="appVersion">Loading...</div>
+<div id="offlineBanner">⚠ Offline mode — uploads will sync automatically</div>
 <div id="taskList">Loading tasks...</div>
 
-<!-- Hidden camera input -->
 <input type="file" id="cameraInput" accept="image/*" capture="environment" hidden />
 
 <script type="module">
-/* ================= FIREBASE IMPORTS ================= */
-import { initializeApp } from
-  "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 import {
-  getDatabase,
-  ref,
-  get,
-  update,
-  query,
-  orderByChild,
-  equalTo
-} from
-  "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
-
+  getDatabase, ref, get, update, query, orderByChild, equalTo
+} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import {
-  getStorage,
-  ref as sRef,
-  uploadBytes,
-  getDownloadURL
-} from
-  "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
+  getStorage, ref as sRef, uploadBytes, getDownloadURL
+} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-/* ================= APP VERSION ================= */
-const APP_VERSION = "v1.4.0";
-
-/* ================= FIREBASE CONFIG ================= */
+/* ===== CONFIG ===== */
+const APP_VERSION = "v1.5.0";
 const firebaseConfig = {
   apiKey: "AIzaSyDFW61pnwLvh6HGKWt10zLYNr860fI8vkg",
   authDomain: "driva-pwa.firebaseapp.com",
@@ -111,19 +101,29 @@ const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 const storage = getStorage(app);
 
-/* ================= DRIVER ID ================= */
+/* ===== DRIVER ID ===== */
 let DRIVER_ID = localStorage.getItem("driverId");
-
-while (!DRIVER_ID) {
-  DRIVER_ID = prompt("Enter Driver ID (e.g. driver_001)");
-}
-
+while (!DRIVER_ID) DRIVER_ID = prompt("Enter Driver ID");
 localStorage.setItem("driverId", DRIVER_ID);
 
 document.getElementById("appVersion").innerText =
   `Driver: ${DRIVER_ID} | Version: ${APP_VERSION}`;
 
-/* ================= LOCATION ================= */
+/* ===== OFFLINE QUEUE ===== */
+const QUEUE_KEY = "offlineQueue";
+const getQueue = () => JSON.parse(localStorage.getItem(QUEUE_KEY) || "[]");
+const setQueue = q => localStorage.setItem(QUEUE_KEY, JSON.stringify(q));
+
+/* ===== CONNECTIVITY ===== */
+function updateOnlineStatus() {
+  document.getElementById("offlineBanner").style.display =
+    navigator.onLine ? "none" : "block";
+}
+window.addEventListener("online", updateOnlineStatus);
+window.addEventListener("offline", updateOnlineStatus);
+updateOnlineStatus();
+
+/* ===== LOCATION ===== */
 function getLocation() {
   return new Promise((resolve, reject) => {
     navigator.geolocation.getCurrentPosition(
@@ -134,166 +134,114 @@ function getLocation() {
   });
 }
 
-/* ================= IMAGE COMPRESSION ================= */
+/* ===== IMAGE COMPRESSION ===== */
 function compressImage(file) {
-  return new Promise((resolve, reject) => {
+  return new Promise(resolve => {
     const img = new Image();
     const reader = new FileReader();
-
     reader.onload = e => img.src = e.target.result;
-
     img.onload = () => {
-      const canvas = document.createElement("canvas");
-      const ctx = canvas.getContext("2d");
-
-      const MAX_WIDTH = 1280;
-      let { width, height } = img;
-
-      if (width > MAX_WIDTH) {
-        height *= MAX_WIDTH / width;
-        width = MAX_WIDTH;
-      }
-
-      canvas.width = width;
-      canvas.height = height;
-      ctx.drawImage(img, 0, 0, width, height);
-
-      canvas.toBlob(
-        blob => blob ? resolve(blob) : reject("Compression failed"),
-        "image/jpeg",
-        0.65
-      );
+      const c = document.createElement("canvas");
+      const ctx = c.getContext("2d");
+      let w = img.width, h = img.height;
+      if (w > 1280) { h *= 1280 / w; w = 1280; }
+      c.width = w; c.height = h;
+      ctx.drawImage(img, 0, 0, w, h);
+      resolve(c.toDataURL("image/jpeg", 0.65));
     };
-
-    img.onerror = () => reject("Invalid image");
     reader.readAsDataURL(file);
   });
 }
 
-/* ================= CAMERA HANDLER ================= */
+/* ===== CAMERA ===== */
 let CURRENT_TASK_ID = null;
 const cameraInput = document.getElementById("cameraInput");
 
-window.takePicture = function (taskId) {
+window.takePicture = taskId => {
   CURRENT_TASK_ID = taskId;
   cameraInput.click();
 };
 
 cameraInput.addEventListener("change", async e => {
   const file = e.target.files[0];
-  if (!file || !CURRENT_TASK_ID) return;
+  if (!file) return;
 
-  let coords;
-  try {
-    coords = await getLocation();
-  } catch (err) {
-    alert(err);
+  const coords = await getLocation();
+  const imageBase64 = await compressImage(file);
+
+  if (!navigator.onLine) {
+    const q = getQueue();
+    q.push({
+      taskId: CURRENT_TASK_ID,
+      imageBase64,
+      latitude: coords.latitude,
+      longitude: coords.longitude,
+      capturedAt: new Date().toISOString()
+    });
+    setQueue(q);
+    alert("Saved offline. Will upload when online.");
+    CURRENT_TASK_ID = null;
     return;
   }
 
-  const taskRef = ref(db, `tasks/${CURRENT_TASK_ID}`);
-
-  await update(taskRef, {
-    status: "UPLOADING",
-    latitude: coords.latitude,
-    longitude: coords.longitude,
-    capturedAt: new Date().toISOString()
-  });
-
-  const compressed = await compressImage(file);
-  const imgRef = sRef(storage, `tasks/${CURRENT_TASK_ID}/${Date.now()}.jpg`);
-
-  await uploadBytes(imgRef, compressed, { contentType: "image/jpeg" });
-  const imageUrl = await getDownloadURL(imgRef);
-
-  await update(taskRef, {
-    status: "COMPLETED",
-    uploadedAt: new Date().toISOString(),
-    imageUrl
-  });
-
-  cameraInput.value = "";
-  CURRENT_TASK_ID = null;
-  loadTasks();
+  await uploadTask(CURRENT_TASK_ID, imageBase64, coords);
 });
 
-/* ================= TOGGLE IMAGE ================= */
-window.toggleImage = function (imgId, btn) {
-  const img = document.getElementById(imgId);
-  if (!img) return;
+/* ===== UPLOAD ===== */
+async function uploadTask(taskId, imageBase64, coords) {
+  const blob = await (await fetch(imageBase64)).blob();
+  const imgRef = sRef(storage, `tasks/${taskId}/${Date.now()}.jpg`);
+  await uploadBytes(imgRef, blob);
+  const url = await getDownloadURL(imgRef);
 
-  if (img.style.display === "none") {
-    img.style.display = "block";
-    btn.innerText = "🙈 Hide Photo";
-  } else {
-    img.style.display = "none";
-    btn.innerText = "👁 Show Photo";
-  }
-};
-
-/* ================= LOAD TASKS ================= */
-async function loadTasks() {
-  const list = document.getElementById("taskList");
-
-  const q = query(
-    ref(db, "tasks"),
-    orderByChild("driverId"),
-    equalTo(DRIVER_ID)
-  );
-
-  const snap = await get(q);
-  const tasks = Object.values(snap.val() || {});
-
-  tasks.sort((a, b) => {
-    if (a.status === "COMPLETED" && b.status !== "COMPLETED") return 1;
-    if (a.status !== "COMPLETED" && b.status === "COMPLETED") return -1;
-    return 0;
+  await update(ref(db, `tasks/${taskId}`), {
+    status: "COMPLETED",
+    latitude: coords.latitude,
+    longitude: coords.longitude,
+    capturedAt: new Date().toISOString(),
+    uploadedAt: new Date().toISOString(),
+    imageUrl: url
   });
 
-  list.innerHTML = tasks.length ? "" : "No tasks assigned";
+  loadTasks();
+}
+
+/* ===== SYNC OFFLINE QUEUE ===== */
+async function syncQueue() {
+  if (!navigator.onLine) return;
+  const q = getQueue();
+  if (!q.length) return;
+
+  for (const item of q) {
+    await uploadTask(item.taskId, item.imageBase64, item);
+  }
+  setQueue([]);
+}
+setInterval(syncQueue, 5000);
+
+/* ===== LOAD TASKS ===== */
+async function loadTasks() {
+  const q = query(ref(db, "tasks"), orderByChild("driverId"), equalTo(DRIVER_ID));
+  const snap = await get(q);
+  const tasks = Object.values(snap.val() || {});
+  taskList.innerHTML = tasks.length ? "" : "No tasks";
 
   tasks.forEach(t => {
-    const imgId = `img_${t.id}`;
-
     const div = document.createElement("div");
     div.className = `task ${t.status === "COMPLETED" ? "completed" : ""}`;
-
     div.innerHTML = `
       <b>${t.name}</b>
       <div class="small">${t.address}</div>
       <div class="small">Status: ${t.status}</div>
-
-      ${
-        t.status === "COMPLETED" ? `
-          <div class="small">📍 ${t.latitude}, ${t.longitude}</div>
-          <div class="small">📸 ${new Date(t.capturedAt).toLocaleString()}</div>
-          <div class="small">☁️ ${new Date(t.uploadedAt).toLocaleString()}</div>
-        ` : ""
-      }
-
-      ${
-        t.imageUrl ? `
-          <button class="toggle"
-            onclick="toggleImage('${imgId}', this)">
-            👁 Show Photo
-          </button>
-          <img id="${imgId}" src="${t.imageUrl}" style="display:none">
-        ` : ""
-      }
-
-      <button class="capture"
-        onclick="takePicture('${t.id}')">
-        ${t.status === "COMPLETED" ? "🔁 Retake Picture" : "📸 Take Picture"}
+      <button class="capture" onclick="takePicture('${t.id}')">
+        📸 Take / Retake Picture
       </button>
     `;
-
-    list.appendChild(div);
+    taskList.appendChild(div);
   });
 }
 
-/* INIT */
 loadTasks();
-setInterval(loadTasks, 5000);
 </script>
 
 </body>
