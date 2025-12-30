@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Assign Task</title>
+
+<style>
+body { font-family:Arial; background:#f3f3f3; padding:10px; }
+h2 { text-align:center; }
+
+.card {
+  background:#fff;
+  padding:14px;
+  border-radius:8px;
+  box-shadow:0 0 4px rgba(0,0,0,.1);
+}
+
+input, button {
+  width:100%;
+  padding:12px;
+  margin-top:8px;
+  font-size:14px;
+}
+
+button {
+  border:none;
+  border-radius:6px;
+  cursor:pointer;
+}
+
+.create { background:#007bff; color:#fff; }
+.back { background:#444; color:#fff; margin-top:10px; }
+</style>
+</head>
+
+<body>
+
+<h2>➕ Assign Task</h2>
+
+<div class="card">
+  <input id="name" placeholder="Name">
+  <input id="address" placeholder="Address">
+  <input id="driverId" placeholder="Driver ID (e.g. driver_001)">
+  <button class="create" onclick="createTask()">Create Task</button>
+  <button class="back" onclick="location.href='admin.html'">⬅ Back to Dashboard</button>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import { getDatabase, ref, push, set } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyDFW61pnwLvh6HGKWt10zLYNr860fI8vkg",
+  authDomain: "driva-pwa.firebaseapp.com",
+  databaseURL: "https://driva-pwa-default-rtdb.firebaseio.com",
+  projectId: "driva-pwa",
+  storageBucket: "driva-pwa.firebasestorage.app",
+  messagingSenderId: "299138219722",
+  appId: "1:299138219722:web:623ff6b0a067ea822dfe33"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
+
+window.createTask = async function () {
+  const name = document.getElementById("name").value.trim();
+  const address = document.getElementById("address").value.trim();
+  const driverId = document.getElementById("driverId").value.trim();
+
+  if (!name || !address || !driverId) {
+    alert("Fill all fields");
+    return;
+  }
+
+  const taskRef = push(ref(db, "tasks"));
+  await set(taskRef, {
+    id: taskRef.key,
+    name,
+    address,
+    driverId,
+    status: "PENDING",
+    createdAt: new Date().toISOString()
+  });
+
+  alert("Task assigned");
+  name.value = address.value = driverId.value = "";
+};
+</script>
+
+</body>
+</html>
