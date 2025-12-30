@@ -40,9 +40,8 @@ body {
   border-left: 5px solid orange;
 }
 
-.task.completed {
-  border-left-color: green;
-}
+.task.completed { border-left-color: green; }
+.task.offline { border-left-color: #c0392b; }
 
 button {
   padding: 10px;
@@ -103,7 +102,7 @@ import {
   "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
 /* ================= CONFIG ================= */
-const APP_VERSION = "v1.6.0";
+const APP_VERSION = "v1.7.0";
 
 const firebaseConfig = {
   apiKey: "AIzaSyDFW61pnwLvh6HGKWt10zLYNr860fI8vkg",
@@ -121,9 +120,7 @@ const storage = getStorage(app);
 
 /* ================= DRIVER ID ================= */
 let DRIVER_ID = localStorage.getItem("driverId");
-while (!DRIVER_ID) {
-  DRIVER_ID = prompt("Enter Driver ID (e.g. driver_001)");
-}
+while (!DRIVER_ID) DRIVER_ID = prompt("Enter Driver ID");
 localStorage.setItem("driverId", DRIVER_ID);
 
 document.getElementById("appVersion").innerText =
@@ -143,7 +140,6 @@ function updateOnlineStatus() {
   document.getElementById("offlineBanner").style.display =
     navigator.onLine ? "none" : "block";
 }
-
 window.addEventListener("online", updateOnlineStatus);
 window.addEventListener("offline", updateOnlineStatus);
 updateOnlineStatus();
@@ -164,31 +160,18 @@ function compressImage(file) {
   return new Promise(resolve => {
     const img = new Image();
     const reader = new FileReader();
-
     reader.onload = e => img.src = e.target.result;
 
     img.onload = () => {
       const canvas = document.createElement("canvas");
       const ctx = canvas.getContext("2d");
-
-      let width = img.width;
-      let height = img.height;
-      const MAX_WIDTH = 1280;
-
-      if (width > MAX_WIDTH) {
-        height *= MAX_WIDTH / width;
-        width = MAX_WIDTH;
-      }
-
-      canvas.width = width;
-      canvas.height = height;
-      ctx.drawImage(img, 0, 0, width, height);
-
-      canvas.toBlob(
-        blob => resolve(blob),
-        "image/jpeg",
-        0.65
-      );
+      let w = img.width, h = img.height;
+      const MAX = 1280;
+      if (w > MAX) { h *= MAX / w; w = MAX; }
+      canvas.width = w;
+      canvas.height = h;
+      ctx.drawImage(img, 0, 0, w, h);
+      canvas.toBlob(b => resolve(b), "image/jpeg", 0.65);
     };
 
     reader.readAsDataURL(file);
@@ -208,32 +191,27 @@ cameraInput.addEventListener("change", async e => {
   const file = e.target.files[0];
   if (!file || !CURRENT_TASK_ID) return;
 
-  let coords;
-  try {
-    coords = await getLocation();
-  } catch (err) {
-    alert(err);
-    return;
-  }
-
-  const compressedBlob = await compressImage(file);
+  const coords = await getLocation();
+  const blob = await compressImage(file);
 
   if (!navigator.onLine) {
     const q = getQueue();
     q.push({
       taskId: CURRENT_TASK_ID,
-      imageBase64: await blobToBase64(compressedBlob),
+      imageBase64: await blobToBase64(blob),
       latitude: coords.latitude,
       longitude: coords.longitude,
-      capturedAt: new Date().toISOString()
+      capturedAt: new Date().toISOString(),
+      offline: true
     });
     setQueue(q);
     alert("Saved offline. Will upload when online.");
     CURRENT_TASK_ID = null;
+    loadTasks();
     return;
   }
 
-  await uploadTask(CURRENT_TASK_ID, compressedBlob, coords);
+  await uploadTask(CURRENT_TASK_ID, blob, coords);
 });
 
 /* ================= UPLOAD ================= */
@@ -249,27 +227,27 @@ async function uploadTask(taskId, blob, coords) {
 
   const imgRef = sRef(storage, `tasks/${taskId}/${Date.now()}.jpg`);
   await uploadBytes(imgRef, blob);
-  const imageUrl = await getDownloadURL(imgRef);
+  const url = await getDownloadURL(imgRef);
 
   await update(taskRef, {
     status: "COMPLETED",
     uploadedAt: new Date().toISOString(),
-    imageUrl
+    imageUrl: url
   });
 
   loadTasks();
 }
 
-/* ================= BASE64 HELPER ================= */
+/* ================= BASE64 ================= */
 function blobToBase64(blob) {
   return new Promise(resolve => {
-    const reader = new FileReader();
-    reader.onloadend = () => resolve(reader.result);
-    reader.readAsDataURL(blob);
+    const r = new FileReader();
+    r.onloadend = () => resolve(r.result);
+    r.readAsDataURL(blob);
   });
 }
 
-/* ================= SYNC OFFLINE QUEUE ================= */
+/* ================= SYNC QUEUE ================= */
 async function syncQueue() {
   if (!navigator.onLine) return;
   const q = getQueue();
@@ -279,13 +257,11 @@ async function syncQueue() {
     const blob = await (await fetch(item.imageBase64)).blob();
     await uploadTask(item.taskId, blob, item);
   }
-
   setQueue([]);
 }
-
 setInterval(syncQueue, 5000);
 
-/* ================= LOAD TASKS (SORT FIXED) ================= */
+/* ================= LOAD TASKS ================= */
 async function loadTasks() {
   const list = document.getElementById("taskList");
 
@@ -297,9 +273,14 @@ async function loadTasks() {
 
   const snap = await get(q);
   const tasks = Object.values(snap.val() || {});
+  const offlineIds = getQueue().map(i => i.taskId);
 
-  /* ✅ FIX: PENDING ON TOP, COMPLETED AT BOTTOM */
+  /* ✅ SORT: PENDING / OFFLINE FIRST */
   tasks.sort((a, b) => {
+    const aOffline = offlineIds.includes(a.id);
+    const bOffline = offlineIds.includes(b.id);
+    if (aOffline && !bOffline) return -1;
+    if (!aOffline && bOffline) return 1;
     if (a.status === "COMPLETED" && b.status !== "COMPLETED") return 1;
     if (a.status !== "COMPLETED" && b.status === "COMPLETED") return -1;
     return 0;
@@ -308,15 +289,18 @@ async function loadTasks() {
   list.innerHTML = tasks.length ? "" : "No tasks assigned";
 
   tasks.forEach(t => {
+    const offline = offlineIds.includes(t.id);
     const imgId = `img_${t.id}`;
 
     const div = document.createElement("div");
-    div.className = `task ${t.status === "COMPLETED" ? "completed" : ""}`;
+    div.className = `task ${t.status === "COMPLETED" ? "completed" : ""} ${offline ? "offline" : ""}`;
 
     div.innerHTML = `
       <b>${t.name}</b>
       <div class="small">${t.address}</div>
-      <div class="small">Status: ${t.status}</div>
+      <div class="small">
+        Status: ${offline ? "OFFLINE – WAITING TO SYNC" : t.status}
+      </div>
 
       ${
         t.status === "COMPLETED" ? `
@@ -345,7 +329,6 @@ async function loadTasks() {
 window.toggleImage = function (imgId, btn) {
   const img = document.getElementById(imgId);
   if (!img) return;
-
   if (img.style.display === "none") {
     img.style.display = "block";
     btn.innerText = "🙈 Hide Photo";
