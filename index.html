@@ -81,8 +81,15 @@ import {
 const firebaseConfig = {
   apiKey: "AIzaSyDFW61pnwLvh6HGKWt10zLYNr860fI8vkg",
   authDomain: "driva-pwa.firebaseapp.com",
+
+  // ✅ REQUIRED for Realtime Database
+  databaseURL: "https://driva-pwa-default-rtdb.firebaseio.com",
+
   projectId: "driva-pwa",
-  storageBucket: "driva-pwa.firebasestorage.app",
+
+  // ✅ Correct web storage bucket
+  storageBucket: "driva-pwa.appspot.com",
+
   messagingSenderId: "299138219722",
   appId: "1:299138219722:web:623ff6b0a067ea822dfe33"
 };
