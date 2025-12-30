@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Admin – Task Dispatcher</title>
+<title>Admin – Task Review</title>
 
 <style>
 body {
@@ -17,6 +17,26 @@ h2 {
   text-align: center;
 }
 
+#topBar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+button {
+  padding: 10px;
+  font-size: 14px;
+  border-radius: 5px;
+  border: none;
+  cursor: pointer;
+}
+
+.refresh {
+  background: #28a745;
+  color: #fff;
+}
+
 .card {
   background: #fff;
   padding: 12px;
@@ -25,27 +45,19 @@ h2 {
   box-shadow: 0 0 4px rgba(0,0,0,.1);
 }
 
-input, button {
-  width: 100%;
-  padding: 10px;
-  margin-top: 6px;
-  font-size: 14px;
-}
-
-button {
-  background: #007bff;
-  color: #fff;
-  border: none;
-  border-radius: 5px;
-}
-
 .task {
   border-left: 5px solid orange;
 }
 
 .task.completed {
   border-left-color: green;
-  opacity: .85;
+}
+
+img {
+  width: 100%;
+  margin-top: 8px;
+  border-radius: 6px;
+  border: 1px solid #ddd;
 }
 
 .small {
@@ -57,32 +69,24 @@ button {
 
 <body>
 
-<h2>🧑‍💼 Admin – Task Dispatcher</h2>
+<h2>🧑‍💼 Admin – Task Review</h2>
 
-<div class="card">
-  <b>Create New Task</b>
-  <input id="name" placeholder="Name" />
-  <input id="address" placeholder="Address" />
-  <input id="driverId" placeholder="Driver ID (e.g. driver_001)" />
-  <button onclick="createTask()">➕ Create Task</button>
+<div id="topBar">
+  <div class="small">Manual refresh (every ~30 min)</div>
+  <button class="refresh" onclick="loadTasks()">🔄 Refresh</button>
 </div>
 
-<div class="card">
-  <b>All Tasks</b>
-  <div id="taskList">Loading tasks...</div>
-</div>
+<div id="taskList">Click refresh to load tasks</div>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 import {
   getDatabase,
   ref,
-  push,
-  get,
-  update
+  get
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
-/* 🔥 FIREBASE CONFIG (SAME AS DRIVER) */
+/* 🔥 FIREBASE CONFIG (SAME PROJECT) */
 const firebaseConfig = {
   apiKey: "AIzaSyDFW61pnwLvh6HGKWt10zLYNr860fI8vkg",
   authDomain: "driva-pwa.firebaseapp.com",
@@ -96,70 +100,54 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 
-/* ➕ CREATE TASK */
-window.createTask = async function () {
-  const name = document.getElementById("name").value.trim();
-  const address = document.getElementById("address").value.trim();
-  const driverId = document.getElementById("driverId").value.trim();
-
-  if (!name || !address || !driverId) {
-    alert("Please fill in all fields");
-    return;
-  }
-
-  const taskRef = push(ref(db, "tasks"));
-  const taskId = taskRef.key;
-
-  await update(taskRef, {
-    id: taskId,
-    name,
-    address,
-    driverId,
-    status: "PENDING",
-    latitude: null,
-    longitude: null,
-    capturedAt: null,
-    uploadedAt: null
-  });
-
-  document.getElementById("name").value = "";
-  document.getElementById("address").value = "";
-  document.getElementById("driverId").value = "";
-
-  loadTasks();
-};
-
-/* 📋 LOAD ALL TASKS */
-async function loadTasks() {
+/* 📋 LOAD ALL TASKS (MANUAL) */
+window.loadTasks = async function () {
   const list = document.getElementById("taskList");
-  list.innerHTML = "";
+  list.innerHTML = "Loading tasks...";
 
   const snap = await get(ref(db, "tasks"));
   const tasks = Object.values(snap.val() || {});
 
-  // newest first
-  tasks.reverse();
+  if (!tasks.length) {
+    list.innerHTML = "No tasks found";
+    return;
+  }
+
+  /* 🔥 Sort: PENDING first, COMPLETED last */
+  tasks.sort((a, b) => {
+    if (a.status === "COMPLETED" && b.status !== "COMPLETED") return 1;
+    if (a.status !== "COMPLETED" && b.status === "COMPLETED") return -1;
+    return 0;
+  });
+
+  list.innerHTML = "";
 
   tasks.forEach(t => {
     const div = document.createElement("div");
-    div.className = `task ${t.status === "COMPLETED" ? "completed" : ""}`;
+    div.className = `card task ${t.status === "COMPLETED" ? "completed" : ""}`;
 
     div.innerHTML = `
       <b>${t.name}</b><br>
       <div class="small">${t.address}</div>
       <div class="small">Driver: ${t.driverId}</div>
       <div class="small">Status: ${t.status}</div>
-      ${t.latitude ? `<div class="small">📍 ${t.latitude}, ${t.longitude}</div>` : ""}
+
+      ${t.latitude ? `
+        <div class="small">📍 ${t.latitude}, ${t.longitude}</div>
+        <div class="small">📸 Captured: ${new Date(t.capturedAt).toLocaleString()}</div>
+        <div class="small">☁️ Uploaded: ${new Date(t.uploadedAt).toLocaleString()}</div>
+      ` : ""}
+
+      ${t.imageUrl ? `
+        <img src="${t.imageUrl}" alt="Proof photo" />
+      ` : `
+        <div class="small">No photo uploaded</div>
+      `}
     `;
 
     list.appendChild(div);
   });
-
-  if (!tasks.length) list.innerHTML = "No tasks yet";
-}
-
-loadTasks();
-setInterval(loadTasks, 5000);
+};
 </script>
 
 </body>
