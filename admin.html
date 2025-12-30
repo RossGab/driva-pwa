@@ -1,95 +1,56 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Admin Dashboard</title>
 
 <style>
-body {
-  font-family: Arial, sans-serif;
-  background: #f3f3f3;
-  margin: 0;
-  padding: 10px;
-}
+body { font-family: Arial, sans-serif; background:#f3f3f3; padding:10px; }
+h2 { text-align:center; }
 
-h2 {
-  text-align: center;
-  margin-bottom: 10px;
-}
-
-.dashboard {
-  display: flex;
-  gap: 10px;
-  margin-bottom: 12px;
-}
-
-.gauge {
-  flex: 1;
-  background: #fff;
-  padding: 16px;
-  border-radius: 10px;
-  text-align: center;
-  box-shadow: 0 0 4px rgba(0,0,0,.1);
-}
-
-.gauge.open { border-top: 5px solid orange; }
-.gauge.done { border-top: 5px solid green; }
-
-.big {
-  font-size: 32px;
-  font-weight: bold;
-}
-
-.actions {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 12px;
-}
-
-button {
-  flex: 1;
-  padding: 12px;
-  font-size: 14px;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-}
-
-.assign { background: #007bff; color: #fff; }
-.openBtn { background: orange; color: #fff; }
-.doneBtn { background: green; color: #fff; }
-.refresh { background: #444; color: #fff; }
-
+.dashboard { display:flex; gap:10px; margin-bottom:12px; }
 .card {
-  background: #fff;
-  padding: 12px;
-  margin-bottom: 10px;
-  border-radius: 8px;
-  box-shadow: 0 0 4px rgba(0,0,0,.1);
-  border-left: 5px solid #ccc;
+  flex:1;
+  background:#fff;
+  padding:16px;
+  border-radius:10px;
+  text-align:center;
+  box-shadow:0 0 4px rgba(0,0,0,.1);
+}
+.open { border-top:5px solid orange; }
+.done { border-top:5px solid green; }
+
+.big { font-size:32px; font-weight:bold; }
+
+.actions { display:flex; gap:8px; margin-bottom:12px; }
+button {
+  flex:1;
+  padding:12px;
+  font-size:14px;
+  border:none;
+  border-radius:6px;
+  cursor:pointer;
 }
 
-.card.completed { border-left-color: green; }
-.card.pending { border-left-color: orange; }
+.assign { background:#007bff; color:#fff; }
+.openBtn { background:orange; color:#fff; }
+.doneBtn { background:green; color:#fff; }
+.refresh { background:#444; color:#fff; }
 
-img {
-  width: 100%;
-  margin-top: 8px;
-  border-radius: 6px;
+.task {
+  background:#fff;
+  padding:12px;
+  margin-bottom:10px;
+  border-radius:8px;
+  box-shadow:0 0 4px rgba(0,0,0,.1);
+  border-left:5px solid #ccc;
 }
+.task.completed { border-left-color:green; }
+.task.pending { border-left-color:orange; }
 
-input {
-  width: 100%;
-  padding: 10px;
-  margin-top: 6px;
-  font-size: 14px;
-}
-
-.small {
-  font-size: 13px;
-  color: #555;
-}
+img { width:100%; margin-top:8px; border-radius:6px; }
+.small { font-size:13px; color:#555; }
 </style>
 </head>
 
@@ -97,49 +58,30 @@ input {
 
 <h2>🧑‍💼 Admin Dashboard</h2>
 
-<!-- DASHBOARD -->
 <div class="dashboard">
-  <div class="gauge open">
+  <div class="card open">
     <div class="big" id="openCount">0</div>
     Open Tasks (Today)
   </div>
-  <div class="gauge done">
+  <div class="card done">
     <div class="big" id="doneCount">0</div>
     Completed (Today)
   </div>
 </div>
 
-<!-- ACTIONS -->
 <div class="actions">
-  <button class="assign" onclick="toggleAssign()">➕ Assign Task</button>
+  <button class="assign" onclick="location.href='assign.html'">➕ Assign Task</button>
   <button class="openBtn" onclick="loadTasks('PENDING')">📂 Open</button>
   <button class="doneBtn" onclick="loadTasks('COMPLETED')">✅ Completed</button>
   <button class="refresh" onclick="refreshDashboard()">🔄</button>
 </div>
 
-<!-- ASSIGN -->
-<div class="card" id="assignBox" style="display:none">
-  <b>Assign New Task</b>
-  <input id="name" placeholder="Name" />
-  <input id="address" placeholder="Address" />
-  <input id="driverId" placeholder="Driver ID (e.g. driver_001)" />
-  <button class="assign" onclick="createTask()">Create Task</button>
-</div>
-
-<!-- TASK LIST -->
 <div id="taskList">Select Open or Completed</div>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import {
-  getDatabase,
-  ref,
-  push,
-  get,
-  set
-} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+import { getDatabase, ref, get } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
-/* FIREBASE CONFIG */
 const firebaseConfig = {
   apiKey: "AIzaSyDFW61pnwLvh6HGKWt10zLYNr860fI8vkg",
   authDomain: "driva-pwa.firebaseapp.com",
@@ -152,9 +94,8 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
-const today = new Date().toISOString().slice(0, 10);
+const today = new Date().toISOString().slice(0,10);
 
-/* DASHBOARD */
 window.refreshDashboard = async function () {
   const snap = await get(ref(db, "tasks"));
   const tasks = Object.values(snap.val() || {});
@@ -165,49 +106,10 @@ window.refreshDashboard = async function () {
     t.status === "COMPLETED" ? done++ : open++;
   });
 
-  document.getElementById("openCount").innerText = open;
-  document.getElementById("doneCount").innerText = done;
+  openCount.innerText = open;
+  doneCount.innerText = done;
 };
 
-/* TOGGLE ASSIGN */
-window.toggleAssign = function () {
-  const box = document.getElementById("assignBox");
-  box.style.display = box.style.display === "none" ? "block" : "none";
-};
-
-/* CREATE TASK */
-window.createTask = async function () {
-  try {
-    const name = document.getElementById("name").value.trim();
-    const address = document.getElementById("address").value.trim();
-    const driverId = document.getElementById("driverId").value.trim();
-
-    if (!name || !address || !driverId) {
-      alert("Fill all fields");
-      return;
-    }
-
-    const taskRef = push(ref(db, "tasks"));
-
-    await set(taskRef, {
-      id: taskRef.key,
-      name,
-      address,
-      driverId,
-      status: "PENDING",
-      createdAt: new Date().toISOString(),
-      imageUrl: null
-    });
-
-    document.getElementById("assignBox").style.display = "none";
-    alert("Task assigned");
-    refreshDashboard();
-  } catch (e) {
-    alert("Error creating task: " + e.message);
-  }
-};
-
-/* LOAD TASKS */
 window.loadTasks = async function (status) {
   const list = document.getElementById("taskList");
   list.innerHTML = "Loading...";
@@ -220,7 +122,7 @@ window.loadTasks = async function (status) {
 
   tasks.forEach(t => {
     const div = document.createElement("div");
-    div.className = `card ${status === "COMPLETED" ? "completed" : "pending"}`;
+    div.className = `task ${status === "COMPLETED" ? "completed" : "pending"}`;
     div.innerHTML = `
       <b>${t.name}</b>
       <div class="small">${t.address}</div>
@@ -231,7 +133,6 @@ window.loadTasks = async function (status) {
   });
 };
 
-/* INIT */
 refreshDashboard();
 </script>
 
