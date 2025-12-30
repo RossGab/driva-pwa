@@ -28,21 +28,29 @@ body {
   margin-bottom: 10px;
   border-radius: 8px;
   box-shadow: 0 0 4px rgba(0,0,0,.1);
+  border-left: 5px solid orange;
 }
 
-.task.pending { border-left: 5px solid orange; }
-.task.completed { border-left: 5px solid green; opacity: 0.9; }
+.task.completed {
+  border-left-color: green;
+}
 
 button {
   padding: 10px;
   width: 100%;
   margin-top: 6px;
   font-size: 14px;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
 }
+
+.capture { background: #007bff; color: #fff; }
+.toggle { background: #0069d9; color: #fff; }
 
 img {
   width: 100%;
-  margin-top: 6px;
+  margin-top: 8px;
   border-radius: 6px;
 }
 
@@ -62,10 +70,10 @@ img {
 <input type="file" id="cameraInput" accept="image/*" capture="environment" hidden />
 
 <script type="module">
-/* ===============================
-   FIREBASE IMPORTS (CDN)
-================================= */
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+/* ================= FIREBASE IMPORTS ================= */
+import { initializeApp } from
+  "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+
 import {
   getDatabase,
   ref,
@@ -74,23 +82,21 @@ import {
   query,
   orderByChild,
   equalTo
-} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+} from
+  "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
 import {
   getStorage,
   ref as sRef,
   uploadBytes,
   getDownloadURL
-} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
+} from
+  "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-/* ===============================
-   APP VERSION (CHANGE TO FORCE REFRESH)
-================================= */
-const APP_VERSION = "v1.3.0";
+/* ================= APP VERSION ================= */
+const APP_VERSION = "v1.4.0";
 
-/* ===============================
-   FIREBASE CONFIG
-================================= */
+/* ================= FIREBASE CONFIG ================= */
 const firebaseConfig = {
   apiKey: "AIzaSyDFW61pnwLvh6HGKWt10zLYNr860fI8vkg",
   authDomain: "driva-pwa.firebaseapp.com",
@@ -105,9 +111,7 @@ const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 const storage = getStorage(app);
 
-/* ===============================
-   DRIVER ID (ASK ONCE)
-================================= */
+/* ================= DRIVER ID ================= */
 let DRIVER_ID = localStorage.getItem("driverId");
 
 while (!DRIVER_ID) {
@@ -119,9 +123,7 @@ localStorage.setItem("driverId", DRIVER_ID);
 document.getElementById("appVersion").innerText =
   `Driver: ${DRIVER_ID} | Version: ${APP_VERSION}`;
 
-/* ===============================
-   LOCATION
-================================= */
+/* ================= LOCATION ================= */
 function getLocation() {
   return new Promise((resolve, reject) => {
     navigator.geolocation.getCurrentPosition(
@@ -132,20 +134,13 @@ function getLocation() {
   });
 }
 
-/* ===============================
-   IMAGE COMPRESSION (🔥 IMPORTANT)
-   - Max width: 1280px
-   - JPEG quality: 0.65
-   - Reduces size by ~70–85%
-================================= */
+/* ================= IMAGE COMPRESSION ================= */
 function compressImage(file) {
   return new Promise((resolve, reject) => {
     const img = new Image();
     const reader = new FileReader();
 
-    reader.onload = e => {
-      img.src = e.target.result;
-    };
+    reader.onload = e => img.src = e.target.result;
 
     img.onload = () => {
       const canvas = document.createElement("canvas");
@@ -155,20 +150,16 @@ function compressImage(file) {
       let { width, height } = img;
 
       if (width > MAX_WIDTH) {
-        height = height * (MAX_WIDTH / width);
+        height *= MAX_WIDTH / width;
         width = MAX_WIDTH;
       }
 
       canvas.width = width;
       canvas.height = height;
-
       ctx.drawImage(img, 0, 0, width, height);
 
       canvas.toBlob(
-        blob => {
-          if (!blob) reject("Compression failed");
-          resolve(blob);
-        },
+        blob => blob ? resolve(blob) : reject("Compression failed"),
         "image/jpeg",
         0.65
       );
@@ -179,9 +170,7 @@ function compressImage(file) {
   });
 }
 
-/* ===============================
-   CAMERA HANDLER
-================================= */
+/* ================= CAMERA HANDLER ================= */
 let CURRENT_TASK_ID = null;
 const cameraInput = document.getElementById("cameraInput");
 
@@ -211,17 +200,11 @@ cameraInput.addEventListener("change", async e => {
     capturedAt: new Date().toISOString()
   });
 
-  /* 🔥 COMPRESS IMAGE BEFORE UPLOAD */
-  const compressedBlob = await compressImage(file);
+  const compressed = await compressImage(file);
+  const imgRef = sRef(storage, `tasks/${CURRENT_TASK_ID}/${Date.now()}.jpg`);
 
-  const storagePath = `tasks/${CURRENT_TASK_ID}/${Date.now()}.jpg`;
-  const imageRef = sRef(storage, storagePath);
-
-  await uploadBytes(imageRef, compressedBlob, {
-    contentType: "image/jpeg"
-  });
-
-  const imageUrl = await getDownloadURL(imageRef);
+  await uploadBytes(imgRef, compressed, { contentType: "image/jpeg" });
+  const imageUrl = await getDownloadURL(imgRef);
 
   await update(taskRef, {
     status: "COMPLETED",
@@ -234,9 +217,21 @@ cameraInput.addEventListener("change", async e => {
   loadTasks();
 });
 
-/* ===============================
-   LOAD TASKS (ONLY THIS DRIVER)
-================================= */
+/* ================= TOGGLE IMAGE ================= */
+window.toggleImage = function (imgId, btn) {
+  const img = document.getElementById(imgId);
+  if (!img) return;
+
+  if (img.style.display === "none") {
+    img.style.display = "block";
+    btn.innerText = "🙈 Hide Photo";
+  } else {
+    img.style.display = "none";
+    btn.innerText = "👁 Show Photo";
+  }
+};
+
+/* ================= LOAD TASKS ================= */
 async function loadTasks() {
   const list = document.getElementById("taskList");
 
@@ -249,7 +244,6 @@ async function loadTasks() {
   const snap = await get(q);
   const tasks = Object.values(snap.val() || {});
 
-  /* 🔥 SORT: PENDING ON TOP */
   tasks.sort((a, b) => {
     if (a.status === "COMPLETED" && b.status !== "COMPLETED") return 1;
     if (a.status !== "COMPLETED" && b.status === "COMPLETED") return -1;
@@ -259,23 +253,36 @@ async function loadTasks() {
   list.innerHTML = tasks.length ? "" : "No tasks assigned";
 
   tasks.forEach(t => {
+    const imgId = `img_${t.id}`;
+
     const div = document.createElement("div");
-    div.className = `task ${t.status === "COMPLETED" ? "completed" : "pending"}`;
+    div.className = `task ${t.status === "COMPLETED" ? "completed" : ""}`;
 
     div.innerHTML = `
-      <b>${t.name}</b><br>
+      <b>${t.name}</b>
       <div class="small">${t.address}</div>
       <div class="small">Status: ${t.status}</div>
 
-      ${t.imageUrl ? `<img src="${t.imageUrl}" />` : ""}
+      ${
+        t.status === "COMPLETED" ? `
+          <div class="small">📍 ${t.latitude}, ${t.longitude}</div>
+          <div class="small">📸 ${new Date(t.capturedAt).toLocaleString()}</div>
+          <div class="small">☁️ ${new Date(t.uploadedAt).toLocaleString()}</div>
+        ` : ""
+      }
 
-      ${t.latitude ? `
-        <div class="small">📍 ${t.latitude}, ${t.longitude}</div>
-        <div class="small">📸 ${new Date(t.capturedAt).toLocaleString()}</div>
-        <div class="small">☁️ ${new Date(t.uploadedAt).toLocaleString()}</div>
-      ` : ""}
+      ${
+        t.imageUrl ? `
+          <button class="toggle"
+            onclick="toggleImage('${imgId}', this)">
+            👁 Show Photo
+          </button>
+          <img id="${imgId}" src="${t.imageUrl}" style="display:none">
+        ` : ""
+      }
 
-      <button onclick="takePicture('${t.id}')">
+      <button class="capture"
+        onclick="takePicture('${t.id}')">
         ${t.status === "COMPLETED" ? "🔁 Retake Picture" : "📸 Take Picture"}
       </button>
     `;
@@ -284,9 +291,7 @@ async function loadTasks() {
   });
 }
 
-/* ===============================
-   INIT
-================================= */
+/* INIT */
 loadTasks();
 setInterval(loadTasks, 5000);
 </script>
