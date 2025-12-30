@@ -6,7 +6,7 @@
 <title>Driver Tasks</title>
 
 <!-- PWA -->
-<link rel="manifest" href="manifest.json">
+<link rel="manifest" href="./manifest.json">
 <meta name="theme-color" content="#222222">
 
 <style>
@@ -42,7 +42,9 @@ body {
   border-left:5px solid orange;
 }
 
-.task.completed { border-left-color:green; }
+.task.completed {
+  border-left-color:green;
+}
 
 button {
   width:100%;
@@ -57,8 +59,15 @@ button:disabled {
   background:#aaa;
 }
 
-.capture { background:#007bff; color:#fff; }
-.toggle { background:#0069d9; color:#fff; }
+.capture {
+  background:#007bff;
+  color:#fff;
+}
+
+.toggle {
+  background:#0069d9;
+  color:#fff;
+}
 
 img {
   width:100%;
@@ -69,6 +78,12 @@ img {
 .small {
   font-size:13px;
   color:#555;
+}
+
+.offline-indicator {
+  color:#c0392b;
+  font-weight:bold;
+  margin-top:4px;
 }
 </style>
 </head>
@@ -82,13 +97,14 @@ img {
 <input type="file" id="cameraInput" accept="image/*" capture="environment" hidden>
 
 <script type="module">
+/* ================= FIREBASE ================= */
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 import { getDatabase, ref, get, update, query, orderByChild, equalTo }
   from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL }
   from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "v2.3.0";
+const VERSION = "v2.4.0";
 
 const firebaseConfig = {
   apiKey: "AIzaSyDFW61pnwLvh6HGKWt10zLYNr860fI8vkg",
@@ -104,19 +120,19 @@ const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 const storage = getStorage(app);
 
-/* ===== DRIVER ===== */
+/* ================= DRIVER ID ================= */
 let DRIVER_ID = localStorage.getItem("driverId");
 while (!DRIVER_ID) DRIVER_ID = prompt("Enter Driver ID");
 localStorage.setItem("driverId", DRIVER_ID);
 
 appVersion.innerText = `Driver: ${DRIVER_ID} | ${VERSION}`;
 
-/* ===== OFFLINE QUEUE ===== */
+/* ================= OFFLINE QUEUE ================= */
 const QUEUE_KEY = "offlineQueue";
 const getQueue = () => JSON.parse(localStorage.getItem(QUEUE_KEY) || "[]");
 const setQueue = q => localStorage.setItem(QUEUE_KEY, JSON.stringify(q));
 
-/* ===== NETWORK ===== */
+/* ================= NETWORK ================= */
 function updateNet() {
   offlineBanner.style.display = navigator.onLine ? "none" : "block";
 }
@@ -124,7 +140,7 @@ window.addEventListener("online", updateNet);
 window.addEventListener("offline", updateNet);
 updateNet();
 
-/* ===== IMAGE HELPERS ===== */
+/* ================= IMAGE HELPERS ================= */
 function compress(file) {
   return new Promise(res => {
     const img = new Image();
@@ -150,7 +166,7 @@ function toBase64(blob) {
   });
 }
 
-/* ===== CAMERA ===== */
+/* ================= CAMERA ================= */
 let CURRENT_TASK_KEY = null;
 const cam = document.getElementById("cameraInput");
 
@@ -180,7 +196,7 @@ cam.addEventListener("change", async e => {
   await upload(CURRENT_TASK_KEY, blob);
 });
 
-/* ===== UPLOAD ===== */
+/* ================= UPLOAD ================= */
 async function upload(taskKey, blob) {
   const tRef = ref(db, `tasks/${taskKey}`);
   await update(tRef, { status:"UPLOADING" });
@@ -198,7 +214,7 @@ async function upload(taskKey, blob) {
   loadTasks();
 }
 
-/* ===== SYNC OFFLINE ===== */
+/* ================= SYNC OFFLINE ================= */
 setInterval(async () => {
   if (!navigator.onLine) return;
   const q = getQueue();
@@ -211,7 +227,7 @@ setInterval(async () => {
   setQueue([]);
 }, 5000);
 
-/* ===== LOAD TASKS ===== */
+/* ================= LOAD TASKS ================= */
 async function loadTasks() {
   const snap = await get(
     query(ref(db,"tasks"), orderByChild("driverId"), equalTo(DRIVER_ID))
@@ -238,6 +254,7 @@ async function loadTasks() {
   taskList.innerHTML = tasks.length ? "" : "No tasks";
 
   tasks.forEach(t=>{
+    const isOfflineSaved = offlineMap[t._key];
     const div = document.createElement("div");
     div.className = `task ${t.status==="COMPLETED"?"completed":""}`;
 
@@ -246,8 +263,14 @@ async function loadTasks() {
       <div class="small">${t.address}</div>
       <div class="small">Status: ${t.status}</div>
 
+      ${isOfflineSaved ? `
+        <div class="offline-indicator">
+          🕒 Photo saved — will upload when online
+        </div>
+      ` : ``}
+
       ${
-        offlineMap[t._key]
+        isOfflineSaved
           ? `<button disabled>⏳ Saved – Upload Later</button>`
           : t.status === "COMPLETED"
             ? `
@@ -274,7 +297,7 @@ loadTasks();
 <!-- Service Worker -->
 <script>
 if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("sw.js");
+  navigator.serviceWorker.register("./sw.js");
 }
 </script>
 
