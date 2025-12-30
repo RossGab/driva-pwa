@@ -74,6 +74,7 @@ button {
 .small {
   font-size:13px;
   color:#555;
+  margin-top:2px;
 }
 
 img {
@@ -187,6 +188,14 @@ window.loadTasks = async function (status) {
       <b>${t.name}</b>
       <div class="small">${t.address}</div>
       <div class="small">Driver: ${t.driverId}</div>
+
+      ${
+        status === "COMPLETED" ? `
+          <div class="small">📍 ${t.latitude}, ${t.longitude}</div>
+          <div class="small">📸 Taken: ${new Date(t.capturedAt).toLocaleString()}</div>
+          <div class="small">☁️ Uploaded: ${new Date(t.uploadedAt).toLocaleString()}</div>
+        ` : ""
+      }
 
       ${t.imageUrl ? `
         <button class="toggleBtn"
