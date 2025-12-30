@@ -39,7 +39,6 @@ body {
 }
 
 .task.completed { border-left-color:green; }
-.task.offline { border-left-color:#c0392b; }
 
 button {
   width:100%;
@@ -49,6 +48,11 @@ button {
   border:none;
   border-radius:6px;
   cursor:pointer;
+}
+
+button:disabled {
+  background:#aaa;
+  cursor:not-allowed;
 }
 
 .capture { background:#007bff; color:#fff; }
@@ -70,20 +74,20 @@ img {
 <body>
 
 <div id="appVersion"></div>
-<div id="offlineBanner">⚠ Offline — photos will sync automatically</div>
+<div id="offlineBanner">⚠ Offline — photos will upload automatically</div>
 <div id="taskList">Loading tasks...</div>
 
 <input type="file" id="cameraInput" accept="image/*" capture="environment" hidden>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import { getDatabase, ref, get, update, query, orderByChild, equalTo } 
+import { getDatabase, ref, get, update, query, orderByChild, equalTo }
   from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
-import { getStorage, ref as sRef, uploadBytes, getDownloadURL } 
+import { getStorage, ref as sRef, uploadBytes, getDownloadURL }
   from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
 /* ================= CONFIG ================= */
-const VERSION = "v1.9.0";
+const VERSION = "v2.0.0";
 
 const firebaseConfig = {
   apiKey: "AIzaSyDFW61pnwLvh6HGKWt10zLYNr860fI8vkg",
@@ -108,8 +112,12 @@ appVersion.innerText = `Driver: ${DRIVER_ID} | ${VERSION}`;
 
 /* ================= OFFLINE QUEUE ================= */
 const QUEUE_KEY = "offlineQueue";
-const getQueue = () => JSON.parse(localStorage.getItem(QUEUE_KEY) || "[]");
-const setQueue = q => localStorage.setItem(QUEUE_KEY, JSON.stringify(q));
+
+const getQueue = () =>
+  JSON.parse(localStorage.getItem(QUEUE_KEY) || "[]");
+
+const setQueue = q =>
+  localStorage.setItem(QUEUE_KEY, JSON.stringify(q));
 
 /* ================= NETWORK ================= */
 function updateNet() {
@@ -194,7 +202,7 @@ async function upload(taskId, blob) {
   loadTasks();
 }
 
-/* ================= SYNC ================= */
+/* ================= SYNC OFFLINE ================= */
 setInterval(async () => {
   if (!navigator.onLine) return;
   const q = getQueue();
@@ -215,7 +223,7 @@ async function loadTasks() {
 
   const tasks = Object.values(snap.val() || {});
   const offlineMap = Object.fromEntries(
-    getQueue().map(i => [i.taskId, i.image])
+    getQueue().map(i => [i.taskId, true])
   );
 
   tasks.sort((a,b)=>{
@@ -229,39 +237,29 @@ async function loadTasks() {
   taskList.innerHTML = tasks.length ? "" : "No tasks";
 
   tasks.forEach(t=>{
-    const offline = offlineMap[t.id];
     const div = document.createElement("div");
-    div.className = `task ${offline?"offline":""} ${t.status==="COMPLETED"?"completed":""}`;
+    div.className = `task ${t.status==="COMPLETED"?"completed":""}`;
 
     div.innerHTML = `
       <b>${t.name}</b>
       <div class="small">${t.address}</div>
-      <div class="small">
-        Status: ${offline ? "OFFLINE – PHOTO SAVED" : t.status}
-      </div>
+      <div class="small">Status: ${t.status}</div>
 
       ${
-        offline ? `
-          <button class="toggle" onclick="this.nextElementSibling.style.display =
-            this.nextElementSibling.style.display==='none'?'block':'none'">
-            👁 Show / Hide Photo
-          </button>
-          <img src="${offline}" style="display:none">
-        ` : ""
-      }
-
-      ${
-        t.status === "COMPLETED" ? `
-          <button class="toggle" onclick="this.nextElementSibling.style.display =
-            this.nextElementSibling.style.display==='none'?'block':'none'">
-            👁 Show / Hide Photo
-          </button>
-          <img src="${t.imageUrl}" style="display:none">
-        ` : `
-          <button class="capture" onclick="takePicture('${t.id}')">
-            📸 Take Picture
-          </button>
-        `
+        offlineMap[t.id]
+          ? `<button disabled>⏳ Saved – Upload Later</button>`
+          : t.status === "COMPLETED"
+            ? `
+              <button class="toggle"
+                onclick="this.nextElementSibling.style.display =
+                  this.nextElementSibling.style.display==='none'?'block':'none'">
+                👁 Show / Hide Photo
+              </button>
+              <img src="${t.imageUrl}" style="display:none">
+            `
+            : `<button class="capture" onclick="takePicture('${t.id}')">
+                 📸 Take Picture
+               </button>`
       }
     `;
 
