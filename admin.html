@@ -97,7 +97,7 @@ input {
 
 <h2>🧑‍💼 Admin Dashboard</h2>
 
-<!-- ===== DASHBOARD ===== -->
+<!-- DASHBOARD -->
 <div class="dashboard">
   <div class="gauge open">
     <div class="big" id="openCount">0</div>
@@ -109,7 +109,7 @@ input {
   </div>
 </div>
 
-<!-- ===== ACTIONS ===== -->
+<!-- ACTIONS -->
 <div class="actions">
   <button class="assign" onclick="toggleAssign()">➕ Assign Task</button>
   <button class="openBtn" onclick="loadTasks('PENDING')">📂 Open</button>
@@ -117,7 +117,7 @@ input {
   <button class="refresh" onclick="refreshDashboard()">🔄</button>
 </div>
 
-<!-- ===== ASSIGN TASK ===== -->
+<!-- ASSIGN -->
 <div class="card" id="assignBox" style="display:none">
   <b>Assign New Task</b>
   <input id="name" placeholder="Name" />
@@ -126,7 +126,7 @@ input {
   <button class="assign" onclick="createTask()">Create Task</button>
 </div>
 
-<!-- ===== TASK LIST ===== -->
+<!-- TASK LIST -->
 <div id="taskList">Select Open or Completed</div>
 
 <script type="module">
@@ -135,7 +135,8 @@ import {
   getDatabase,
   ref,
   push,
-  get
+  get,
+  set
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
 /* FIREBASE CONFIG */
@@ -151,96 +152,81 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
-
 const today = new Date().toISOString().slice(0, 10);
 
-/* ===== DASHBOARD ===== */
-async function refreshDashboard() {
+/* DASHBOARD */
+window.refreshDashboard = async function () {
   const snap = await get(ref(db, "tasks"));
   const tasks = Object.values(snap.val() || {});
-
   let open = 0, done = 0;
 
   tasks.forEach(t => {
-    if (!t.createdAt) return;
-    if (!t.createdAt.startsWith(today)) return;
-
-    if (t.status === "COMPLETED") done++;
-    else open++;
+    if (!t.createdAt || !t.createdAt.startsWith(today)) return;
+    t.status === "COMPLETED" ? done++ : open++;
   });
 
   document.getElementById("openCount").innerText = open;
   document.getElementById("doneCount").innerText = done;
-}
+};
 
-window.refreshDashboard = refreshDashboard;
-
-/* ===== TOGGLE ASSIGN ===== */
+/* TOGGLE ASSIGN */
 window.toggleAssign = function () {
   const box = document.getElementById("assignBox");
   box.style.display = box.style.display === "none" ? "block" : "none";
 };
 
-/* ===== CREATE TASK ===== */
+/* CREATE TASK */
 window.createTask = async function () {
-  const name = document.getElementById("name").value.trim();
-  const address = document.getElementById("address").value.trim();
-  const driverId = document.getElementById("driverId").value.trim();
+  try {
+    const name = document.getElementById("name").value.trim();
+    const address = document.getElementById("address").value.trim();
+    const driverId = document.getElementById("driverId").value.trim();
 
-  if (!name || !address || !driverId) {
-    alert("Fill all fields");
-    return;
+    if (!name || !address || !driverId) {
+      alert("Fill all fields");
+      return;
+    }
+
+    const taskRef = push(ref(db, "tasks"));
+
+    await set(taskRef, {
+      id: taskRef.key,
+      name,
+      address,
+      driverId,
+      status: "PENDING",
+      createdAt: new Date().toISOString(),
+      imageUrl: null
+    });
+
+    document.getElementById("assignBox").style.display = "none";
+    alert("Task assigned");
+    refreshDashboard();
+  } catch (e) {
+    alert("Error creating task: " + e.message);
   }
-
-  const refTask = push(ref(db, "tasks"));
-
-  await refTask.set({
-    id: refTask.key,
-    name,
-    address,
-    driverId,
-    status: "PENDING",
-    createdAt: new Date().toISOString(),
-    imageUrl: null
-  });
-
-  document.getElementById("assignBox").style.display = "none";
-  alert("Task assigned");
-  refreshDashboard();
 };
 
-/* ===== LOAD TASKS ===== */
+/* LOAD TASKS */
 window.loadTasks = async function (status) {
   const list = document.getElementById("taskList");
   list.innerHTML = "Loading...";
 
   const snap = await get(ref(db, "tasks"));
   const tasks = Object.values(snap.val() || {})
-    .filter(t =>
-      t.status === status &&
-      t.createdAt &&
-      t.createdAt.startsWith(today)
-    );
+    .filter(t => t.status === status && t.createdAt?.startsWith(today));
 
-  if (!tasks.length) {
-    list.innerHTML = "No tasks";
-    return;
-  }
-
-  list.innerHTML = "";
+  list.innerHTML = tasks.length ? "" : "No tasks";
 
   tasks.forEach(t => {
     const div = document.createElement("div");
     div.className = `card ${status === "COMPLETED" ? "completed" : "pending"}`;
-
     div.innerHTML = `
       <b>${t.name}</b>
       <div class="small">${t.address}</div>
       <div class="small">Driver: ${t.driverId}</div>
-
       ${t.imageUrl ? `<img src="${t.imageUrl}">` : ""}
     `;
-
     list.appendChild(div);
   });
 };
