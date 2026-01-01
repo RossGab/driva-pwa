@@ -1,4 +1,6 @@
-const CACHE_NAME = "driver-app-v1";
+
+const CACHE_VERSION = "v3";
+const CACHE_NAME = `field-task-app-${CACHE_VERSION}`;
 
 const APP_SHELL = [
   "./",
@@ -22,7 +24,7 @@ self.addEventListener("activate", event => {
   event.waitUntil(
     caches.keys().then(keys =>
       Promise.all(
-        keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k))
+        keys.map(k => k !== CACHE_NAME && caches.delete(k))
       )
     )
   );
@@ -30,9 +32,17 @@ self.addEventListener("activate", event => {
 });
 
 self.addEventListener("fetch", event => {
+  // IMPORTANT: handle navigation (refresh)
+  if (event.request.mode === "navigate") {
+    event.respondWith(
+      caches.match("./driver.html").then(res => res || fetch(event.request))
+    );
+    return;
+  }
+
   event.respondWith(
-    caches.match(event.request).then(cached => {
-      return cached || fetch(event.request);
-    })
+    caches.match(event.request).then(
+      cached => cached || fetch(event.request)
+    )
   );
 });
