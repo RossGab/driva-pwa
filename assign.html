@@ -21,6 +21,7 @@ h2 {
   padding: 14px;
   border-radius: 8px;
   box-shadow: 0 0 4px rgba(0,0,0,.1);
+  margin-bottom: 12px;
 }
 
 input, button {
@@ -41,11 +42,24 @@ button {
   color: #fff;
 }
 
+.csv {
+  background: #28a745;
+  color: #fff;
+}
+
 .back {
   background: #444;
   color: #fff;
   margin-top: 10px;
 }
+
+.status {
+  margin-top: 8px;
+  font-size: 13px;
+}
+
+.success { color: green; }
+.error { color: #c0392b; }
 </style>
 </head>
 
@@ -53,14 +67,29 @@ button {
 
 <h2>➕ Assign Task</h2>
 
+<!-- ===== MANUAL ASSIGN ===== -->
 <div class="card">
+  <h3>Manual Entry</h3>
+
   <input id="name" placeholder="Name" />
   <input id="address" placeholder="Address" />
   <input id="driverId" placeholder="Driver ID (e.g. driver_001)" />
 
   <button class="create" onclick="createTask()">Create Task</button>
-  <button class="back" onclick="location.href='admin.html'">⬅ Back to Dashboard</button>
+  <div id="manualStatus" class="status"></div>
 </div>
+
+<!-- ===== CSV ASSIGN ===== -->
+<div class="card">
+  <h3>Upload CSV</h3>
+
+  <input type="file" id="csvFile" accept=".csv" />
+  <button class="csv" onclick="uploadCSV()">Upload CSV</button>
+
+  <div id="csvStatus" class="status"></div>
+</div>
+
+<button class="back" onclick="location.href='admin.html'">⬅ Back to Dashboard</button>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
@@ -71,9 +100,7 @@ import {
   set
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
-/* ===============================
-   FIREBASE CONFIG
-================================= */
+/* ================= FIREBASE CONFIG ================= */
 const firebaseConfig = {
   apiKey: "AIzaSyDFW61pnwLvh6HGKWt10zLYNr860fI8vkg",
   authDomain: "driva-pwa.firebaseapp.com",
@@ -87,20 +114,19 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 
-/* ===============================
-   CREATE TASK (FIXED)
-================================= */
+/* ================= MANUAL CREATE ================= */
 window.createTask = async function () {
   const nameEl = document.getElementById("name");
   const addressEl = document.getElementById("address");
   const driverEl = document.getElementById("driverId");
+  const statusEl = document.getElementById("manualStatus");
 
   const name = nameEl.value.trim();
   const address = addressEl.value.trim();
   const driverId = driverEl.value.trim();
 
   if (!name || !address || !driverId) {
-    alert("Please fill in all fields");
+    statusEl.innerHTML = "<span class='error'>Please fill in all fields</span>";
     return;
   }
 
@@ -115,16 +141,64 @@ window.createTask = async function () {
     createdAt: new Date().toISOString()
   });
 
-  alert("Task assigned successfully");
+  statusEl.innerHTML = "<span class='success'>Task assigned successfully</span>";
 
-  /* ✅ CLEAR INPUTS AFTER SUCCESS */
   nameEl.value = "";
   addressEl.value = "";
   driverEl.value = "";
-
-  /* Optional: focus for fast entry */
   nameEl.focus();
 };
+
+/* ================= CSV UPLOAD ================= */
+window.uploadCSV = function () {
+  const file = document.getElementById("csvFile").files[0];
+  const statusEl = document.getElementById("csvStatus");
+
+  if (!file) {
+    statusEl.innerHTML = "<span class='error'>Please select a CSV file</span>";
+    return;
+  }
+
+  const reader = new FileReader();
+  reader.onload = e => parseCSV(e.target.result);
+  reader.readAsText(file);
+};
+
+async function parseCSV(text) {
+  const statusEl = document.getElementById("csvStatus");
+  const lines = text.trim().split("\n");
+  const header = lines.shift().trim();
+
+  if (header !== "name,address,driverId") {
+    statusEl.innerHTML =
+      "<span class='error'>Invalid CSV header. Required: name,address,driverId</span>";
+    return;
+  }
+
+  let successCount = 0;
+
+  for (const line of lines) {
+    const [name, address, driverId] = line.split(",").map(v => v.trim());
+    if (!name || !address || !driverId) continue;
+
+    const taskRef = push(ref(db, "tasks"));
+    await set(taskRef, {
+      id: taskRef.key,
+      name,
+      address,
+      driverId,
+      status: "PENDING",
+      createdAt: new Date().toISOString()
+    });
+
+    successCount++;
+  }
+
+  statusEl.innerHTML =
+    `<span class='success'>${successCount} tasks uploaded successfully</span>`;
+
+  document.getElementById("csvFile").value = "";
+}
 </script>
 
 </body>
