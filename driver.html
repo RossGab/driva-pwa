@@ -113,7 +113,7 @@ import {
   getStorage, ref as sRef, uploadBytes, getDownloadURL
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.1.1";
+const VERSION = "Driver v3.1.2";
 
 /* ================= CONFIG ================= */
 const firebaseConfig = {
@@ -134,7 +134,7 @@ const storage = getStorage(app);
 const QUEUE_KEY = "offlineQueue";
 const TASK_CACHE_KEY = "cachedTasks";
 const PRIORITY = { PENDING: 1, UPLOADING: 2, SAVED: 2, COMPLETED: 3 };
-const uploadingMap = {}; // 🔹 ONLY ADDITION
+const uploadingMap = {};
 
 /* ================= DRIVER ================= */
 let DRIVER_ID = localStorage.getItem("driverId");
@@ -193,7 +193,18 @@ function compressImage(file) {
 }
 
 const toBase64 = blob =>
-  new Promise(r => { const f=new FileReader(); f.onloadend=()=>r(f.result); f.readAsDataURL(blob); });
+  new Promise(r => {
+    const f = new FileReader();
+    f.onloadend = () => r(f.result);
+    f.readAsDataURL(blob);
+  });
+
+/* ================= FILENAME SANITIZER ================= */
+function sanitizeStrict(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]/g, "_");
+}
 
 /* ================= STATUS ================= */
 function resolveStatus(task, offlineItem) {
@@ -220,7 +231,7 @@ camera.addEventListener("change", async e => {
   const coords = await getLocation();
   const takenAt = new Date().toISOString();
 
-  // OFFLINE — unchanged
+  // OFFLINE
   if (!navigator.onLine) {
     const q = getQueue();
     q.push({
@@ -235,13 +246,13 @@ camera.addEventListener("change", async e => {
     return;
   }
 
-  // ONLINE — show UPLOADING immediately
+  // ONLINE → show UPLOADING
   uploadingMap[CURRENT_TASK] = true;
   render(JSON.parse(localStorage.getItem(TASK_CACHE_KEY) || []));
 
   try {
     await uploadNow(CURRENT_TASK, blob, takenAt, coords);
-  } catch (e) {
+  } catch {
     alert("Upload failed. Please retake the photo.");
   }
 
@@ -250,17 +261,31 @@ camera.addEventListener("change", async e => {
 
 /* ================= UPLOAD ================= */
 async function uploadNow(taskKey, blob, takenAt, coords) {
-  const taskRef = ref(db, `tasks/${taskKey}`);
-  const imgRef = sRef(storage, `tasks/${taskKey}/${Date.now()}.jpg`);
+  const snap = await get(ref(db, `tasks/${taskKey}`));
+  const task = snap.val();
+
+  const uploadedAt = new Date().toISOString();
+
+  const filename = [
+    sanitizeStrict(DRIVER_ID),
+    sanitizeStrict(task?.name),
+    sanitizeStrict(task?.address),
+    sanitizeStrict(coords?.latitude),
+    sanitizeStrict(coords?.longitude),
+    sanitizeStrict(takenAt),
+    sanitizeStrict(uploadedAt)
+  ].join("_") + ".jpg";
+
+  const imgRef = sRef(storage, `tasks/${taskKey}/${filename}`);
 
   await uploadBytes(imgRef, blob);
   const url = await getDownloadURL(imgRef);
 
-  await update(taskRef, {
+  await update(ref(db, `tasks/${taskKey}`), {
     status: "COMPLETED",
     imageUrl: url,
     takenAt,
-    uploadedAt: new Date().toISOString(),
+    uploadedAt,
     latitude: coords?.latitude,
     longitude: coords?.longitude
   });
