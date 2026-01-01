@@ -38,7 +38,6 @@ body {
   padding: 12px;
   margin-bottom: 10px;
   border-radius: 8px;
-  box-shadow: 0 0 4px rgba(0,0,0,0.1);
   border-left: 5px solid orange;
 }
 
@@ -49,6 +48,7 @@ body {
 .small {
   font-size: 13px;
   color: #555;
+  margin-top: 2px;
 }
 
 .offline-indicator {
@@ -61,13 +61,8 @@ button {
   width: 100%;
   padding: 10px;
   margin-top: 6px;
-  font-size: 14px;
-  border: none;
   border-radius: 6px;
-}
-
-button:disabled {
-  background: #aaa;
+  border: none;
 }
 
 .capture {
@@ -78,6 +73,10 @@ button:disabled {
 .toggle {
   background: #0069d9;
   color: #fff;
+}
+
+button:disabled {
+  background: #aaa;
 }
 
 img {
@@ -107,7 +106,7 @@ import {
   getStorage, ref as sRef, uploadBytes, getDownloadURL
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v2.6.0";
+const VERSION = "Driver v2.7.0";
 
 const firebaseConfig = {
   apiKey: "AIzaSyDFW61pnwLvh6HGKWt10zLYNr860fI8vkg",
@@ -123,24 +122,17 @@ const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 const storage = getStorage(app);
 
-/* ================= STORAGE KEYS ================= */
+/* ================= STORAGE ================= */
 const QUEUE_KEY = "offlineQueue";
 const TASK_CACHE_KEY = "cachedTasks";
 
-/* ================= DRIVER ID ================= */
+/* ================= DRIVER ================= */
 let DRIVER_ID = localStorage.getItem("driverId");
 while (!DRIVER_ID) DRIVER_ID = prompt("Enter Driver ID");
 localStorage.setItem("driverId", DRIVER_ID);
 
 document.getElementById("appVersion").innerText =
   `Driver: ${DRIVER_ID} | ${VERSION}`;
-
-/* ================= OFFLINE QUEUE ================= */
-const getQueue = () =>
-  JSON.parse(localStorage.getItem(QUEUE_KEY) || "[]");
-
-const setQueue = q =>
-  localStorage.setItem(QUEUE_KEY, JSON.stringify(q));
 
 /* ================= NETWORK ================= */
 function updateNetwork() {
@@ -151,40 +143,47 @@ window.addEventListener("online", updateNetwork);
 window.addEventListener("offline", updateNetwork);
 updateNetwork();
 
-/* ================= IMAGE HELPERS ================= */
+/* ================= GEO ================= */
+function getLocation() {
+  return new Promise(resolve => {
+    navigator.geolocation.getCurrentPosition(
+      pos => resolve(pos.coords),
+      () => resolve(null),
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  });
+}
+
+/* ================= QUEUE ================= */
+const getQueue = () =>
+  JSON.parse(localStorage.getItem(QUEUE_KEY) || "[]");
+
+const setQueue = q =>
+  localStorage.setItem(QUEUE_KEY, JSON.stringify(q));
+
+/* ================= IMAGE ================= */
 function compressImage(file) {
   return new Promise(resolve => {
     const img = new Image();
     const reader = new FileReader();
-
     reader.onload = e => img.src = e.target.result;
 
     img.onload = () => {
       const canvas = document.createElement("canvas");
       let w = img.width;
       let h = img.height;
-
-      if (w > 1280) {
-        h *= 1280 / w;
-        w = 1280;
-      }
-
+      if (w > 1280) { h *= 1280 / w; w = 1280; }
       canvas.width = w;
       canvas.height = h;
       canvas.getContext("2d").drawImage(img, 0, 0, w, h);
-
-      canvas.toBlob(blob => resolve(blob), "image/jpeg", 0.65);
+      canvas.toBlob(b => resolve(b), "image/jpeg", 0.65);
     };
-
     reader.readAsDataURL(file);
   });
 }
 
-const toBase64 = blob => new Promise(res => {
-  const fr = new FileReader();
-  fr.onloadend = () => res(fr.result);
-  fr.readAsDataURL(blob);
-});
+const toBase64 = blob =>
+  new Promise(r => { const f=new FileReader(); f.onloadend=()=>r(f.result); f.readAsDataURL(blob); });
 
 /* ================= CAMERA ================= */
 let CURRENT_TASK = null;
@@ -200,35 +199,41 @@ camera.addEventListener("change", async e => {
   if (!e.target.files[0] || !CURRENT_TASK) return;
 
   const blob = await compressImage(e.target.files[0]);
+  const coords = await getLocation();
+  const takenAt = new Date().toISOString();
 
   if (!navigator.onLine) {
-    const queue = getQueue();
-    queue.push({
+    const q = getQueue();
+    q.push({
       taskKey: CURRENT_TASK,
-      image: await toBase64(blob)
+      image: await toBase64(blob),
+      takenAt,
+      latitude: coords?.latitude,
+      longitude: coords?.longitude
     });
-    setQueue(queue);
-    CURRENT_TASK = null;
+    setQueue(q);
     loadTasks();
     return;
   }
 
-  await uploadNow(CURRENT_TASK, blob);
+  await uploadNow(CURRENT_TASK, blob, takenAt, coords);
 });
 
 /* ================= UPLOAD ================= */
-async function uploadNow(taskKey, blob) {
+async function uploadNow(taskKey, blob, takenAt, coords) {
   const taskRef = ref(db, `tasks/${taskKey}`);
-  await update(taskRef, { status: "UPLOADING" });
-
   const imgRef = sRef(storage, `tasks/${taskKey}/${Date.now()}.jpg`);
+
   await uploadBytes(imgRef, blob);
   const url = await getDownloadURL(imgRef);
 
   await update(taskRef, {
     status: "COMPLETED",
     imageUrl: url,
-    uploadedAt: new Date().toISOString()
+    takenAt,
+    uploadedAt: new Date().toISOString(),
+    latitude: coords?.latitude,
+    longitude: coords?.longitude
   });
 
   loadTasks();
@@ -237,76 +242,71 @@ async function uploadNow(taskKey, blob) {
 /* ================= OFFLINE SYNC ================= */
 setInterval(async () => {
   if (!navigator.onLine) return;
-  const queue = getQueue();
-  if (!queue.length) return;
+  const q = getQueue();
+  if (!q.length) return;
 
-  for (const item of queue) {
-    const blob = await (await fetch(item.image)).blob();
-    await uploadNow(item.taskKey, blob);
+  for (const i of q) {
+    const blob = await (await fetch(i.image)).blob();
+    await uploadNow(i.taskKey, blob, i.takenAt, {
+      latitude: i.latitude,
+      longitude: i.longitude
+    });
   }
   setQueue([]);
 }, 5000);
 
-/* ================= LOAD TASKS ================= */
+/* ================= LOAD & RENDER ================= */
 async function loadTasks() {
   const list = document.getElementById("taskList");
 
   if (!navigator.onLine) {
-    const cached = JSON.parse(
-      localStorage.getItem(TASK_CACHE_KEY) || "[]"
-    );
+    const cached = JSON.parse(localStorage.getItem(TASK_CACHE_KEY) || "[]");
     if (!cached.length) {
       list.innerHTML = "No cached tasks available offline";
       return;
     }
-    renderTasks(cached, true);
+    render(cached, true);
     return;
   }
 
   const snap = await get(
     query(ref(db, "tasks"), orderByChild("driverId"), equalTo(DRIVER_ID))
   );
-
   const raw = snap.val() || {};
   const tasks = Object.keys(raw).map(k => ({ _key: k, ...raw[k] }));
-
   localStorage.setItem(TASK_CACHE_KEY, JSON.stringify(tasks));
-  renderTasks(tasks, false);
+  render(tasks, false);
 }
 
-/* ================= RENDER ================= */
-function renderTasks(tasks, offlineMode) {
+function render(tasks, offlineMode) {
   const list = document.getElementById("taskList");
   list.innerHTML = "";
 
   const offlineMap = Object.fromEntries(
-    getQueue().map(i => [i.taskKey, true])
+    getQueue().map(i => [i.taskKey, i])
   );
 
-  tasks.sort((a, b) => {
-    if (offlineMap[a._key]) return -1;
-    if (offlineMap[b._key]) return 1;
-    if (a.status === "COMPLETED") return 1;
-    if (b.status === "COMPLETED") return -1;
-    return 0;
-  });
-
   tasks.forEach(t => {
-    const savedOffline = offlineMap[t._key];
+    const q = offlineMap[t._key];
     const div = document.createElement("div");
-
     div.className = `task ${t.status === "COMPLETED" ? "completed" : ""}`;
+
+    const lat = q?.latitude ?? t.latitude;
+    const lng = q?.longitude ?? t.longitude;
+    const taken = q?.takenAt ?? t.takenAt;
 
     div.innerHTML = `
       <b>${t.name}</b>
       <div class="small">${t.address}</div>
-      <div class="small">Status: ${t.status}</div>
 
-      ${offlineMode ? `<div class="offline-indicator">📦 Offline copy</div>` : ""}
-      ${savedOffline ? `<div class="offline-indicator">🕒 Photo saved – upload later</div>` : ""}
+      ${lat ? `<div class="small">📍 ${lat}, ${lng}</div>` : ""}
+      ${taken ? `<div class="small">📸 Taken: ${new Date(taken).toLocaleString()}</div>` : ""}
+      ${t.uploadedAt ? `<div class="small">☁ Uploaded: ${new Date(t.uploadedAt).toLocaleString()}</div>` : ""}
+
+      ${q ? `<div class="offline-indicator">🕒 Saved offline – upload pending</div>` : ""}
 
       ${
-        savedOffline
+        q
           ? `<button disabled>⏳ Saved for upload</button>`
           : t.status === "COMPLETED"
             ? `
@@ -320,7 +320,6 @@ function renderTasks(tasks, offlineMode) {
             : `<button class="capture" onclick="takePicture('${t._key}')">📸 Take Picture</button>`
       }
     `;
-
     list.appendChild(div);
   });
 }
