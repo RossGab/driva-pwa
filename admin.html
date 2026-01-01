@@ -12,9 +12,7 @@ body {
   padding:10px;
 }
 
-h2 {
-  text-align:center;
-}
+h2 { text-align:center; }
 
 .dashboard {
   display:flex;
@@ -92,6 +90,24 @@ img {
   border-radius:5px;
   font-size:13px;
 }
+
+.reassignBox {
+  margin-top:10px;
+  display:flex;
+  gap:6px;
+}
+
+.reassignBox input {
+  flex:1;
+  padding:6px;
+}
+
+.reassignBtn {
+  background:#c0392b;
+  color:#fff;
+  padding:6px 10px;
+  border-radius:5px;
+}
 </style>
 </head>
 
@@ -128,7 +144,8 @@ import { initializeApp } from
 import {
   getDatabase,
   ref,
-  get
+  get,
+  update
 } from
   "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
@@ -168,7 +185,10 @@ window.loadTasks = async function (status) {
   list.innerHTML = "Loading...";
 
   const snap = await get(ref(db, "tasks"));
-  const tasks = Object.values(snap.val() || {})
+  const all = snap.val() || {};
+
+  const tasks = Object.keys(all)
+    .map(k => ({ _key: k, ...all[k] }))
     .filter(t => t.status === status && t.createdAt?.startsWith(today));
 
   if (!tasks.length) {
@@ -179,7 +199,7 @@ window.loadTasks = async function (status) {
   list.innerHTML = "";
 
   tasks.forEach(t => {
-    const imgId = `img_${t.id}`;
+    const imgId = `img_${t._key}`;
 
     const div = document.createElement("div");
     div.className = `task ${status === "COMPLETED" ? "completed" : "pending"}`;
@@ -192,24 +212,60 @@ window.loadTasks = async function (status) {
       ${
         status === "COMPLETED" ? `
           <div class="small">📍 ${t.latitude}, ${t.longitude}</div>
-          <div class="small">📸 Taken: ${new Date(t.capturedAt).toLocaleString()}</div>
-          <div class="small">☁️ Uploaded: ${new Date(t.uploadedAt).toLocaleString()}</div>
+          <div class="small">📸 Taken: ${new Date(t.takenAt).toLocaleString()}</div>
+          <div class="small">☁ Uploaded: ${new Date(t.uploadedAt).toLocaleString()}</div>
         ` : ""
       }
 
       ${t.imageUrl ? `
-        <button class="toggleBtn"
-          onclick="toggleImage('${imgId}', this)">
+        <button class="toggleBtn" onclick="toggleImage('${imgId}', this)">
           👁 Show Picture
         </button>
         <img id="${imgId}" src="${t.imageUrl}" style="display:none">
-      ` : `
-        <div class="small">No photo uploaded</div>
-      `}
+      ` : `<div class="small">No photo uploaded</div>`}
+
+      ${
+        status === "PENDING" ? `
+          <div class="reassignBox">
+            <input placeholder="New Driver ID" id="driver_${t._key}">
+            <button class="reassignBtn"
+              onclick="reassignTask('${t._key}')">
+              🔁 Reassign
+            </button>
+          </div>
+        ` : ""
+      }
     `;
 
     list.appendChild(div);
   });
+};
+
+/* ===== REASSIGN TASK ===== */
+window.reassignTask = async function (taskKey) {
+  const input = document.getElementById(`driver_${taskKey}`);
+  const newDriver = input.value.trim();
+
+  if (!newDriver) {
+    alert("Enter a driver ID");
+    return;
+  }
+
+  if (!confirm(`Reassign task to ${newDriver}?`)) return;
+
+  await update(ref(db, `tasks/${taskKey}`), {
+    driverId: newDriver,
+    status: "PENDING",
+    imageUrl: null,
+    takenAt: null,
+    uploadedAt: null,
+    latitude: null,
+    longitude: null
+  });
+
+  alert("Task reassigned");
+  refreshDashboard();
+  loadTasks("PENDING");
 };
 
 /* ===== TOGGLE IMAGE ===== */
