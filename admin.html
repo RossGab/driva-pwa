@@ -108,6 +108,16 @@ img {
   padding:6px 10px;
   border-radius:5px;
 }
+
+.deleteBtn {
+  margin-top:6px;
+  background:#b00020;
+  color:#fff;
+  padding:8px;
+  width:100%;
+  border-radius:5px;
+  font-size:13px;
+}
 </style>
 </head>
 
@@ -145,7 +155,8 @@ import {
   getDatabase,
   ref,
   get,
-  update
+  update,
+  remove
 } from
   "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
@@ -222,7 +233,7 @@ window.loadTasks = async function (status) {
           👁 Show Picture
         </button>
         <img id="${imgId}" src="${t.imageUrl}" style="display:none">
-      ` : `<div class="small">No photo uploaded</div>`}
+      ` : ""}
 
       ${
         status === "PENDING" ? `
@@ -233,6 +244,11 @@ window.loadTasks = async function (status) {
               🔁 Reassign
             </button>
           </div>
+
+          <button class="deleteBtn"
+            onclick="deleteTask('${t._key}')">
+            🗑 Delete Task
+          </button>
         ` : ""
       }
     `;
@@ -241,7 +257,7 @@ window.loadTasks = async function (status) {
   });
 };
 
-/* ===== REASSIGN TASK ===== */
+/* ===== REASSIGN ===== */
 window.reassignTask = async function (taskKey) {
   const input = document.getElementById(`driver_${taskKey}`);
   const newDriver = input.value.trim();
@@ -264,6 +280,17 @@ window.reassignTask = async function (taskKey) {
   });
 
   alert("Task reassigned");
+  refreshDashboard();
+  loadTasks("PENDING");
+};
+
+/* ===== DELETE ===== */
+window.deleteTask = async function (taskKey) {
+  if (!confirm("Delete this task? This cannot be undone.")) return;
+
+  await remove(ref(db, `tasks/${taskKey}`));
+
+  alert("Task deleted");
   refreshDashboard();
   loadTasks("PENDING");
 };
