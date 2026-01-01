@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -7,7 +6,6 @@
 
 <title>Driver Tasks</title>
 
-<!-- PWA -->
 <link rel="manifest" href="./manifest.json">
 <meta name="theme-color" content="#222222">
 
@@ -54,7 +52,7 @@ body {
 }
 
 .offline-indicator {
-  margin-top: 4px;
+  margin-top: 6px;
   font-weight: bold;
   color: #c0392b;
 }
@@ -101,12 +99,15 @@ img {
 <script type="module">
 /* ================= FIREBASE ================= */
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import { getDatabase, ref, get, update, query, orderByChild, equalTo }
-  from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
-import { getStorage, ref as sRef, uploadBytes, getDownloadURL }
-  from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
+import {
+  getDatabase, ref, get, update, query,
+  orderByChild, equalTo
+} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+import {
+  getStorage, ref as sRef, uploadBytes, getDownloadURL
+} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v2.5.0";
+const VERSION = "Driver v2.6.0";
 
 const firebaseConfig = {
   apiKey: "AIzaSyDFW61pnwLvh6HGKWt10zLYNr860fI8vkg",
@@ -122,6 +123,10 @@ const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 const storage = getStorage(app);
 
+/* ================= STORAGE KEYS ================= */
+const QUEUE_KEY = "offlineQueue";
+const TASK_CACHE_KEY = "cachedTasks";
+
 /* ================= DRIVER ID ================= */
 let DRIVER_ID = localStorage.getItem("driverId");
 while (!DRIVER_ID) DRIVER_ID = prompt("Enter Driver ID");
@@ -131,8 +136,6 @@ document.getElementById("appVersion").innerText =
   `Driver: ${DRIVER_ID} | ${VERSION}`;
 
 /* ================= OFFLINE QUEUE ================= */
-const QUEUE_KEY = "offlineQueue";
-
 const getQueue = () =>
   JSON.parse(localStorage.getItem(QUEUE_KEY) || "[]");
 
@@ -144,7 +147,6 @@ function updateNetwork() {
   document.getElementById("offlineBanner").style.display =
     navigator.onLine ? "none" : "block";
 }
-
 window.addEventListener("online", updateNetwork);
 window.addEventListener("offline", updateNetwork);
 updateNetwork();
@@ -171,31 +173,25 @@ function compressImage(file) {
       canvas.height = h;
       canvas.getContext("2d").drawImage(img, 0, 0, w, h);
 
-      canvas.toBlob(
-        blob => resolve(blob),
-        "image/jpeg",
-        0.65
-      );
+      canvas.toBlob(blob => resolve(blob), "image/jpeg", 0.65);
     };
 
     reader.readAsDataURL(file);
   });
 }
 
-function toBase64(blob) {
-  return new Promise(res => {
-    const fr = new FileReader();
-    fr.onloadend = () => res(fr.result);
-    fr.readAsDataURL(blob);
-  });
-}
+const toBase64 = blob => new Promise(res => {
+  const fr = new FileReader();
+  fr.onloadend = () => res(fr.result);
+  fr.readAsDataURL(blob);
+});
 
 /* ================= CAMERA ================= */
 let CURRENT_TASK = null;
 const camera = document.getElementById("cameraInput");
 
-window.takePicture = taskKey => {
-  CURRENT_TASK = taskKey;
+window.takePicture = key => {
+  CURRENT_TASK = key;
   camera.value = "";
   camera.click();
 };
@@ -241,7 +237,6 @@ async function uploadNow(taskKey, blob) {
 /* ================= OFFLINE SYNC ================= */
 setInterval(async () => {
   if (!navigator.onLine) return;
-
   const queue = getQueue();
   if (!queue.length) return;
 
@@ -249,25 +244,44 @@ setInterval(async () => {
     const blob = await (await fetch(item.image)).blob();
     await uploadNow(item.taskKey, blob);
   }
-
   setQueue([]);
 }, 5000);
 
 /* ================= LOAD TASKS ================= */
 async function loadTasks() {
+  const list = document.getElementById("taskList");
+
+  if (!navigator.onLine) {
+    const cached = JSON.parse(
+      localStorage.getItem(TASK_CACHE_KEY) || "[]"
+    );
+    if (!cached.length) {
+      list.innerHTML = "No cached tasks available offline";
+      return;
+    }
+    renderTasks(cached, true);
+    return;
+  }
+
   const snap = await get(
     query(ref(db, "tasks"), orderByChild("driverId"), equalTo(DRIVER_ID))
   );
 
   const raw = snap.val() || {};
+  const tasks = Object.keys(raw).map(k => ({ _key: k, ...raw[k] }));
+
+  localStorage.setItem(TASK_CACHE_KEY, JSON.stringify(tasks));
+  renderTasks(tasks, false);
+}
+
+/* ================= RENDER ================= */
+function renderTasks(tasks, offlineMode) {
+  const list = document.getElementById("taskList");
+  list.innerHTML = "";
+
   const offlineMap = Object.fromEntries(
     getQueue().map(i => [i.taskKey, true])
   );
-
-  const tasks = Object.keys(raw).map(k => ({
-    _key: k,
-    ...raw[k]
-  }));
 
   tasks.sort((a, b) => {
     if (offlineMap[a._key]) return -1;
@@ -277,11 +291,8 @@ async function loadTasks() {
     return 0;
   });
 
-  const list = document.getElementById("taskList");
-  list.innerHTML = tasks.length ? "" : "No tasks assigned";
-
   tasks.forEach(t => {
-    const isOfflineSaved = offlineMap[t._key];
+    const savedOffline = offlineMap[t._key];
     const div = document.createElement("div");
 
     div.className = `task ${t.status === "COMPLETED" ? "completed" : ""}`;
@@ -291,15 +302,12 @@ async function loadTasks() {
       <div class="small">${t.address}</div>
       <div class="small">Status: ${t.status}</div>
 
-      ${isOfflineSaved ? `
-        <div class="offline-indicator">
-          🕒 Photo saved — will upload when online
-        </div>
-      ` : ""}
+      ${offlineMode ? `<div class="offline-indicator">📦 Offline copy</div>` : ""}
+      ${savedOffline ? `<div class="offline-indicator">🕒 Photo saved – upload later</div>` : ""}
 
       ${
-        isOfflineSaved
-          ? `<button disabled>⏳ Saved – Upload Later</button>`
+        savedOffline
+          ? `<button disabled>⏳ Saved for upload</button>`
           : t.status === "COMPLETED"
             ? `
               <button class="toggle"
@@ -309,9 +317,7 @@ async function loadTasks() {
               </button>
               <img src="${t.imageUrl}" style="display:none">
             `
-            : `<button class="capture" onclick="takePicture('${t._key}')">
-                 📸 Take Picture
-               </button>`
+            : `<button class="capture" onclick="takePicture('${t._key}')">📸 Take Picture</button>`
       }
     `;
 
@@ -322,7 +328,6 @@ async function loadTasks() {
 loadTasks();
 </script>
 
-<!-- SERVICE WORKER -->
 <script>
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("./sw.js");
