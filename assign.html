@@ -12,9 +12,7 @@ body {
   padding: 10px;
 }
 
-h2 {
-  text-align: center;
-}
+h2 { text-align: center; }
 
 .card {
   background: #fff;
@@ -37,21 +35,14 @@ button {
   cursor: pointer;
 }
 
-.create {
-  background: #007bff;
-  color: #fff;
+button:disabled {
+  background: #aaa;
+  cursor: not-allowed;
 }
 
-.csv {
-  background: #28a745;
-  color: #fff;
-}
-
-.back {
-  background: #444;
-  color: #fff;
-  margin-top: 10px;
-}
+.create { background: #007bff; color: #fff; }
+.csv { background: #28a745; color: #fff; }
+.back { background: #444; color: #fff; margin-top: 10px; }
 
 .status {
   margin-top: 8px;
@@ -60,6 +51,7 @@ button {
 
 .success { color: green; }
 .error { color: #c0392b; }
+.loading { color: #555; font-weight: bold; }
 </style>
 </head>
 
@@ -75,7 +67,7 @@ button {
   <input id="address" placeholder="Address" />
   <input id="driverId" placeholder="Driver ID (e.g. driver_001)" />
 
-  <button class="create" onclick="createTask()">Create Task</button>
+  <button id="manualBtn" class="create" onclick="createTask()">Create Task</button>
   <div id="manualStatus" class="status"></div>
 </div>
 
@@ -84,7 +76,7 @@ button {
   <h3>Upload CSV</h3>
 
   <input type="file" id="csvFile" accept=".csv" />
-  <button class="csv" onclick="uploadCSV()">Upload CSV</button>
+  <button id="csvBtn" class="csv" onclick="uploadCSV()">Upload CSV</button>
 
   <div id="csvStatus" class="status"></div>
 </div>
@@ -120,6 +112,7 @@ window.createTask = async function () {
   const addressEl = document.getElementById("address");
   const driverEl = document.getElementById("driverId");
   const statusEl = document.getElementById("manualStatus");
+  const btn = document.getElementById("manualBtn");
 
   const name = nameEl.value.trim();
   const address = addressEl.value.trim();
@@ -130,23 +123,33 @@ window.createTask = async function () {
     return;
   }
 
-  const taskRef = push(ref(db, "tasks"));
+  btn.disabled = true;
+  statusEl.innerHTML = "<span class='loading'>Uploading task…</span>";
 
-  await set(taskRef, {
-    id: taskRef.key,
-    name,
-    address,
-    driverId,
-    status: "PENDING",
-    createdAt: new Date().toISOString()
-  });
+  try {
+    const taskRef = push(ref(db, "tasks"));
+    await set(taskRef, {
+      id: taskRef.key,
+      name,
+      address,
+      driverId,
+      status: "PENDING",
+      createdAt: new Date().toISOString()
+    });
 
-  statusEl.innerHTML = "<span class='success'>Task assigned successfully</span>";
+    statusEl.innerHTML =
+      "<span class='success'>Task assigned successfully</span>";
 
-  nameEl.value = "";
-  addressEl.value = "";
-  driverEl.value = "";
-  nameEl.focus();
+    nameEl.value = "";
+    addressEl.value = "";
+    driverEl.value = "";
+    nameEl.focus();
+  } catch (e) {
+    statusEl.innerHTML =
+      "<span class='error'>Failed to create task</span>";
+  } finally {
+    btn.disabled = false;
+  }
 };
 
 /* ================= CSV UPLOAD ================= */
@@ -166,6 +169,8 @@ window.uploadCSV = function () {
 
 async function parseCSV(text) {
   const statusEl = document.getElementById("csvStatus");
+  const btn = document.getElementById("csvBtn");
+
   const lines = text.trim().split("\n");
   const header = lines.shift().trim();
 
@@ -175,29 +180,38 @@ async function parseCSV(text) {
     return;
   }
 
+  btn.disabled = true;
+  statusEl.innerHTML = "<span class='loading'>Uploading tasks…</span>";
+
   let successCount = 0;
 
-  for (const line of lines) {
-    const [name, address, driverId] = line.split(",").map(v => v.trim());
-    if (!name || !address || !driverId) continue;
+  try {
+    for (const line of lines) {
+      const [name, address, driverId] = line.split(",").map(v => v.trim());
+      if (!name || !address || !driverId) continue;
 
-    const taskRef = push(ref(db, "tasks"));
-    await set(taskRef, {
-      id: taskRef.key,
-      name,
-      address,
-      driverId,
-      status: "PENDING",
-      createdAt: new Date().toISOString()
-    });
+      const taskRef = push(ref(db, "tasks"));
+      await set(taskRef, {
+        id: taskRef.key,
+        name,
+        address,
+        driverId,
+        status: "PENDING",
+        createdAt: new Date().toISOString()
+      });
 
-    successCount++;
+      successCount++;
+    }
+
+    statusEl.innerHTML =
+      `<span class='success'>${successCount} tasks uploaded successfully</span>`;
+    document.getElementById("csvFile").value = "";
+  } catch (e) {
+    statusEl.innerHTML =
+      "<span class='error'>CSV upload failed</span>";
+  } finally {
+    btn.disabled = false;
   }
-
-  statusEl.innerHTML =
-    `<span class='success'>${successCount} tasks uploaded successfully</span>`;
-
-  document.getElementById("csvFile").value = "";
 }
 </script>
 
