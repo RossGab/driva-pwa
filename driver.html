@@ -1,39 +1,97 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
 <title>Driver Tasks</title>
 
 <link rel="manifest" href="./manifest.json">
-<meta name="theme-color" content="#222">
+<meta name="theme-color" content="#222222">
 
 <style>
-body { font-family: Arial, sans-serif; background:#f4f4f4; padding:10px }
-#appVersion { background:#222;color:#fff;padding:8px;text-align:center;margin-bottom:6px }
-#offlineBanner { background:#c0392b;color:#fff;padding:6px;text-align:center;margin-bottom:10px;display:none }
+body {
+  font-family: Arial, sans-serif;
+  background: #f4f4f4;
+  padding: 10px;
+}
 
-.task { background:#fff;padding:12px;margin-bottom:10px;border-radius:8px;border-left:5px solid orange }
-.task.completed { border-left-color:green }
+#appVersion {
+  background: #222;
+  color: #fff;
+  padding: 8px;
+  text-align: center;
+  margin-bottom: 6px;
+}
 
-.small { font-size:13px;color:#555;margin-top:2px }
-.status { font-weight:bold }
-.uploading { color:#f39c12;font-weight:bold }
-.failed { color:#c0392b;font-weight:bold }
+#offlineBanner {
+  background: #c0392b;
+  color: #fff;
+  padding: 6px;
+  text-align: center;
+  margin-bottom: 10px;
+  display: none;
+}
 
-button { width:100%;padding:10px;margin-top:6px;border:none;border-radius:6px }
-button:disabled { background:#aaa }
-.capture { background:#007bff;color:#fff }
-.toggle { background:#0069d9;color:#fff }
+.task {
+  background: #fff;
+  padding: 12px;
+  margin-bottom: 10px;
+  border-radius: 8px;
+  border-left: 5px solid orange;
+}
 
-img { width:100%;margin-top:8px;border-radius:6px;display:none }
+.task.completed {
+  border-left-color: green;
+}
+
+.small {
+  font-size: 13px;
+  color: #555;
+  margin-top: 2px;
+}
+
+.offline-indicator {
+  margin-top: 6px;
+  font-weight: bold;
+  color: #c0392b;
+}
+
+button {
+  width: 100%;
+  padding: 10px;
+  margin-top: 6px;
+  border-radius: 6px;
+  border: none;
+  font-size: 14px;
+}
+
+button:disabled {
+  background: #aaa;
+}
+
+.capture {
+  background: #007bff;
+  color: #fff;
+}
+
+.toggle {
+  background: #0069d9;
+  color: #fff;
+}
+
+img {
+  width: 100%;
+  margin-top: 8px;
+  border-radius: 6px;
+}
 </style>
 </head>
 
 <body>
 
 <div id="appVersion"></div>
-<div id="offlineBanner">⚠ Offline — photo will upload automatically</div>
+<div id="offlineBanner">⚠ Offline — photos will upload automatically</div>
 <div id="taskList">Loading tasks...</div>
 
 <input type="file" id="cameraInput" accept="image/*" capture="environment" hidden>
@@ -49,9 +107,8 @@ import {
   getStorage, ref as sRef, uploadBytes, getDownloadURL
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.5.0";
+const VERSION = "Driver v3.1.0";
 
-/* ================= CONFIG ================= */
 const firebaseConfig = {
   apiKey: "AIzaSyDFW61pnwLvh6HGKWt10zLYNr860fI8vkg",
   authDomain: "driva-pwa.firebaseapp.com",
@@ -66,14 +123,10 @@ const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 const storage = getStorage(app);
 
-/* ================= STATE ================= */
-const TASK_CACHE = "cachedTasks";
-const OFFLINE_QUEUE = "offlineQueue";
-
-const uploadingMap = {};
-const failedMap = {};
-
-let isLoading = false;
+/* ================= CONSTANTS ================= */
+const QUEUE_KEY = "offlineQueue";
+const TASK_CACHE_KEY = "cachedTasks";
+const PRIORITY = { PENDING: 1, SAVED: 2, COMPLETED: 3 };
 
 /* ================= DRIVER ================= */
 let DRIVER_ID = localStorage.getItem("driverId");
@@ -98,33 +151,36 @@ function getLocation() {
     navigator.geolocation.getCurrentPosition(
       pos => resolve(pos.coords),
       () => resolve(null),
-      { enableHighAccuracy:true, timeout:10000 }
+      { enableHighAccuracy: true, timeout: 10000 }
     );
   });
 }
 
-/* ================= OFFLINE QUEUE ================= */
+/* ================= QUEUE ================= */
 const getQueue = () =>
-  JSON.parse(localStorage.getItem(OFFLINE_QUEUE) || "[]");
+  JSON.parse(localStorage.getItem(QUEUE_KEY) || "[]");
 
 const setQueue = q =>
-  localStorage.setItem(OFFLINE_QUEUE, JSON.stringify(q));
+  localStorage.setItem(QUEUE_KEY, JSON.stringify(q));
 
 /* ================= IMAGE ================= */
 function compressImage(file) {
   return new Promise(resolve => {
     const img = new Image();
-    const fr = new FileReader();
-    fr.onload = e => img.src = e.target.result;
+    const reader = new FileReader();
+    reader.onload = e => img.src = e.target.result;
+
     img.onload = () => {
-      const c = document.createElement("canvas");
-      let w = img.width, h = img.height;
+      const canvas = document.createElement("canvas");
+      let w = img.width;
+      let h = img.height;
       if (w > 1280) { h *= 1280 / w; w = 1280; }
-      c.width = w; c.height = h;
-      c.getContext("2d").drawImage(img,0,0,w,h);
-      c.toBlob(b => resolve(b),"image/jpeg",0.65);
+      canvas.width = w;
+      canvas.height = h;
+      canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+      canvas.toBlob(b => resolve(b), "image/jpeg", 0.65);
     };
-    fr.readAsDataURL(file);
+    reader.readAsDataURL(file);
   });
 }
 
@@ -132,11 +188,9 @@ const toBase64 = blob =>
   new Promise(r => { const f=new FileReader(); f.onloadend=()=>r(f.result); f.readAsDataURL(blob); });
 
 /* ================= STATUS ================= */
-function resolveStatus(task, offline, uploading, failed) {
+function resolveStatus(task, offlineItem) {
   if (task.status === "COMPLETED") return "COMPLETED";
-  if (failed) return "FAILED";
-  if (uploading) return "UPLOADING";
-  if (offline || task.imageUrl) return "SAVED";
+  if (offlineItem || task.imageUrl) return "SAVED";
   return "PENDING";
 }
 
@@ -150,15 +204,13 @@ window.takePicture = key => {
   camera.click();
 };
 
-camera.onchange = async e => {
-  const file = e.target.files[0];
-  if (!file || !CURRENT_TASK) return;
+camera.addEventListener("change", async e => {
+  if (!e.target.files[0] || !CURRENT_TASK) return;
 
-  const blob = await compressImage(file);
+  const blob = await compressImage(e.target.files[0]);
   const coords = await getLocation();
   const takenAt = new Date().toISOString();
 
-  // OFFLINE
   if (!navigator.onLine) {
     const q = getQueue();
     q.push({
@@ -169,33 +221,22 @@ camera.onchange = async e => {
       longitude: coords?.longitude
     });
     setQueue(q);
-    render(getCachedTasks());
+    loadTasks();
     return;
   }
 
-  // ONLINE (OPTIMISTIC UI)
-  uploadingMap[CURRENT_TASK] = { takenAt, ...coords };
-  render(getCachedTasks());
-
-  try {
-    await uploadNow(CURRENT_TASK, blob, takenAt, coords);
-    delete uploadingMap[CURRENT_TASK];
-    delete failedMap[CURRENT_TASK];
-    await loadTasks(); // ONLY AFTER UPLOAD
-  } catch {
-    failedMap[CURRENT_TASK] = true;
-    delete uploadingMap[CURRENT_TASK];
-    render(getCachedTasks());
-  }
-};
+  await uploadNow(CURRENT_TASK, blob, takenAt, coords);
+});
 
 /* ================= UPLOAD ================= */
 async function uploadNow(taskKey, blob, takenAt, coords) {
+  const taskRef = ref(db, `tasks/${taskKey}`);
   const imgRef = sRef(storage, `tasks/${taskKey}/${Date.now()}.jpg`);
+
   await uploadBytes(imgRef, blob);
   const url = await getDownloadURL(imgRef);
 
-  await update(ref(db, `tasks/${taskKey}`), {
+  await update(taskRef, {
     status: "COMPLETED",
     imageUrl: url,
     takenAt,
@@ -203,6 +244,8 @@ async function uploadNow(taskKey, blob, takenAt, coords) {
     latitude: coords?.latitude,
     longitude: coords?.longitude
   });
+
+  loadTasks();
 }
 
 /* ================= OFFLINE SYNC ================= */
@@ -212,63 +255,41 @@ setInterval(async () => {
   if (!q.length) return;
 
   for (const i of q) {
-    uploadingMap[i.taskKey] = i;
-    render(getCachedTasks());
-
-    try {
-      const blob = await (await fetch(i.image)).blob();
-      await uploadNow(i.taskKey, blob, i.takenAt, i);
-    } catch {
-      failedMap[i.taskKey] = true;
-      continue;
-    }
+    const blob = await (await fetch(i.image)).blob();
+    await uploadNow(i.taskKey, blob, i.takenAt, {
+      latitude: i.latitude,
+      longitude: i.longitude
+    });
   }
   setQueue([]);
-  loadTasks();
 }, 5000);
-
-/* ================= DATA ================= */
-const getCachedTasks = () =>
-  JSON.parse(localStorage.getItem(TASK_CACHE) || "[]");
 
 /* ================= LOAD ================= */
 async function loadTasks() {
   const list = document.getElementById("taskList");
-  isLoading = true;
-  list.innerHTML = "Loading tasks...";
 
   if (!navigator.onLine) {
-    const cached = getCachedTasks();
-    isLoading = false;
-
+    const cached = JSON.parse(localStorage.getItem(TASK_CACHE_KEY) || "[]");
     if (!cached.length) {
       list.innerHTML = "No cached tasks available offline";
       return;
     }
-
     render(cached);
     return;
   }
 
-  try {
-    const snap = await get(
-      query(ref(db,"tasks"),orderByChild("driverId"),equalTo(DRIVER_ID))
-    );
-    const raw = snap.val() || {};
-    const tasks = Object.keys(raw).map(k=>({_key:k,...raw[k]}));
-    localStorage.setItem(TASK_CACHE, JSON.stringify(tasks));
-    render(tasks);
-  } catch {
-    list.innerHTML = "Failed to load tasks";
-  } finally {
-    isLoading = false;
-  }
+  const snap = await get(
+    query(ref(db, "tasks"), orderByChild("driverId"), equalTo(DRIVER_ID))
+  );
+
+  const raw = snap.val() || {};
+  const tasks = Object.keys(raw).map(k => ({ _key: k, ...raw[k] }));
+  localStorage.setItem(TASK_CACHE_KEY, JSON.stringify(tasks));
+  render(tasks);
 }
 
 /* ================= RENDER ================= */
 function render(tasks) {
-  if (isLoading) return;
-
   const list = document.getElementById("taskList");
   list.innerHTML = "";
 
@@ -276,59 +297,55 @@ function render(tasks) {
     getQueue().map(i => [i.taskKey, i])
   );
 
-  tasks.sort((a,b)=>{
-    const sa = resolveStatus(a, offlineMap[a._key], uploadingMap[a._key], failedMap[a._key]);
-    const sb = resolveStatus(b, offlineMap[b._key], uploadingMap[b._key], failedMap[b._key]);
-    return {PENDING:1,SAVED:2,UPLOADING:2,FAILED:2,COMPLETED:3}[sa] -
-           {PENDING:1,SAVED:2,UPLOADING:2,FAILED:2,COMPLETED:3}[sb];
+  tasks.sort((a, b) => {
+    const sa = resolveStatus(a, offlineMap[a._key]);
+    const sb = resolveStatus(b, offlineMap[b._key]);
+    return PRIORITY[sa] - PRIORITY[sb];
   });
 
-  tasks.forEach(t=>{
-    const offline = offlineMap[t._key];
-    const uploading = uploadingMap[t._key];
-    const failed = failedMap[t._key];
-    const status = resolveStatus(t, offline, uploading, failed);
+  tasks.forEach(t => {
+    const q = offlineMap[t._key];
+    const status = resolveStatus(t, q);
 
-    const lat = offline?.latitude ?? uploading?.latitude ?? t.latitude;
-    const lng = offline?.longitude ?? uploading?.longitude ?? t.longitude;
-    const taken = offline?.takenAt ?? uploading?.takenAt ?? t.takenAt;
+    const lat = q?.latitude ?? t.latitude;
+    const lng = q?.longitude ?? t.longitude;
+    const taken = q?.takenAt ?? t.takenAt;
 
     const div = document.createElement("div");
-    div.className = `task ${status==="COMPLETED"?"completed":""}`;
+    div.className = `task ${status === "COMPLETED" ? "completed" : ""}`;
 
     div.innerHTML = `
       <b>${t.name}</b>
       <div class="small">${t.address}</div>
 
-      <div class="small status">Status: ${status}</div>
+      <div class="small"><b>Status:</b> ${status}</div>
+
       ${lat ? `<div class="small">📍 ${lat}, ${lng}</div>` : ""}
       ${taken ? `<div class="small">📸 Taken: ${new Date(taken).toLocaleString()}</div>` : ""}
       ${t.uploadedAt ? `<div class="small">☁ Uploaded: ${new Date(t.uploadedAt).toLocaleString()}</div>` : ""}
 
-      ${status==="UPLOADING"?`<div class="uploading">⬆ Uploading...</div>`:""}
-      ${status==="FAILED"?`<div class="failed">❌ Upload failed — retrying</div>`:""}
-      ${offline?`<div class="small">🕒 Saved offline — upload pending</div>`:""}
+      ${status === "SAVED" && q ? `<div class="offline-indicator">🕒 Saved offline — upload pending</div>` : ""}
 
       ${
-        status==="PENDING"
-        ? `<button class="capture" onclick="takePicture('${t._key}')">📸 Take Picture</button>`
-        : status==="COMPLETED"
-          ? `
-            <button class="toggle"
-              onclick="this.nextElementSibling.style.display =
-              this.nextElementSibling.style.display==='none'?'block':'none'">
-              👁 Show / Hide Photo
-            </button>
-            <img src="${t.imageUrl}">
-          `
-          : `<button disabled>${status}</button>`
+        status === "PENDING"
+          ? `<button class="capture" onclick="takePicture('${t._key}')">📸 Take Picture</button>`
+          : status === "COMPLETED"
+            ? `
+              <button class="toggle"
+                onclick="this.nextElementSibling.style.display =
+                this.nextElementSibling.style.display === 'none' ? 'block' : 'none'">
+                👁 Show / Hide Photo
+              </button>
+              <img src="${t.imageUrl}" style="display:none">
+            `
+            : `<button disabled>⏳ Saved</button>`
       }
     `;
+
     list.appendChild(div);
   });
 }
 
-/* ================= INIT ================= */
 loadTasks();
 </script>
 
