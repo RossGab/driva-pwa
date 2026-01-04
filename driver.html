@@ -48,7 +48,16 @@ body {
 .small {
   font-size: 13px;
   color: #555;
-  margin-top: 2px;
+  margin-top: 4px;
+}
+
+textarea {
+  width: 100%;
+  min-height: 60px;
+  margin-top: 6px;
+  padding: 6px;
+  font-size: 14px;
+  resize: vertical;
 }
 
 .offline-indicator {
@@ -112,7 +121,7 @@ import {
   getStorage, ref as sRef, uploadBytes, getDownloadURL
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.2.0";
+const VERSION = "Driver v3.3.0";
 
 /* ================= CONFIG ================= */
 const firebaseConfig = {
@@ -206,20 +215,21 @@ function resolveStatus(task, offlineItem) {
   return "PENDING";
 }
 
-/* ================= CAMERA + REMARKS ================= */
+/* ================= CAMERA ================= */
 let CURRENT_TASK = null;
-let CURRENT_REMARKS = "";
 const camera = document.getElementById("cameraInput");
 
 window.takePicture = key => {
   CURRENT_TASK = key;
-  CURRENT_REMARKS = prompt("Enter remarks (optional):") || "";
   camera.value = "";
   camera.click();
 };
 
 camera.addEventListener("change", async e => {
   if (!e.target.files[0] || !CURRENT_TASK) return;
+
+  const textarea = document.getElementById(`remarks_${CURRENT_TASK}`);
+  const remarks = textarea ? textarea.value.trim() : "";
 
   const blob = await compressImage(e.target.files[0]);
   const coords = await getLocation();
@@ -234,7 +244,7 @@ camera.addEventListener("change", async e => {
       takenAt,
       latitude: coords?.latitude,
       longitude: coords?.longitude,
-      remarks: CURRENT_REMARKS
+      remarks
     });
     setQueue(q);
     loadTasks();
@@ -243,10 +253,10 @@ camera.addEventListener("change", async e => {
 
   // ONLINE
   uploadingMap[CURRENT_TASK] = true;
-  render(JSON.parse(localStorage.getItem(TASK_CACHE_KEY) || []));
+  loadTasks();
 
   try {
-    await uploadNow(CURRENT_TASK, blob, takenAt, coords, CURRENT_REMARKS);
+    await uploadNow(CURRENT_TASK, blob, takenAt, coords, remarks);
   } catch {
     alert("Upload failed. Please retake the photo.");
   }
@@ -256,12 +266,8 @@ camera.addEventListener("change", async e => {
 
 /* ================= UPLOAD ================= */
 async function uploadNow(taskKey, blob, takenAt, coords, remarks) {
-  const snap = await get(ref(db, `tasks/${taskKey}`));
-  const task = snap.val();
-
   const uploadedAt = new Date().toISOString();
-  const filename = `${Date.now()}.jpg`;
-  const imgRef = sRef(storage, `tasks/${taskKey}/${filename}`);
+  const imgRef = sRef(storage, `tasks/${taskKey}/${Date.now()}.jpg`);
 
   await uploadBytes(imgRef, blob);
   const url = await getDownloadURL(imgRef);
@@ -346,21 +352,29 @@ function render(tasks) {
       <div class="small">${t.address}</div>
       <div class="small"><b>Status:</b> ${status}</div>
 
-      ${t.remarks ? `<div class="small">📝 ${t.remarks}</div>` : ""}
-
       ${
         status === "PENDING"
-          ? `<button class="capture" onclick="takePicture('${t._key}')">📸 Take Picture</button>`
-          : status === "COMPLETED"
-            ? `
-              <button class="toggle"
-                onclick="this.nextElementSibling.style.display =
-                this.nextElementSibling.style.display === 'none' ? 'block' : 'none'">
-                👁 Show / Hide Photo
-              </button>
-              <img src="${t.imageUrl}" style="display:none">
-            `
-            : `<button disabled>⏳ ${status}</button>`
+          ? `
+            <textarea id="remarks_${t._key}" placeholder="Remarks (optional)"></textarea>
+            <button class="capture" onclick="takePicture('${t._key}')">
+              📸 Take Picture
+            </button>
+          `
+          : `
+            ${t.remarks ? `<div class="small">📝 ${t.remarks}</div>` : ""}
+            ${
+              status === "COMPLETED"
+                ? `
+                  <button class="toggle"
+                    onclick="this.nextElementSibling.style.display =
+                    this.nextElementSibling.style.display === 'none' ? 'block' : 'none'">
+                    👁 Show / Hide Photo
+                  </button>
+                  <img src="${t.imageUrl}" style="display:none">
+                `
+                : `<div class="uploading">⏳ Uploading…</div>`
+            }
+          `
       }
     `;
 
