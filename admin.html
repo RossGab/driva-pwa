@@ -72,7 +72,16 @@ button {
 .small {
   font-size:13px;
   color:#555;
-  margin-top:2px;
+  margin-top:4px;
+}
+
+.remarks {
+  margin-top:6px;
+  padding:6px;
+  background:#f7f7f7;
+  border-left:3px solid #007bff;
+  font-size:13px;
+  color:#333;
 }
 
 img {
@@ -220,6 +229,12 @@ window.loadTasks = async function (status) {
       <div class="small">${t.address}</div>
       <div class="small">Driver: ${t.driverId}</div>
 
+      ${t.remarks ? `
+        <div class="remarks">
+          📝 <b>Remarks:</b><br>${t.remarks}
+        </div>
+      ` : ""}
+
       ${
         status === "COMPLETED" ? `
           <div class="small">📍 ${t.latitude}, ${t.longitude}</div>
@@ -276,7 +291,8 @@ window.reassignTask = async function (taskKey) {
     takenAt: null,
     uploadedAt: null,
     latitude: null,
-    longitude: null
+    longitude: null,
+    remarks: null
   });
 
   alert("Task reassigned");
