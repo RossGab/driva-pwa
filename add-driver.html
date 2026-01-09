@@ -39,6 +39,7 @@ button {
 .add { background:#007bff; color:#fff; }
 .search { background:#17a2b8; color:#fff; }
 .update { background:#28a745; color:#fff; }
+.confirm { background:#f39c12; color:#fff; }
 .back { background:#444; color:#fff; margin-top:10px; }
 
 input {
@@ -46,6 +47,10 @@ input {
   padding:12px;
   margin-top:8px;
   font-size:14px;
+}
+
+input[readonly] {
+  background:#eee;
 }
 
 .hidden { display:none; }
@@ -62,16 +67,15 @@ input {
   <div class="actions">
     <button class="add" onclick="setMode('add')">➕ Add Driver</button>
     <button class="search" onclick="setMode('search')">🔍 Search Driver</button>
-    <button class="update" onclick="setMode('update')">✏ Modify Driver</button>
   </div>
 
-  <!-- SEARCH BOX -->
+  <!-- SEARCH -->
   <input id="searchBox" class="hidden"
     placeholder="Search driver (code, name, address, contact, team, vehicle)">
 
   <!-- DRIVER FORM -->
   <div id="driverForm" class="hidden">
-    <input id="driverCode" placeholder="Driver Code (e.g. driver_001)">
+    <input id="driverCode" placeholder="Driver Code">
     <input id="name" placeholder="Driver Name">
     <input id="address" placeholder="Address">
     <input id="contact" placeholder="Contact Number">
@@ -127,33 +131,28 @@ const teamEl = document.getElementById("team");
 const vehicleEl = document.getElementById("vehicle");
 
 let MODE = null;
+let CONFIRMED_MODIFY = false;
 
 /* MODE SWITCH */
 window.setMode = function (mode) {
   MODE = mode;
+  CONFIRMED_MODIFY = false;
   hideAll();
 
   if (mode === "add") {
-    form.classList.remove("hidden");
-    actionBtn.className = "add";
+    showForm(false);
     actionBtn.innerText = "Save Driver";
+    actionBtn.className = "add";
     actionBtn.classList.remove("hidden");
     clearForm();
   }
 
   if (mode === "search") {
     searchBox.classList.remove("hidden");
-    actionBtn.className = "search";
     actionBtn.innerText = "Search";
+    actionBtn.className = "search";
     actionBtn.classList.remove("hidden");
     searchBox.value = "";
-  }
-
-  if (mode === "update") {
-    form.classList.remove("hidden");
-    actionBtn.className = "update";
-    actionBtn.innerText = "Update Driver";
-    actionBtn.classList.remove("hidden");
   }
 };
 
@@ -172,24 +171,32 @@ window.handleAction = async function () {
 
     if (!found) return alert("Driver not found");
 
-    codeEl.value = found.driverCode || "";
-    nameEl.value = found.name || "";
-    addressEl.value = found.address || "";
-    contactEl.value = found.contact || "";
-    teamEl.value = found.team || "";
-    vehicleEl.value = found.vehicle || "";
+    populateForm(found);
+    setReadOnly(true);
 
-    setMode("update");
+    actionBtn.innerText = "✏ Modify Driver";
+    actionBtn.className = "confirm";
+    CONFIRMED_MODIFY = false;
+    MODE = "confirm-modify";
     return;
   }
 
-  const driverCode = codeEl.value.trim();
-  if (!driverCode) return alert("Driver code is required");
-
-  const driverRef = ref(db, `drivers/${driverCode}`);
+  /* CONFIRM MODIFY */
+  if (MODE === "confirm-modify") {
+    setReadOnly(false);
+    actionBtn.innerText = "Update Driver";
+    actionBtn.className = "update";
+    MODE = "update";
+    CONFIRMED_MODIFY = true;
+    return;
+  }
 
   /* ADD */
   if (MODE === "add") {
+    const driverCode = codeEl.value.trim();
+    if (!driverCode) return alert("Driver code is required");
+
+    const driverRef = ref(db, `drivers/${driverCode}`);
     const exists = await get(driverRef);
     if (exists.exists()) return alert("Driver already exists");
 
@@ -200,9 +207,13 @@ window.handleAction = async function () {
   }
 
   /* UPDATE */
-  if (MODE === "update") {
-    await update(driverRef, buildPayload(false));
+  if (MODE === "update" && CONFIRMED_MODIFY) {
+    const driverCode = codeEl.value.trim();
+    if (!driverCode) return alert("Driver code missing");
+
+    await update(ref(db, `drivers/${driverCode}`), buildPayload(false));
     alert("Driver updated successfully");
+    setReadOnly(true);
   }
 };
 
@@ -217,6 +228,26 @@ function buildPayload(isNew) {
     ...(isNew ? { createdAt: new Date().toISOString() } : {}),
     updatedAt: new Date().toISOString()
   };
+}
+
+function populateForm(d) {
+  showForm(true);
+  codeEl.value = d.driverCode || "";
+  nameEl.value = d.name || "";
+  addressEl.value = d.address || "";
+  contactEl.value = d.contact || "";
+  teamEl.value = d.team || "";
+  vehicleEl.value = d.vehicle || "";
+}
+
+function setReadOnly(state) {
+  [codeEl, nameEl, addressEl, contactEl, teamEl, vehicleEl]
+    .forEach(i => i.readOnly = state);
+}
+
+function showForm(readOnly) {
+  form.classList.remove("hidden");
+  setReadOnly(readOnly);
 }
 
 function hideAll() {
