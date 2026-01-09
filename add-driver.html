@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Add Driver</title>
+<title>Driver Management</title>
 
 <style>
 body {
@@ -21,38 +21,64 @@ h2 { text-align:center; }
   box-shadow:0 0 4px rgba(0,0,0,.1);
 }
 
-input, button {
-  width:100%;
-  padding:12px;
-  margin-top:8px;
-  font-size:14px;
+.actions {
+  display:flex;
+  gap:8px;
+  margin-bottom:10px;
 }
 
 button {
+  flex:1;
+  padding:12px;
+  font-size:14px;
   border:none;
   border-radius:6px;
   cursor:pointer;
 }
 
-.save { background:#007bff; color:#fff; }
+.add { background:#007bff; color:#fff; }
+.search { background:#17a2b8; color:#fff; }
+.update { background:#28a745; color:#fff; }
 .back { background:#444; color:#fff; margin-top:10px; }
+
+input {
+  width:100%;
+  padding:12px;
+  margin-top:8px;
+  font-size:14px;
+}
 </style>
 </head>
 
 <body>
 
-<h2>👤 Add Driver</h2>
+<h2>👤 Driver Management</h2>
 
 <div class="card">
+
+  <!-- ACTION BUTTONS -->
+  <div class="actions">
+    <button class="add" onclick="setMode('add')">➕ Add Driver</button>
+    <button class="search" onclick="setMode('search')">🔍 Search Driver</button>
+    <button class="update" onclick="setMode('update')">✏ Modify Driver</button>
+  </div>
+
+  <!-- FORM -->
+  <input id="driverCode" placeholder="Driver Code (e.g. driver_001)">
   <input id="name" placeholder="Driver Name">
   <input id="address" placeholder="Address">
   <input id="contact" placeholder="Contact Number">
-  <input id="driverCode" placeholder="Driver Code (e.g. driver_001)">
   <input id="team" placeholder="Driver Team">
   <input id="vehicle" placeholder="Vehicle Details">
 
-  <button class="save" onclick="saveDriver()">Save Driver</button>
-  <button class="back" onclick="location.href='admin.html'">⬅ Back</button>
+  <button id="actionBtn" class="add" onclick="handleAction()">
+    Save Driver
+  </button>
+
+  <button class="back" onclick="location.href='admin.html'">
+    ⬅ Back to Dashboard
+  </button>
+
 </div>
 
 <script type="module">
@@ -62,7 +88,8 @@ import {
   getDatabase,
   ref,
   set,
-  get
+  get,
+  update
 } from
   "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
@@ -80,54 +107,105 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 
-window.saveDriver = async function () {
-  const name = nameEl.value.trim();
-  const address = addressEl.value.trim();
-  const contact = contactEl.value.trim();
-  const driverCode = codeEl.value.trim();
-  const team = teamEl.value.trim();
-  const vehicle = vehicleEl.value.trim();
-
-  if (!name || !driverCode) {
-    alert("Driver name and driver code are required");
-    return;
-  }
-
-  const driverRef = ref(db, `drivers/${driverCode}`);
-
-  // Prevent overwrite
-  const exists = await get(driverRef);
-  if (exists.exists()) {
-    alert("Driver code already exists");
-    return;
-  }
-
-  await set(driverRef, {
-    name,
-    address,
-    contact,
-    driverCode,
-    team,
-    vehicle,
-    createdAt: new Date().toISOString()
-  });
-
-  alert("Driver added successfully");
-
-  // Clear inputs
-  nameEl.value = addressEl.value = contactEl.value =
-  codeEl.value = teamEl.value = vehicleEl.value = "";
-
-  nameEl.focus();
-};
-
-// cache elements
+/* ELEMENTS */
+const codeEl = document.getElementById("driverCode");
 const nameEl = document.getElementById("name");
 const addressEl = document.getElementById("address");
 const contactEl = document.getElementById("contact");
-const codeEl = document.getElementById("driverCode");
 const teamEl = document.getElementById("team");
 const vehicleEl = document.getElementById("vehicle");
+const actionBtn = document.getElementById("actionBtn");
+
+let MODE = "add";
+
+/* MODE HANDLER */
+window.setMode = function (mode) {
+  MODE = mode;
+
+  if (mode === "add") {
+    actionBtn.innerText = "Save Driver";
+    actionBtn.className = "add";
+    clearForm();
+  }
+
+  if (mode === "search") {
+    actionBtn.innerText = "Search Driver";
+    actionBtn.className = "search";
+    clearForm(false);
+  }
+
+  if (mode === "update") {
+    actionBtn.innerText = "Update Driver";
+    actionBtn.className = "update";
+  }
+};
+
+window.handleAction = async function () {
+  const driverCode = codeEl.value.trim();
+  if (!driverCode) return alert("Driver code is required");
+
+  const driverRef = ref(db, `drivers/${driverCode}`);
+
+  /* SEARCH */
+  if (MODE === "search") {
+    const snap = await get(driverRef);
+    if (!snap.exists()) {
+      alert("Driver not found");
+      return;
+    }
+    const d = snap.val();
+    nameEl.value = d.name || "";
+    addressEl.value = d.address || "";
+    contactEl.value = d.contact || "";
+    teamEl.value = d.team || "";
+    vehicleEl.value = d.vehicle || "";
+    alert("Driver loaded. You may now modify.");
+    setMode("update");
+    return;
+  }
+
+  /* ADD */
+  if (MODE === "add") {
+    const exists = await get(driverRef);
+    if (exists.exists()) {
+      alert("Driver code already exists");
+      return;
+    }
+
+    await set(driverRef, buildPayload());
+    alert("Driver added successfully");
+    clearForm();
+    return;
+  }
+
+  /* UPDATE */
+  if (MODE === "update") {
+    await update(driverRef, buildPayload());
+    alert("Driver updated successfully");
+    return;
+  }
+};
+
+function buildPayload() {
+  return {
+    driverCode: codeEl.value.trim(),
+    name: nameEl.value.trim(),
+    address: addressEl.value.trim(),
+    contact: contactEl.value.trim(),
+    team: teamEl.value.trim(),
+    vehicle: vehicleEl.value.trim(),
+    updatedAt: new Date().toISOString()
+  };
+}
+
+function clearForm(clearCode = true) {
+  if (clearCode) codeEl.value = "";
+  nameEl.value = "";
+  addressEl.value = "";
+  contactEl.value = "";
+  teamEl.value = "";
+  vehicleEl.value = "";
+}
 </script>
 
 </body>
