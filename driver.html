@@ -70,6 +70,12 @@ textarea {
   resize: vertical;
 }
 
+.offline-indicator {
+  margin-top: 6px;
+  font-weight: bold;
+  color: #c0392b;
+}
+
 .uploading {
   margin-top: 6px;
   font-weight: bold;
@@ -340,26 +346,55 @@ function render(tasks) {
   const list = document.getElementById("taskList");
   list.innerHTML = "";
 
-  if (!tasks.length) {
-    list.innerHTML = "No matching tasks";
-    return;
-  }
+  const offlineMap = Object.fromEntries(
+    getQueue().map(i => [i.taskKey, i])
+  );
 
   tasks.sort((a, b) => {
-    const sa = resolveStatus(a);
-    const sb = resolveStatus(b);
+    const sa = resolveStatus(a, offlineMap[a._key]);
+    const sb = resolveStatus(b, offlineMap[b._key]);
     return PRIORITY[sa] - PRIORITY[sb];
   });
 
   tasks.forEach(t => {
+    const q = offlineMap[t._key];
+    const status = resolveStatus(t, q);
+
     const div = document.createElement("div");
-    div.className = `task ${t.status === "COMPLETED" ? "completed" : ""}`;
+    div.className = `task ${status === "COMPLETED" ? "completed" : ""}`;
 
     div.innerHTML = `
       <b>${t.name}</b>
       <div class="small">${t.address}</div>
-      <div class="small"><b>Status:</b> ${t.status}</div>
-      ${t.remarks ? `<div class="small">📝 ${t.remarks}</div>` : ""}
+      <div class="small"><b>Status:</b> ${status}</div>
+
+      ${
+        status === "PENDING"
+          ? `
+            <textarea id="remarks_${t._key}" placeholder="Remarks (optional)"></textarea>
+            <button class="capture" onclick="takePicture('${t._key}')">
+              📸 Take Picture
+            </button>
+          `
+          : `
+            ${t.remarks ? `<div class="small">📝 ${t.remarks}</div>` : ""}
+            ${
+              status === "COMPLETED"
+                ? `
+                  <button class="toggle"
+                    onclick="this.nextElementSibling.style.display =
+                    this.nextElementSibling.style.display === 'none' ? 'block' : 'none'">
+                    👁 Show / Hide Photo
+                  </button>
+                  <img src="${t.imageUrl}" style="display:none">
+                `
+                : `
+                  <div class="uploading">⏳ Uploading…</div>
+                  ${q ? `<div class="offline-indicator">🕒 Saved offline — upload pending</div>` : ""}
+                `
+            }
+          `
+      }
     `;
 
     list.appendChild(div);
