@@ -152,7 +152,12 @@ img {
 <div class="dashboard">
   <div class="card open">
     <div class="big" id="openCount">0</div>
-    Open Tasks (Today)
+      <div class="small">
+        🔴 <span id="slaBreach">0</span> |
+        🟡 <span id="slaWarn">0</span> |
+        🟢 <span id="slaOk">0</span>
+      </div>
+      Open Tasks
   </div>
   <div class="card done">
     <div class="big" id="doneCount">0</div>
@@ -215,31 +220,35 @@ document.getElementById("searchBox").addEventListener("input", e => {
 window.refreshDashboard = async function () {
   const snap = await get(ref(db, "tasks"));
   const tasks = Object.values(snap.val() || {});
+
   let open = 0, done = 0;
+  let breach = 0, warn = 0, ok = 0;
 
   tasks.forEach(t => {
-    t.status === "COMPLETED" ? done++ : open++;
+    if (t.status === "COMPLETED") {
+      done++;
+      return;
+    }
+
+    open++;
+
+    if (!t.createdAt) return;
+
+    const ageHours =
+      (Date.now() - new Date(t.createdAt).getTime()) / 36e5;
+
+    if (ageHours < 24) ok++;
+    else if (ageHours < 48) warn++;
+    else breach++;
   });
 
   openCount.innerText = open;
   doneCount.innerText = done;
+
+  slaOk.innerText = ok;
+  slaWarn.innerText = warn;
+  slaBreach.innerText = breach;
 };
-
-function getSLA(task) {
-  if (!task.createdAt || task.status === "COMPLETED") return null;
-
-  const ageHours =
-    (Date.now() - new Date(task.createdAt).getTime()) / 36e5;
-
-  if (ageHours < 24)
-    return { text: "Within SLA", cls: "sla-ok" };
-
-  if (ageHours < 48)
-    return { text: "At Risk", cls: "sla-warn" };
-
-  return { text: "SLA Breached", cls: "sla-breach" };
-}
-
 /* ===== LOAD TASKS ===== */
 window.loadTasks = async function (status) {
   CURRENT_STATUS = status;
