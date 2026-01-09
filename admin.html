@@ -57,6 +57,16 @@ button {
 .doneBtn { background:green; color:#fff; }
 .refresh { background:#444; color:#fff; }
 
+/* 🔍 SEARCH */
+#searchBox {
+  width:100%;
+  padding:10px;
+  margin-bottom:12px;
+  border-radius:6px;
+  border:1px solid #ccc;
+  font-size:14px;
+}
+
 .task {
   background:#fff;
   padding:12px;
@@ -154,6 +164,9 @@ img {
   <button class="refresh" onclick="refreshDashboard()">🔄</button>
 </div>
 
+<!-- 🔍 SEARCH BAR -->
+<input id="searchBox" placeholder="Search name, address, driver, remarks, etc.">
+
 <!-- ===== TASK LIST ===== -->
 <div id="taskList">Select Open or Completed</div>
 
@@ -184,6 +197,15 @@ const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 const today = new Date().toISOString().slice(0,10);
 
+let CURRENT_STATUS = null;
+let SEARCH_TERM = "";
+
+/* ===== SEARCH ===== */
+document.getElementById("searchBox").addEventListener("input", e => {
+  SEARCH_TERM = e.target.value.toLowerCase();
+  if (CURRENT_STATUS) loadTasks(CURRENT_STATUS);
+});
+
 /* ===== DASHBOARD COUNTS ===== */
 window.refreshDashboard = async function () {
   const snap = await get(ref(db, "tasks"));
@@ -201,15 +223,23 @@ window.refreshDashboard = async function () {
 
 /* ===== LOAD TASKS ===== */
 window.loadTasks = async function (status) {
+  CURRENT_STATUS = status;
   const list = document.getElementById("taskList");
   list.innerHTML = "Loading...";
 
   const snap = await get(ref(db, "tasks"));
   const all = snap.val() || {};
 
-  const tasks = Object.keys(all)
+  let tasks = Object.keys(all)
     .map(k => ({ _key: k, ...all[k] }))
     .filter(t => t.status === status && t.createdAt?.startsWith(today));
+
+  /* 🔍 FILTER */
+  if (SEARCH_TERM) {
+    tasks = tasks.filter(t =>
+      JSON.stringify(t).toLowerCase().includes(SEARCH_TERM)
+    );
+  }
 
   if (!tasks.length) {
     list.innerHTML = "No tasks";
@@ -277,11 +307,7 @@ window.reassignTask = async function (taskKey) {
   const input = document.getElementById(`driver_${taskKey}`);
   const newDriver = input.value.trim();
 
-  if (!newDriver) {
-    alert("Enter a driver ID");
-    return;
-  }
-
+  if (!newDriver) return alert("Enter a driver ID");
   if (!confirm(`Reassign task to ${newDriver}?`)) return;
 
   await update(ref(db, `tasks/${taskKey}`), {
