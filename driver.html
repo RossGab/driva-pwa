@@ -319,6 +319,35 @@ async function uploadNow(taskKey, blob, takenAt, coords, remarks, filename) {
   loadTasks();
 }
 
+/* ================= OFFLINE SYNC (RESTORED) ================= */
+setInterval(async () => {
+  if (!navigator.onLine) return;
+
+  const q = getQueue();
+  if (!q.length) return;
+
+  for (const i of q) {
+    try {
+      const blob = await (await fetch(i.image)).blob();
+
+      await uploadNow(
+        i.taskKey,
+        blob,
+        i.takenAt,
+        { latitude: i.latitude, longitude: i.longitude },
+        i.remarks,
+        i.filename
+      );
+    } catch (err) {
+      console.error("Retry upload failed", err);
+      return; // stop loop, retry next interval
+    }
+  }
+
+  setQueue([]); // clear only after successful uploads
+  loadTasks();
+}, 5000);
+
 /* ================= LOAD ================= */
 async function loadTasks() {
   let tasks = JSON.parse(localStorage.getItem(TASK_CACHE_KEY) || "[]");
