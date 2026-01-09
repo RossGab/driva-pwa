@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Add Driver</title>
+
+<style>
+body {
+  font-family: Arial, sans-serif;
+  background:#f3f3f3;
+  padding:10px;
+}
+
+h2 { text-align:center; }
+
+.card {
+  background:#fff;
+  padding:14px;
+  border-radius:8px;
+  box-shadow:0 0 4px rgba(0,0,0,.1);
+}
+
+input, button {
+  width:100%;
+  padding:12px;
+  margin-top:8px;
+  font-size:14px;
+}
+
+button {
+  border:none;
+  border-radius:6px;
+  cursor:pointer;
+}
+
+.save { background:#007bff; color:#fff; }
+.back { background:#444; color:#fff; margin-top:10px; }
+</style>
+</head>
+
+<body>
+
+<h2>👤 Add Driver</h2>
+
+<div class="card">
+  <input id="name" placeholder="Driver Name">
+  <input id="address" placeholder="Address">
+  <input id="contact" placeholder="Contact Number">
+  <input id="driverCode" placeholder="Driver Code (e.g. driver_001)">
+  <input id="team" placeholder="Driver Team">
+  <input id="vehicle" placeholder="Vehicle Details">
+
+  <button class="save" onclick="saveDriver()">Save Driver</button>
+  <button class="back" onclick="location.href='admin.html'">⬅ Back</button>
+</div>
+
+<script type="module">
+import { initializeApp } from
+  "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import {
+  getDatabase,
+  ref,
+  set,
+  get
+} from
+  "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+
+/* FIREBASE CONFIG */
+const firebaseConfig = {
+  apiKey: "AIzaSyDFW61pnwLvh6HGKWt10zLYNr860fI8vkg",
+  authDomain: "driva-pwa.firebaseapp.com",
+  databaseURL: "https://driva-pwa-default-rtdb.firebaseio.com",
+  projectId: "driva-pwa",
+  storageBucket: "driva-pwa.firebasestorage.app",
+  messagingSenderId: "299138219722",
+  appId: "1:299138219722:web:623ff6b0a067ea822dfe33"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
+
+window.saveDriver = async function () {
+  const name = nameEl.value.trim();
+  const address = addressEl.value.trim();
+  const contact = contactEl.value.trim();
+  const driverCode = codeEl.value.trim();
+  const team = teamEl.value.trim();
+  const vehicle = vehicleEl.value.trim();
+
+  if (!name || !driverCode) {
+    alert("Driver name and driver code are required");
+    return;
+  }
+
+  const driverRef = ref(db, `drivers/${driverCode}`);
+
+  // Prevent overwrite
+  const exists = await get(driverRef);
+  if (exists.exists()) {
+    alert("Driver code already exists");
+    return;
+  }
+
+  await set(driverRef, {
+    name,
+    address,
+    contact,
+    driverCode,
+    team,
+    vehicle,
+    createdAt: new Date().toISOString()
+  });
+
+  alert("Driver added successfully");
+
+  // Clear inputs
+  nameEl.value = addressEl.value = contactEl.value =
+  codeEl.value = teamEl.value = vehicleEl.value = "";
+
+  nameEl.focus();
+};
+
+// cache elements
+const nameEl = document.getElementById("name");
+const addressEl = document.getElementById("address");
+const contactEl = document.getElementById("contact");
+const codeEl = document.getElementById("driverCode");
+const teamEl = document.getElementById("team");
+const vehicleEl = document.getElementById("vehicle");
+</script>
+
+</body>
+</html>
