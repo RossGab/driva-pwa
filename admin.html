@@ -137,6 +137,10 @@ img {
   border-radius:5px;
   font-size:13px;
 }
+  .sla-ok { color: green; font-weight: bold; }
+  .sla-warn { color: orange; font-weight: bold; }
+  .sla-breach { color: red; font-weight: bold; }
+  
 </style>
 </head>
 
@@ -221,6 +225,21 @@ window.refreshDashboard = async function () {
   doneCount.innerText = done;
 };
 
+function getSLA(task) {
+  if (!task.createdAt || task.status === "COMPLETED") return null;
+
+  const ageHours =
+    (Date.now() - new Date(task.createdAt).getTime()) / 36e5;
+
+  if (ageHours < 24)
+    return { text: "Within SLA", cls: "sla-ok" };
+
+  if (ageHours < 48)
+    return { text: "At Risk", cls: "sla-warn" };
+
+  return { text: "SLA Breached", cls: "sla-breach" };
+}
+
 /* ===== LOAD TASKS ===== */
 window.loadTasks = async function (status) {
   CURRENT_STATUS = status;
@@ -254,6 +273,8 @@ window.loadTasks = async function (status) {
     const div = document.createElement("div");
     div.className = `task ${status === "COMPLETED" ? "completed" : "pending"}`;
 
+    const sla = getSLA(t);
+
     div.innerHTML = `
       <b>${t.name}</b>
       <div class="small">${t.address}</div>
@@ -282,6 +303,11 @@ window.loadTasks = async function (status) {
 
       ${
         status === "PENDING" ? `
+        ${sla ? `
+          <div class="small ${sla.cls}">
+            ⏱ SLA: ${sla.text}
+          </div>
+        ` : ""}
           <div class="reassignBox">
             <input placeholder="New Driver ID" id="driver_${t._key}">
             <button class="reassignBtn"
