@@ -33,6 +33,16 @@ body {
   display: none;
 }
 
+/* 🔍 SEARCH */
+#searchBox {
+  width: 100%;
+  padding: 10px;
+  margin-bottom: 10px;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+  font-size: 14px;
+}
+
 .task {
   background: #fff;
   padding: 12px;
@@ -60,12 +70,6 @@ textarea {
   resize: vertical;
 }
 
-.offline-indicator {
-  margin-top: 6px;
-  font-weight: bold;
-  color: #c0392b;
-}
-
 .uploading {
   margin-top: 6px;
   font-weight: bold;
@@ -85,15 +89,8 @@ button:disabled {
   background: #aaa;
 }
 
-.capture {
-  background: #007bff;
-  color: #fff;
-}
-
-.toggle {
-  background: #0069d9;
-  color: #fff;
-}
+.capture { background: #007bff; color: #fff; }
+.toggle { background: #0069d9; color: #fff; }
 
 img {
   width: 100%;
@@ -107,6 +104,10 @@ img {
 
 <div id="appVersion"></div>
 <div id="offlineBanner">⚠ Offline — photos will upload automatically</div>
+
+<!-- 🔍 SEARCH INPUT -->
+<input id="searchBox" placeholder="Search tasks (name, address, remarks, etc.)">
+
 <div id="taskList">Loading tasks...</div>
 
 <input type="file" id="cameraInput" accept="image/*" capture="environment" hidden>
@@ -121,7 +122,7 @@ import {
   getStorage, ref as sRef, uploadBytes, getDownloadURL
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.3.1";
+const VERSION = "Driver v3.3.2";
 
 /* ================= CONFIG ================= */
 const firebaseConfig = {
@@ -143,6 +144,7 @@ const QUEUE_KEY = "offlineQueue";
 const TASK_CACHE_KEY = "cachedTasks";
 const PRIORITY = { PENDING: 1, UPLOADING: 2, SAVED: 2, COMPLETED: 3 };
 const uploadingMap = {};
+let SEARCH_TERM = "";
 
 /* ================= DRIVER ================= */
 let DRIVER_ID = localStorage.getItem("driverId");
@@ -151,6 +153,12 @@ localStorage.setItem("driverId", DRIVER_ID);
 
 document.getElementById("appVersion").innerText =
   `Driver: ${DRIVER_ID} | ${VERSION}`;
+
+/* ================= SEARCH ================= */
+document.getElementById("searchBox").addEventListener("input", e => {
+  SEARCH_TERM = e.target.value.toLowerCase();
+  loadTasks();
+});
 
 /* ================= NETWORK ================= */
 function updateNetwork() {
@@ -207,7 +215,6 @@ const toBase64 = blob =>
     f.readAsDataURL(blob);
   });
 
-/* ===== ADD: SAVE TO GALLERY ===== */
 function saveToGallery(blob, filename) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
@@ -247,24 +254,15 @@ camera.addEventListener("change", async e => {
   const coords = await getLocation();
   const takenAt = new Date().toISOString();
 
-  /* ===== ADD: BUILD SAFE FILENAME ===== */
   const cached = JSON.parse(localStorage.getItem(TASK_CACHE_KEY) || "[]");
   const task = cached.find(t => t._key === CURRENT_TASK);
 
-  const safe = v =>
-    String(v || "").toLowerCase().replace(/[^a-z0-9]/g, "_");
-
+  const safe = v => String(v || "").toLowerCase().replace(/[^a-z0-9]/g, "_");
   const filename =
-    `${safe(task?.name)}_` +
-    `${safe(task?.address)}_` +
-    `${coords?.latitude || "0"}_${coords?.longitude || "0"}_` +
-    `${takenAt.replace(/[:.]/g, "-")}_` +
-    `${DRIVER_ID}.jpg`;
+    `${safe(task?.name)}_${safe(task?.address)}_${coords?.latitude || "0"}_${coords?.longitude || "0"}_${takenAt.replace(/[:.]/g, "-")}_${DRIVER_ID}.jpg`;
 
-  /* ===== ADD: SAVE LOCALLY ===== */
   saveToGallery(blob, filename);
 
-  /* ===== OFFLINE ===== */
   if (!navigator.onLine) {
     const q = getQueue();
     q.push({
@@ -281,7 +279,6 @@ camera.addEventListener("change", async e => {
     return;
   }
 
-  /* ===== ONLINE ===== */
   uploadingMap[CURRENT_TASK] = true;
   loadTasks();
 
@@ -316,47 +313,25 @@ async function uploadNow(taskKey, blob, takenAt, coords, remarks, filename) {
   loadTasks();
 }
 
-/* ================= OFFLINE SYNC ================= */
-setInterval(async () => {
-  if (!navigator.onLine) return;
-  const q = getQueue();
-  if (!q.length) return;
-
-  for (const i of q) {
-    const blob = await (await fetch(i.image)).blob();
-    await uploadNow(
-      i.taskKey,
-      blob,
-      i.takenAt,
-      { latitude: i.latitude, longitude: i.longitude },
-      i.remarks,
-      i.filename
-    );
-  }
-  setQueue([]);
-}, 5000);
-
 /* ================= LOAD ================= */
 async function loadTasks() {
-  const list = document.getElementById("taskList");
+  let tasks = JSON.parse(localStorage.getItem(TASK_CACHE_KEY) || "[]");
 
-  if (!navigator.onLine) {
-    const cached = JSON.parse(localStorage.getItem(TASK_CACHE_KEY) || "[]");
-    if (!cached.length) {
-      list.innerHTML = "No cached tasks available offline";
-      return;
-    }
-    render(cached);
-    return;
+  if (navigator.onLine) {
+    const snap = await get(
+      query(ref(db, "tasks"), orderByChild("driverId"), equalTo(DRIVER_ID))
+    );
+    const raw = snap.val() || {};
+    tasks = Object.keys(raw).map(k => ({ _key: k, ...raw[k] }));
+    localStorage.setItem(TASK_CACHE_KEY, JSON.stringify(tasks));
   }
 
-  const snap = await get(
-    query(ref(db, "tasks"), orderByChild("driverId"), equalTo(DRIVER_ID))
-  );
+  if (SEARCH_TERM) {
+    tasks = tasks.filter(t =>
+      JSON.stringify(t).toLowerCase().includes(SEARCH_TERM)
+    );
+  }
 
-  const raw = snap.val() || {};
-  const tasks = Object.keys(raw).map(k => ({ _key: k, ...raw[k] }));
-  localStorage.setItem(TASK_CACHE_KEY, JSON.stringify(tasks));
   render(tasks);
 }
 
@@ -365,52 +340,26 @@ function render(tasks) {
   const list = document.getElementById("taskList");
   list.innerHTML = "";
 
-  const offlineMap = Object.fromEntries(
-    getQueue().map(i => [i.taskKey, i])
-  );
+  if (!tasks.length) {
+    list.innerHTML = "No matching tasks";
+    return;
+  }
 
   tasks.sort((a, b) => {
-    const sa = resolveStatus(a, offlineMap[a._key]);
-    const sb = resolveStatus(b, offlineMap[b._key]);
+    const sa = resolveStatus(a);
+    const sb = resolveStatus(b);
     return PRIORITY[sa] - PRIORITY[sb];
   });
 
   tasks.forEach(t => {
-    const q = offlineMap[t._key];
-    const status = resolveStatus(t, q);
-
     const div = document.createElement("div");
-    div.className = `task ${status === "COMPLETED" ? "completed" : ""}`;
+    div.className = `task ${t.status === "COMPLETED" ? "completed" : ""}`;
 
     div.innerHTML = `
       <b>${t.name}</b>
       <div class="small">${t.address}</div>
-      <div class="small"><b>Status:</b> ${status}</div>
-
-      ${
-        status === "PENDING"
-          ? `
-            <textarea id="remarks_${t._key}" placeholder="Remarks (optional)"></textarea>
-            <button class="capture" onclick="takePicture('${t._key}')">
-              📸 Take Picture
-            </button>
-          `
-          : `
-            ${t.remarks ? `<div class="small">📝 ${t.remarks}</div>` : ""}
-            ${
-              status === "COMPLETED"
-                ? `
-                  <button class="toggle"
-                    onclick="this.nextElementSibling.style.display =
-                    this.nextElementSibling.style.display === 'none' ? 'block' : 'none'">
-                    👁 Show / Hide Photo
-                  </button>
-                  <img src="${t.imageUrl}" style="display:none">
-                `
-                : `<div class="uploading">⏳ Uploading…</div>`
-            }
-          `
-      }
+      <div class="small"><b>Status:</b> ${t.status}</div>
+      ${t.remarks ? `<div class="small">📝 ${t.remarks}</div>` : ""}
     `;
 
     list.appendChild(div);
