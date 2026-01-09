@@ -214,7 +214,6 @@ window.refreshDashboard = async function () {
   let open = 0, done = 0;
 
   tasks.forEach(t => {
-    if (!t.createdAt || !t.createdAt.startsWith(today)) return;
     t.status === "COMPLETED" ? done++ : open++;
   });
 
@@ -233,7 +232,7 @@ window.loadTasks = async function (status) {
 
   let tasks = Object.keys(all)
     .map(k => ({ _key: k, ...all[k] }))
-    .filter(t => t.status === status && t.createdAt?.startsWith(today));
+    .filter(t => t.status === status);
 
   /* 🔍 FILTER */
   if (SEARCH_TERM) {
