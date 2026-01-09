@@ -24,7 +24,7 @@ h2 { text-align:center; }
 .actions {
   display:flex;
   gap:8px;
-  margin-bottom:10px;
+  margin-bottom:12px;
 }
 
 button {
@@ -47,6 +47,8 @@ input {
   margin-top:8px;
   font-size:14px;
 }
+
+.hidden { display:none; }
 </style>
 </head>
 
@@ -63,17 +65,22 @@ input {
     <button class="update" onclick="setMode('update')">✏ Modify Driver</button>
   </div>
 
-  <!-- FORM -->
-  <input id="driverCode" placeholder="Driver Code (e.g. driver_001)">
-  <input id="name" placeholder="Driver Name">
-  <input id="address" placeholder="Address">
-  <input id="contact" placeholder="Contact Number">
-  <input id="team" placeholder="Driver Team">
-  <input id="vehicle" placeholder="Vehicle Details">
+  <!-- SEARCH BOX -->
+  <input id="searchBox" class="hidden"
+    placeholder="Search driver (code, name, address, contact, team, vehicle)">
 
-  <button id="actionBtn" class="add" onclick="handleAction()">
-    Save Driver
-  </button>
+  <!-- DRIVER FORM -->
+  <div id="driverForm" class="hidden">
+    <input id="driverCode" placeholder="Driver Code (e.g. driver_001)">
+    <input id="name" placeholder="Driver Name">
+    <input id="address" placeholder="Address">
+    <input id="contact" placeholder="Contact Number">
+    <input id="team" placeholder="Driver Team">
+    <input id="vehicle" placeholder="Vehicle Details">
+  </div>
+
+  <!-- ACTION BUTTON -->
+  <button id="actionBtn" class="hidden" onclick="handleAction()"></button>
 
   <button class="back" onclick="location.href='admin.html'">
     ⬅ Back to Dashboard
@@ -108,71 +115,85 @@ const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 
 /* ELEMENTS */
+const searchBox = document.getElementById("searchBox");
+const form = document.getElementById("driverForm");
+const actionBtn = document.getElementById("actionBtn");
+
 const codeEl = document.getElementById("driverCode");
 const nameEl = document.getElementById("name");
 const addressEl = document.getElementById("address");
 const contactEl = document.getElementById("contact");
 const teamEl = document.getElementById("team");
 const vehicleEl = document.getElementById("vehicle");
-const actionBtn = document.getElementById("actionBtn");
 
-let MODE = "add";
+let MODE = null;
 
-/* MODE HANDLER */
+/* MODE SWITCH */
 window.setMode = function (mode) {
   MODE = mode;
+  hideAll();
 
   if (mode === "add") {
-    actionBtn.innerText = "Save Driver";
+    form.classList.remove("hidden");
     actionBtn.className = "add";
+    actionBtn.innerText = "Save Driver";
+    actionBtn.classList.remove("hidden");
     clearForm();
   }
 
   if (mode === "search") {
-    actionBtn.innerText = "Search Driver";
+    searchBox.classList.remove("hidden");
     actionBtn.className = "search";
-    clearForm(false);
+    actionBtn.innerText = "Search";
+    actionBtn.classList.remove("hidden");
+    searchBox.value = "";
   }
 
   if (mode === "update") {
-    actionBtn.innerText = "Update Driver";
+    form.classList.remove("hidden");
     actionBtn.className = "update";
+    actionBtn.innerText = "Update Driver";
+    actionBtn.classList.remove("hidden");
   }
 };
 
 window.handleAction = async function () {
+  /* SEARCH */
+  if (MODE === "search") {
+    const term = searchBox.value.trim().toLowerCase();
+    if (!term) return alert("Enter search text");
+
+    const snap = await get(ref(db, "drivers"));
+    const all = snap.val() || {};
+
+    const found = Object.values(all).find(d =>
+      JSON.stringify(d).toLowerCase().includes(term)
+    );
+
+    if (!found) return alert("Driver not found");
+
+    codeEl.value = found.driverCode || "";
+    nameEl.value = found.name || "";
+    addressEl.value = found.address || "";
+    contactEl.value = found.contact || "";
+    teamEl.value = found.team || "";
+    vehicleEl.value = found.vehicle || "";
+
+    setMode("update");
+    return;
+  }
+
   const driverCode = codeEl.value.trim();
   if (!driverCode) return alert("Driver code is required");
 
   const driverRef = ref(db, `drivers/${driverCode}`);
 
-  /* SEARCH */
-  if (MODE === "search") {
-    const snap = await get(driverRef);
-    if (!snap.exists()) {
-      alert("Driver not found");
-      return;
-    }
-    const d = snap.val();
-    nameEl.value = d.name || "";
-    addressEl.value = d.address || "";
-    contactEl.value = d.contact || "";
-    teamEl.value = d.team || "";
-    vehicleEl.value = d.vehicle || "";
-    alert("Driver loaded. You may now modify.");
-    setMode("update");
-    return;
-  }
-
   /* ADD */
   if (MODE === "add") {
     const exists = await get(driverRef);
-    if (exists.exists()) {
-      alert("Driver code already exists");
-      return;
-    }
+    if (exists.exists()) return alert("Driver already exists");
 
-    await set(driverRef, buildPayload());
+    await set(driverRef, buildPayload(true));
     alert("Driver added successfully");
     clearForm();
     return;
@@ -180,13 +201,12 @@ window.handleAction = async function () {
 
   /* UPDATE */
   if (MODE === "update") {
-    await update(driverRef, buildPayload());
+    await update(driverRef, buildPayload(false));
     alert("Driver updated successfully");
-    return;
   }
 };
 
-function buildPayload() {
+function buildPayload(isNew) {
   return {
     driverCode: codeEl.value.trim(),
     name: nameEl.value.trim(),
@@ -194,12 +214,19 @@ function buildPayload() {
     contact: contactEl.value.trim(),
     team: teamEl.value.trim(),
     vehicle: vehicleEl.value.trim(),
+    ...(isNew ? { createdAt: new Date().toISOString() } : {}),
     updatedAt: new Date().toISOString()
   };
 }
 
-function clearForm(clearCode = true) {
-  if (clearCode) codeEl.value = "";
+function hideAll() {
+  searchBox.classList.add("hidden");
+  form.classList.add("hidden");
+  actionBtn.classList.add("hidden");
+}
+
+function clearForm() {
+  codeEl.value = "";
   nameEl.value = "";
   addressEl.value = "";
   contactEl.value = "";
