@@ -169,7 +169,6 @@ localStorage.setItem("driverId", DRIVER_ID);
 document.getElementById("appVersion").innerText =
   `Driver: ${DRIVER_ID} | ${VERSION}`;
 
-startLiveTracking();
 
 // ================= LIVE DRIVER LOCATION =================
 const LOCATION_INTERVAL = 45000; // 45 seconds
@@ -204,18 +203,8 @@ function startLiveTracking() {
     }
   );
 }
+startLiveTracking();
 
-if ("geolocation" in navigator) {
-  navigator.geolocation.watchPosition(
-    pos => sendLiveLocation(pos.coords),
-    err => console.warn("Location error", err),
-    {
-      enableHighAccuracy: true,
-      maximumAge: 10000,
-      timeout: 10000
-    }
-  );
-}
 
 /* ================= SEARCH ================= */
 document.getElementById("searchBox").addEventListener("input", e => {
