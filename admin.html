@@ -167,7 +167,7 @@ img {
 
 <!-- ===== ACTIONS ===== -->
 <div class="actions">
-  <button class="assign" onclick="location.href='admin-map.html'">🗺 Live Map</button>
+  <button class="assign" onclick="toggleMap()">🗺 Live Map</button>
   <button class="assign" onclick="location.href='assign.html'">➕ Assign Task</button>
   <button class="openBtn" onclick="loadTasks('PENDING')">📂 Open</button>
   <button class="doneBtn" onclick="loadTasks('COMPLETED')">✅ Completed</button>
@@ -181,6 +181,11 @@ img {
 <!-- ===== TASK LIST ===== -->
 <div id="taskList">Select Open or Completed</div>
 
+<!-- 🗺 LIVE MAP -->
+<div id="mapContainer" style="display:none; margin-top:12px;">
+  <div id="map" style="height:420px; border-radius:10px;"></div>
+</div>
+  
 <script type="module">
 import { initializeApp } from
   "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
@@ -210,6 +215,22 @@ const today = new Date().toISOString().slice(0,10);
 
 let CURRENT_STATUS = null;
 let SEARCH_TERM = "";
+
+/* ===== LIVE MAP TOGGLE ===== */
+let MAP_VISIBLE = false;
+
+window.toggleLiveMap = function () {
+  MAP_VISIBLE = !MAP_VISIBLE;
+
+  document.getElementById("mapContainer").style.display =
+    MAP_VISIBLE ? "block" : "none";
+
+  document.getElementById("taskList").style.display =
+    MAP_VISIBLE ? "none" : "block";
+
+  if (MAP_VISIBLE) initMap();
+};
+
 
 /* ===== SEARCH ===== */
 document.getElementById("searchBox").addEventListener("input", e => {
