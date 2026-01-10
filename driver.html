@@ -137,7 +137,7 @@ import {
   getStorage, ref as sRef, uploadBytes, getDownloadURL
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.3.3";
+const VERSION = "Driver v3.3.4";
 
 /* ================= CONFIG ================= */
 const firebaseConfig = {
@@ -308,7 +308,7 @@ camera.addEventListener("change", async e => {
   loadTasks();
 
   try {
-    await uploadNow(CURRENT_TASK, blob, takenAt, coords, remarks, filename);
+    await uploadNow(CURRENT_TASK, blob, takenAt, coords, remarks, deiveryType, filename);
   } catch {
     alert("Upload failed. Please retake the photo.");
   }
@@ -317,7 +317,7 @@ camera.addEventListener("change", async e => {
 });
 
 /* ================= UPLOAD ================= */
-async function uploadNow(taskKey, blob, takenAt, coords, remarks, filename) {
+async function uploadNow(taskKey, blob, takenAt, coords, remarks, deliveryType, filename) {
   const uploadedAt = new Date().toISOString();
   const imgRef = sRef(storage, `tasks/${taskKey}/${filename}`);
 
