@@ -60,6 +60,15 @@ body {
   color: #555;
   margin-top: 4px;
 }
+.radio-group {
+  margin-top: 6px;
+  font-size: 14px;
+}
+
+.radio-group label {
+  display: block;
+  margin-top: 4px;
+}
 
 textarea {
   width: 100%;
@@ -128,7 +137,7 @@ import {
   getStorage, ref as sRef, uploadBytes, getDownloadURL
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.3.2";
+const VERSION = "Driver v3.3.3";
 
 /* ================= CONFIG ================= */
 const firebaseConfig = {
@@ -255,6 +264,15 @@ camera.addEventListener("change", async e => {
 
   const textarea = document.getElementById(`remarks_${CURRENT_TASK}`);
   const remarks = textarea ? textarea.value.trim() : "";
+  const selected = document.querySelector(`input[name="delivery_${CURRENT_TASK}"]:checked`);
+
+  const deliveryType = selected ? selected.value : null;
+  
+  if (!deliveryType) {
+    alert("Please select delivery method");
+    CURRENT_TASK = null;
+    return;
+  }
 
   const blob = await compressImage(e.target.files[0]);
   const coords = await getLocation();
@@ -278,6 +296,7 @@ camera.addEventListener("change", async e => {
       latitude: coords?.latitude,
       longitude: coords?.longitude,
       remarks,
+      deliveryType,
       filename
     });
     setQueue(q);
@@ -313,6 +332,7 @@ async function uploadNow(taskKey, blob, takenAt, coords, remarks, filename) {
     latitude: coords?.latitude,
     longitude: coords?.longitude,
     remarks,
+    deliveryType,
     filename
   });
 
@@ -336,6 +356,7 @@ setInterval(async () => {
         i.takenAt,
         { latitude: i.latitude, longitude: i.longitude },
         i.remarks,
+        i.deliveryType,
         i.filename
       );
     } catch (err) {
@@ -401,6 +422,26 @@ function render(tasks) {
         status === "PENDING"
           ? `
             <textarea id="remarks_${t._key}" placeholder="Remarks (optional)"></textarea>
+
+            <div class="radio-group">
+              <b>Delivery Method</b>
+              ${[
+                "D1-Received",
+                "D2-Put in Mailbox",
+                "D3-Inserted in Gate",
+                "D4-Slid Under Door/Window",
+                "D5-Delivered to SA",
+                "D6-Bagsakan"
+              ].map(v => `
+                <label>
+                  <input type="radio"
+                    name="delivery_${t._key}"
+                    value="${v}">
+                  ${v}
+                </label>
+              `).join("")}
+            </div>
+          
             <button class="capture" onclick="takePicture('${t._key}')">
               📸 Take Picture
             </button>
