@@ -5,6 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Admin Dashboard</title>
 
+<!-- ===== LEAFLET (OPTION 2 MAP) ===== -->
+<link
+  rel="stylesheet"
+  href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
 <style>
 body {
   font-family: Arial, sans-serif;
@@ -57,7 +64,6 @@ button {
 .doneBtn { background:green; color:#fff; }
 .refresh { background:#444; color:#fff; }
 
-/* 🔍 SEARCH */
 #searchBox {
   width:100%;
   padding:10px;
@@ -91,13 +97,6 @@ button {
   background:#f7f7f7;
   border-left:3px solid #007bff;
   font-size:13px;
-  color:#333;
-}
-
-img {
-  width:100%;
-  margin-top:8px;
-  border-radius:6px;
 }
 
 .toggleBtn {
@@ -135,12 +134,21 @@ img {
   padding:8px;
   width:100%;
   border-radius:5px;
-  font-size:13px;
 }
-  .sla-ok { color: green; font-weight: bold; }
-  .sla-warn { color: orange; font-weight: bold; }
-  .sla-breach { color: red; font-weight: bold; }
-  
+
+.sla-ok { color:green; font-weight:bold; }
+.sla-warn { color:orange; font-weight:bold; }
+.sla-breach { color:red; font-weight:bold; }
+
+#mapContainer {
+  display:none;
+  margin-top:12px;
+}
+
+#map {
+  height:420px;
+  border-radius:10px;
+}
 </style>
 </head>
 
@@ -152,22 +160,22 @@ img {
 <div class="dashboard">
   <div class="card open">
     <div class="big" id="openCount">0</div>
-      <div class="small">
-        🔴 <span id="slaBreach">0</span> |
-        🟡 <span id="slaWarn">0</span> |
-        🟢 <span id="slaOk">0</span>
-      </div>
-      Open Tasks
+    <div class="small">
+      🔴 <span id="slaBreach">0</span> |
+      🟡 <span id="slaWarn">0</span> |
+      🟢 <span id="slaOk">0</span>
+    </div>
+    Open Tasks
   </div>
   <div class="card done">
     <div class="big" id="doneCount">0</div>
-    Completed (Today)
+    Completed Tasks
   </div>
 </div>
 
 <!-- ===== ACTIONS ===== -->
 <div class="actions">
-  <button class="assign" onclick="toggleMap()">🗺 Live Map</button>
+  <button class="assign" onclick="toggleLiveMap()">🗺 Live Map</button>
   <button class="assign" onclick="location.href='assign.html'">➕ Assign Task</button>
   <button class="openBtn" onclick="loadTasks('PENDING')">📂 Open</button>
   <button class="doneBtn" onclick="loadTasks('COMPLETED')">✅ Completed</button>
@@ -175,30 +183,25 @@ img {
   <button class="refresh" onclick="refreshDashboard()">🔄</button>
 </div>
 
-<!-- 🔍 SEARCH BAR -->
 <input id="searchBox" placeholder="Search name, address, driver, remarks, etc.">
 
 <!-- ===== TASK LIST ===== -->
 <div id="taskList">Select Open or Completed</div>
 
-<!-- 🗺 LIVE MAP -->
-<div id="mapContainer" style="display:none; margin-top:12px;">
-  <div id="map" style="height:420px; border-radius:10px;"></div>
+<!-- ===== LIVE MAP ===== -->
+<div id="mapContainer">
+  <div id="map"></div>
 </div>
-  
+
 <script type="module">
 import { initializeApp } from
   "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 import {
-  getDatabase,
-  ref,
-  get,
-  update,
-  remove
+  getDatabase, ref, get, update, remove
 } from
   "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
-/* FIREBASE CONFIG */
+/* ===== FIREBASE ===== */
 const firebaseConfig = {
   apiKey: "AIzaSyDFW61pnwLvh6HGKWt10zLYNr860fI8vkg",
   authDomain: "driva-pwa.firebaseapp.com",
@@ -211,223 +214,111 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
-const today = new Date().toISOString().slice(0,10);
 
 let CURRENT_STATUS = null;
 let SEARCH_TERM = "";
-
-/* ===== LIVE MAP TOGGLE ===== */
 let MAP_VISIBLE = false;
 
-window.toggleLiveMap = function () {
-  MAP_VISIBLE = !MAP_VISIBLE;
-
-  document.getElementById("mapContainer").style.display =
-    MAP_VISIBLE ? "block" : "none";
-
-  document.getElementById("taskList").style.display =
-    MAP_VISIBLE ? "none" : "block";
-
-  if (MAP_VISIBLE) initMap();
-};
-
-
 /* ===== SEARCH ===== */
-document.getElementById("searchBox").addEventListener("input", e => {
+searchBox.addEventListener("input", e => {
   SEARCH_TERM = e.target.value.toLowerCase();
   if (CURRENT_STATUS) loadTasks(CURRENT_STATUS);
 });
 
-/* ===== DASHBOARD COUNTS ===== */
+/* ===== SLA ===== */
+function getSLA(task) {
+  if (!task.createdAt || task.status === "COMPLETED") return null;
+  const hrs = (Date.now() - new Date(task.createdAt)) / 36e5;
+  if (hrs < 24) return { text:"Within SLA", cls:"sla-ok" };
+  if (hrs < 48) return { text:"At Risk", cls:"sla-warn" };
+  return { text:"SLA Breached", cls:"sla-breach" };
+}
+
+/* ===== DASHBOARD ===== */
 window.refreshDashboard = async function () {
-  const snap = await get(ref(db, "tasks"));
-  const tasks = Object.values(snap.val() || {});
+  const snap = await get(ref(db,"tasks"));
+  const tasks = Object.values(snap.val()||{});
+  let open=0,done=0,ok=0,warn=0,breach=0;
 
-  let open = 0, done = 0;
-  let breach = 0, warn = 0, ok = 0;
-
-  tasks.forEach(t => {
-    if (t.status === "COMPLETED") {
-      done++;
-      return;
-    }
-
+  tasks.forEach(t=>{
+    if(t.status==="COMPLETED"){done++;return;}
     open++;
-
-    if (!t.createdAt) return;
-
-    const ageHours =
-      (Date.now() - new Date(t.createdAt).getTime()) / 36e5;
-
-    if (ageHours < 24) ok++;
-    else if (ageHours < 48) warn++;
+    const sla=getSLA(t);
+    if(!sla)return;
+    if(sla.cls==="sla-ok")ok++;
+    else if(sla.cls==="sla-warn")warn++;
     else breach++;
   });
 
-  openCount.innerText = open;
-  doneCount.innerText = done;
-
-  slaOk.innerText = ok;
-  slaWarn.innerText = warn;
-  slaBreach.innerText = breach;
+  openCount.innerText=open;
+  doneCount.innerText=done;
+  slaOk.innerText=ok;
+  slaWarn.innerText=warn;
+  slaBreach.innerText=breach;
 };
 
-function getSLA(task) {
-  if (!task.createdAt || task.status === "COMPLETED") return null;
-
-  const ageHours =
-    (Date.now() - new Date(task.createdAt).getTime()) / 36e5;
-
-  if (ageHours < 24)
-    return { text: "Within SLA", cls: "sla-ok" };
-
-  if (ageHours < 48)
-    return { text: "At Risk", cls: "sla-warn" };
-
-  return { text: "SLA Breached", cls: "sla-breach" };
-}
-  
-/* ===== LOAD TASKS ===== */
+/* ===== TASK LIST ===== */
 window.loadTasks = async function (status) {
-  CURRENT_STATUS = status;
-  const list = document.getElementById("taskList");
-  list.innerHTML = "Loading...";
+  CURRENT_STATUS=status;
+  taskList.innerHTML="Loading...";
+  const snap=await get(ref(db,"tasks"));
+  let tasks=Object.keys(snap.val()||{})
+    .map(k=>({_key:k,...snap.val()[k]}))
+    .filter(t=>t.status===status);
 
-  const snap = await get(ref(db, "tasks"));
-  const all = snap.val() || {};
+  if(SEARCH_TERM)
+    tasks=tasks.filter(t=>JSON.stringify(t).toLowerCase().includes(SEARCH_TERM));
 
-  let tasks = Object.keys(all)
-    .map(k => ({ _key: k, ...all[k] }))
-    .filter(t => t.status === status);
+  if(!tasks.length){taskList.innerHTML="No tasks";return;}
 
-  /* 🔍 FILTER */
-  if (SEARCH_TERM) {
-    tasks = tasks.filter(t =>
-      JSON.stringify(t).toLowerCase().includes(SEARCH_TERM)
-    );
-  }
-
-  if (!tasks.length) {
-    list.innerHTML = "No tasks";
-    return;
-  }
-
-  list.innerHTML = "";
-
-  tasks.forEach(t => {
-    const imgId = `img_${t._key}`;
-
-    const div = document.createElement("div");
-    div.className = `task ${status === "COMPLETED" ? "completed" : "pending"}`;
-
-    const sla = getSLA(t);
-
-    div.innerHTML = `
+  taskList.innerHTML="";
+  tasks.forEach(t=>{
+    const sla=getSLA(t);
+    const div=document.createElement("div");
+    div.className=`task ${status==="COMPLETED"?"completed":"pending"}`;
+    div.innerHTML=`
       <b>${t.name}</b>
       <div class="small">${t.address}</div>
       <div class="small">Driver: ${t.driverId}</div>
-
-      ${t.remarks ? `
-        <div class="remarks">
-          📝 <b>Remarks:</b><br>${t.remarks}
-        </div>
-      ` : ""}
-
-      ${
-        status === "COMPLETED" ? `
-          <div class="small">📍 ${t.latitude}, ${t.longitude}</div>
-          <div class="small">📸 Taken: ${new Date(t.takenAt).toLocaleString()}</div>
-          <div class="small">☁ Uploaded: ${new Date(t.uploadedAt).toLocaleString()}</div>
-            ${t.deliveryType ? `
-          <div class="small">
-            📦 <b>Delivery:</b> ${t.deliveryType}
-          </div>
-        ` : ""}
-      ` : ""
-    }
-
-      ${t.imageUrl ? `
-        <button class="toggleBtn" onclick="toggleImage('${imgId}', this)">
-          👁 Show Picture
-        </button>
-        <img id="${imgId}" src="${t.imageUrl}" style="display:none">
-      ` : ""}
-
-      ${
-        status === "PENDING" ? `
-        ${sla ? `
-          <div class="small ${sla.cls}">
-            ⏱ SLA: ${sla.text}
-          </div>
-        ` : ""}
-          <div class="reassignBox">
-            <input placeholder="New Driver ID" id="driver_${t._key}">
-            <button class="reassignBtn"
-              onclick="reassignTask('${t._key}')">
-              🔁 Reassign
-            </button>
-          </div>
-
-          <button class="deleteBtn"
-            onclick="deleteTask('${t._key}')">
-            🗑 Delete Task
-          </button>
-        ` : ""
-      }
+      ${t.remarks?`<div class="remarks">${t.remarks}</div>`:""}
+      ${sla?`<div class="small ${sla.cls}">⏱ ${sla.text}</div>`:""}
+      ${status==="COMPLETED" && t.deliveryType?
+        `<div class="small">📦 ${t.deliveryType}</div>`:""}
     `;
-
-    list.appendChild(div);
+    taskList.appendChild(div);
   });
 };
 
-/* ===== REASSIGN ===== */
-window.reassignTask = async function (taskKey) {
-  const input = document.getElementById(`driver_${taskKey}`);
-  const newDriver = input.value.trim();
+/* ===== LIVE MAP ===== */
+let map, markers={};
 
-  if (!newDriver) return alert("Enter a driver ID");
-  if (!confirm(`Reassign task to ${newDriver}?`)) return;
+window.toggleLiveMap=function(){
+  MAP_VISIBLE=!MAP_VISIBLE;
+  mapContainer.style.display=MAP_VISIBLE?"block":"none";
+  taskList.style.display=MAP_VISIBLE?"none":"block";
+  if(MAP_VISIBLE) initMap();
+};
 
-  await update(ref(db, `tasks/${taskKey}`), {
-    driverId: newDriver,
-    status: "PENDING",
-    imageUrl: null,
-    takenAt: null,
-    uploadedAt: null,
-    latitude: null,
-    longitude: null,
-    remarks: null
+function initMap(){
+  if(map) return;
+  map=L.map("map").setView([14.5995,120.9842],11);
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png").addTo(map);
+  refreshMap();
+}
+
+async function refreshMap(){
+  const snap=await get(ref(db,"driverStatus"));
+  Object.entries(snap.val()||{}).forEach(([id,d])=>{
+    if(!d.latitude||!d.longitude)return;
+    const pos=[d.latitude,d.longitude];
+    if(!markers[id]){
+      markers[id]=L.marker(pos).addTo(map)
+        .bindPopup(`<b>${id}</b><br>${new Date(d.lastSeen).toLocaleString()}`);
+    }else markers[id].setLatLng(pos);
   });
+}
 
-  alert("Task reassigned");
-  refreshDashboard();
-  loadTasks("PENDING");
-};
-
-/* ===== DELETE ===== */
-window.deleteTask = async function (taskKey) {
-  if (!confirm("Delete this task? This cannot be undone.")) return;
-
-  await remove(ref(db, `tasks/${taskKey}`));
-
-  alert("Task deleted");
-  refreshDashboard();
-  loadTasks("PENDING");
-};
-
-/* ===== TOGGLE IMAGE ===== */
-window.toggleImage = function (imgId, btn) {
-  const img = document.getElementById(imgId);
-  if (!img) return;
-
-  if (img.style.display === "none") {
-    img.style.display = "block";
-    btn.innerText = "🙈 Hide Picture";
-  } else {
-    img.style.display = "none";
-    btn.innerText = "👁 Show Picture";
-  }
-};
+setInterval(()=>{ if(MAP_VISIBLE) refreshMap(); },15000);
 
 /* INIT */
 refreshDashboard();
