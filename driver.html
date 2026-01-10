@@ -439,27 +439,7 @@ function render(tasks) {
       ${
         status === "PENDING"
           ? `
-            <textarea id="remarks_${t._key}" placeholder="Remarks (optional)"></textarea>
-
-            <div class="radio-group">
-              <b>Delivery Method</b>
-              ${[
-                "D1-Received",
-                "D2-Put in Mailbox",
-                "D3-Inserted in Gate",
-                "D4-Slid Under Door/Window",
-                "D5-Delivered to SA",
-                "D6-Bagsakan"
-              ].map(v => `
-                <label>
-                  <input type="radio"
-                    name="delivery_${t._key}"
-                    value="${v}">
-                  ${v}
-                </label>
-              `).join("")}
-            </div>
-          
+            <textarea id="remarks_${t._key}" placeholder="Remarks (optional)"></textarea>          
             <button class="capture" onclick="takePicture('${t._key}')">
               📸 Take Picture
             </button>
