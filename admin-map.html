@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin – Live Driver Map</title>
+
+<link
+  rel="stylesheet"
+  href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+/>
+
+<style>
+body {
+  margin: 0;
+  font-family: Arial, sans-serif;
+}
+
+#map {
+  height: 100vh;
+  width: 100%;
+}
+
+.legend {
+  position: absolute;
+  bottom: 20px;
+  left: 20px;
+  background: #fff;
+  padding: 10px;
+  border-radius: 6px;
+  font-size: 13px;
+  box-shadow: 0 0 6px rgba(0,0,0,.2);
+}
+
+.legend div {
+  margin-bottom: 4px;
+}
+</style>
+</head>
+
+<body>
+
+<div id="map"></div>
+
+<div class="legend">
+  <div>🟢 Live (&lt; 1 min)</div>
+  <div>🟡 Idle (1–5 min)</div>
+  <div>🔴 Offline (&gt; 5 min)</div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<script type="module">
+import { initializeApp } from
+  "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import {
+  getDatabase,
+  ref,
+  get
+} from
+  "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+
+/* ================= FIREBASE ================= */
+const firebaseConfig = {
+  apiKey: "AIzaSyDFW61pnwLvh6HGKWt10zLYNr860fI8vkg",
+  authDomain: "driva-pwa.firebaseapp.com",
+  databaseURL: "https://driva-pwa-default-rtdb.firebaseio.com",
+  projectId: "driva-pwa",
+  storageBucket: "driva-pwa.firebasestorage.app",
+  messagingSenderId: "299138219722",
+  appId: "1:299138219722:web:623ff6b0a067ea822dfe33"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
+
+/* ================= MAP ================= */
+const map = L.map("map").setView([14.5995, 120.9842], 11);
+
+L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+  maxZoom: 19
+}).addTo(map);
+
+const markers = {};
+
+/* ================= STATUS ================= */
+function getStatus(lastSeen) {
+  const diff = (Date.now() - new Date(lastSeen).getTime()) / 60000;
+
+  if (diff < 1) return { label: "Live", color: "green" };
+  if (diff < 5) return { label: "Idle", color: "orange" };
+  return { label: "Offline", color: "red" };
+}
+
+function icon(color) {
+  return L.divIcon({
+    className: "",
+    html: `<div style="
+      width:14px;
+      height:14px;
+      background:${color};
+      border-radius:50%;
+      border:2px solid #fff;"></div>`
+  });
+}
+
+/* ================= LOAD DRIVERS ================= */
+async function loadDrivers() {
+  const snap = await get(ref(db, "driverStatus"));
+  const drivers = snap.val() || {};
+
+  for (const [driverId, d] of Object.entries(drivers)) {
+    if (!d.latitude || !d.longitude) continue;
+
+    const status = getStatus(d.lastSeen);
+
+    if (markers[driverId]) {
+      markers[driverId].setLatLng([d.latitude, d.longitude]);
+      markers[driverId].setIcon(icon(status.color));
+    } else {
+      markers[driverId] = L.marker(
+        [d.latitude, d.longitude],
+        { icon: icon(status.color) }
+      ).addTo(map);
+    }
+
+    markers[driverId].bindPopup(`
+      <b>${driverId}</b><br>
+      Status: ${status.label}<br>
+      Last seen: ${new Date(d.lastSeen).toLocaleString()}<br>
+      Lat: ${d.latitude}<br>
+      Lng: ${d.longitude}
+    `);
+  }
+}
+
+/* ================= AUTO REFRESH ================= */
+loadDrivers();
+setInterval(loadDrivers, 15000); // 15 seconds
+</script>
+
+</body>
+</html>
