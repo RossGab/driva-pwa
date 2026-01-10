@@ -417,6 +417,24 @@ function render(tasks) {
       <b>${t.name}</b>
       <div class="small">${t.address}</div>
       <div class="small"><b>Status:</b> ${status}</div>
+      <div class="radio-group">
+        <b>Delivery Method</b>
+        ${[
+          "D1-Received",
+          "D2-Put in Mailbox",
+          "D3-Inserted in Gate",
+          "D4-Slid Under Door/Window",
+          "D5-Delivered to SA",
+          "D6-Bagsakan"
+        ].map(v => `
+          <label>
+            <input type="radio"
+              name="delivery_${t._key}"
+              value="${v}">
+            ${v}
+          </label>
+        `).join("")}
+      </div>
 
       ${
         status === "PENDING"
