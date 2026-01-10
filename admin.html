@@ -316,8 +316,13 @@ window.loadTasks = async function (status) {
           <div class="small">📍 ${t.latitude}, ${t.longitude}</div>
           <div class="small">📸 Taken: ${new Date(t.takenAt).toLocaleString()}</div>
           <div class="small">☁ Uploaded: ${new Date(t.uploadedAt).toLocaleString()}</div>
-        ` : ""
-      }
+            ${t.deliveryType ? `
+          <div class="small">
+            📦 <b>Delivery:</b> ${t.deliveryType}
+          </div>
+        ` : ""}
+      ` : ""
+    }
 
       ${t.imageUrl ? `
         <button class="toggleBtn" onclick="toggleImage('${imgId}', this)">
