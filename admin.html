@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Admin Dashboard</title>
+<title>Admin Dashboard V 2.0.0</title>
 
 <!-- ===== LEAFLET (OPTION 2 MAP) ===== -->
 <link
@@ -239,6 +239,7 @@ const db = getDatabase(app);
 let CURRENT_STATUS = null;
 let SEARCH_TERM = "";
 let MAP_VISIBLE = false;
+let TASK_STATS = {};
 
 /* ===== SEARCH ===== */
 searchBox.addEventListener("input", e => {
@@ -313,18 +314,19 @@ window.loadTasks = async function (status) {
 /* ===== LIVE MAP ===== */
 let map, markers={};
 
-window.toggleLiveMap = function () {
+window.toggleLiveMap = async function () {
   MAP_VISIBLE = !MAP_VISIBLE;
 
   mapContainer.style.display = MAP_VISIBLE ? "block" : "none";
   taskList.style.display = MAP_VISIBLE ? "none" : "block";
 
   if (MAP_VISIBLE) {
+    await buildTaskStats();   // ⭐ ADD THIS
     initMap();
-    setTimeout(() => map.invalidateSize(), 200); // ⭐ ADD THIS
+    setTimeout(() => map.invalidateSize(), 200);
   }
 };
-
+  
 function initMap(){
   if(map) return;
   map=L.map("map").setView([14.5995,120.9842],11);
@@ -350,13 +352,13 @@ function renderDriverList(drivers) {
     if (!d.latitude || !d.longitude) return;
 
     const status = getDriverStatus(d.lastSeen);
+    const stats = TASK_STATS[id] || { open: 0, completed: 0 };
 
     const row = document.createElement("div");
     row.style.cssText = `
       display:flex;
-      align-items:center;
       gap:8px;
-      padding:6px 0;
+      padding:8px 0;
       border-bottom:1px solid #eee;
       cursor:pointer;
     `;
@@ -365,16 +367,22 @@ function renderDriverList(drivers) {
       <div style="
         width:10px;
         height:10px;
+        margin-top:4px;
         border-radius:50%;
         background:${status.color};
       "></div>
-      <div>
-        <div style="font-size:13px;"><b>${id}</b></div>
-        <div style="font-size:11px;color:#666;">${status.label}</div>
+
+      <div style="flex:1">
+        <div style="font-size:13px;font-weight:bold;">${id}</div>
+        <div style="font-size:11px;color:#666;">
+          ${status.label}
+        </div>
+        <div style="font-size:11px;color:#444;margin-top:2px;">
+          🟠 Open: ${stats.open} | ✅ Done: ${stats.completed}
+        </div>
       </div>
     `;
 
-    // 👉 Click driver → center map
     row.onclick = () => {
       map.setView([d.latitude, d.longitude], 15);
       markers[id]?.openPopup();
@@ -384,8 +392,32 @@ function renderDriverList(drivers) {
   });
 
   if (!list.children.length) {
-    list.innerHTML = "<div style='font-size:12px;color:#888'>No active drivers</div>";
+    list.innerHTML =
+      "<div style='font-size:12px;color:#888'>No active drivers</div>";
   }
+}
+  
+async function buildTaskStats() {
+  const snap = await get(ref(db, "tasks"));
+  const tasks = snap.val() || {};
+
+  const stats = {};
+
+  Object.values(tasks).forEach(t => {
+    if (!t.driverId) return;
+
+    if (!stats[t.driverId]) {
+      stats[t.driverId] = { open: 0, completed: 0 };
+    }
+
+    if (t.status === "COMPLETED") {
+      stats[t.driverId].completed++;
+    } else {
+      stats[t.driverId].open++;
+    }
+  });
+
+  TASK_STATS = stats;
 }
 
 async function refreshMap() {
