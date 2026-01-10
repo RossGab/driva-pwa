@@ -169,22 +169,40 @@ localStorage.setItem("driverId", DRIVER_ID);
 document.getElementById("appVersion").innerText =
   `Driver: ${DRIVER_ID} | ${VERSION}`;
 
-/* ================= LIVE LOCATION ================= */
-const LOCATION_INTERVAL = 45000;
+startLiveTracking();
+
+// ================= LIVE DRIVER LOCATION =================
+const LOCATION_INTERVAL = 45000; // 45 seconds
 let lastLocationSent = 0;
 
-async function sendLiveLocation(coords) {
-  if (!navigator.onLine) return;
+function startLiveTracking() {
+  if (!("geolocation" in navigator)) {
+    console.warn("Geolocation not supported");
+    return;
+  }
 
-  const now = Date.now();
-  if (now - lastLocationSent < LOCATION_INTERVAL) return;
-  lastLocationSent = now;
+  navigator.geolocation.watchPosition(
+    pos => {
+      if (!navigator.onLine) return;
 
-  await update(ref(db, `driverStatus/${DRIVER_ID}`), {
-    latitude: coords.latitude,
-    longitude: coords.longitude,
-    lastSeen: new Date().toISOString()
-  });
+      const now = Date.now();
+      if (now - lastLocationSent < LOCATION_INTERVAL) return;
+      lastLocationSent = now;
+
+      update(ref(db, `driverStatus/${DRIVER_ID}`), {
+        latitude: pos.coords.latitude,
+        longitude: pos.coords.longitude,
+        lastSeen: new Date().toISOString(),
+        driverId: DRIVER_ID
+      });
+    },
+    err => console.error("Location error:", err),
+    {
+      enableHighAccuracy: true,
+      maximumAge: 10000,
+      timeout: 15000
+    }
+  );
 }
 
 if ("geolocation" in navigator) {
