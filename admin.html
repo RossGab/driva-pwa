@@ -305,20 +305,57 @@ function initMap(){
   L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png").addTo(map);
   refreshMap();
 }
+  
+function getDriverStatus(lastSeen) {
+  if (!lastSeen) return { label: "Unknown", color: "gray" };
 
-async function refreshMap(){
-  const snap=await get(ref(db,"driverStatus"));
-  Object.entries(snap.val()||{}).forEach(([id,d])=>{
-    if(!d.latitude||!d.longitude)return;
-    const pos=[d.latitude,d.longitude];
-    if(!markers[id]){
-      markers[id]=L.marker(pos).addTo(map)
-        .bindPopup(`<b>${id}</b><br>${new Date(d.lastSeen).toLocaleString()}`);
-    }else markers[id].setLatLng(pos);
+  const diff = Date.now() - new Date(lastSeen).getTime();
+
+  if (diff < 60000) return { label: "Active", color: "green" };
+  if (diff < 120000) return { label: "Idle", color: "orange" };
+  return { label: "Offline", color: "red" };
+}
+  
+
+async function refreshMap() {
+  const snap = await get(ref(db, "driverStatus"));
+  const data = snap.val() || {};
+
+  Object.entries(data).forEach(([id, d]) => {
+    if (!d.latitude || !d.longitude) return;
+
+    const pos = [d.latitude, d.longitude];
+    const status = getDriverStatus(d.lastSeen);
+
+    const icon = L.divIcon({
+      html: `<div style="
+        width:14px;
+        height:14px;
+        background:${status.color};
+        border-radius:50%;
+        border:2px solid white;
+      "></div>`,
+      className: ""
+    });
+
+    if (!markers[id]) {
+      markers[id] = L.marker(pos, { icon })
+        .addTo(map)
+        .bindPopup(`
+          <b>${id}</b><br>
+          Status: ${status.label}<br>
+          Last seen: ${new Date(d.lastSeen).toLocaleString()}
+        `);
+    } else {
+      markers[id].setLatLng(pos);
+      markers[id].setIcon(icon);
+    }
   });
 }
 
-setInterval(()=>{ if(MAP_VISIBLE) refreshMap(); },15000);
+setInterval(()=>{ if(MAP_VISIBLE) refreshMap(); },60000);
+
+
 
 /* INIT */
 refreshDashboard();
