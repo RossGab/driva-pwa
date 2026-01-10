@@ -128,6 +128,7 @@ img {
 <input type="file" id="cameraInput" accept="image/*" capture="environment" hidden>
 
 <script type="module">
+  
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 import {
   getDatabase, ref, get, update, query,
@@ -137,7 +138,7 @@ import {
   getStorage, ref as sRef, uploadBytes, getDownloadURL
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.3.5";
+const VERSION = "Driver v3.3.6";
 
 /* ================= CONFIG ================= */
 const firebaseConfig = {
@@ -165,9 +166,38 @@ let SEARCH_TERM = "";
 let DRIVER_ID = localStorage.getItem("driverId");
 while (!DRIVER_ID) DRIVER_ID = prompt("Enter Driver ID");
 localStorage.setItem("driverId", DRIVER_ID);
-
 document.getElementById("appVersion").innerText =
   `Driver: ${DRIVER_ID} | ${VERSION}`;
+
+/* ================= LIVE LOCATION ================= */
+const LOCATION_INTERVAL = 45000;
+let lastLocationSent = 0;
+
+async function sendLiveLocation(coords) {
+  if (!navigator.onLine) return;
+
+  const now = Date.now();
+  if (now - lastLocationSent < LOCATION_INTERVAL) return;
+  lastLocationSent = now;
+
+  await update(ref(db, `driverStatus/${DRIVER_ID}`), {
+    latitude: coords.latitude,
+    longitude: coords.longitude,
+    lastSeen: new Date().toISOString()
+  });
+}
+
+if ("geolocation" in navigator) {
+  navigator.geolocation.watchPosition(
+    pos => sendLiveLocation(pos.coords),
+    err => console.warn("Location error", err),
+    {
+      enableHighAccuracy: true,
+      maximumAge: 10000,
+      timeout: 10000
+    }
+  );
+}
 
 /* ================= SEARCH ================= */
 document.getElementById("searchBox").addEventListener("input", e => {
