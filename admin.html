@@ -189,8 +189,29 @@ button {
 <div id="taskList">Select Open or Completed</div>
 
 <!-- ===== LIVE MAP ===== -->
-<div id="mapContainer">
-  <div id="map"></div>
+<div id="mapContainer" style="display:none;">
+  <div style="display:flex; gap:10px;">
+
+    <!-- 🗺 MAP (BLUE AREA) -->
+    <div id="map" style="flex:3; height:420px; border-radius:10px;"></div>
+
+    <!-- 👤 DRIVER LIST (YELLOW AREA) -->
+    <div id="driverList" style="
+      flex:1;
+      background:#fff;
+      border-radius:10px;
+      padding:10px;
+      overflow-y:auto;
+      max-height:420px;
+      box-shadow:0 0 4px rgba(0,0,0,.1);
+    ">
+      <b>🚗 Drivers</b>
+      <div id="driverItems" style="margin-top:8px;">
+        Loading drivers…
+      </div>
+    </div>
+
+  </div>
 </div>
 
 <script type="module">
@@ -292,11 +313,16 @@ window.loadTasks = async function (status) {
 /* ===== LIVE MAP ===== */
 let map, markers={};
 
-window.toggleLiveMap=function(){
-  MAP_VISIBLE=!MAP_VISIBLE;
-  mapContainer.style.display=MAP_VISIBLE?"block":"none";
-  taskList.style.display=MAP_VISIBLE?"none":"block";
-  if(MAP_VISIBLE) initMap();
+window.toggleLiveMap = function () {
+  MAP_VISIBLE = !MAP_VISIBLE;
+
+  mapContainer.style.display = MAP_VISIBLE ? "block" : "none";
+  taskList.style.display = MAP_VISIBLE ? "none" : "block";
+
+  if (MAP_VISIBLE) {
+    initMap();
+    setTimeout(() => map.invalidateSize(), 200); // ⭐ ADD THIS
+  }
 };
 
 function initMap(){
@@ -315,11 +341,58 @@ function getDriverStatus(lastSeen) {
   if (diff < 120000) return { label: "Idle", color: "orange" };
   return { label: "Offline", color: "red" };
 }
-  
+
+function renderDriverList(drivers) {
+  const list = document.getElementById("driverItems");
+  list.innerHTML = "";
+
+  Object.entries(drivers).forEach(([id, d]) => {
+    if (!d.latitude || !d.longitude) return;
+
+    const status = getDriverStatus(d.lastSeen);
+
+    const row = document.createElement("div");
+    row.style.cssText = `
+      display:flex;
+      align-items:center;
+      gap:8px;
+      padding:6px 0;
+      border-bottom:1px solid #eee;
+      cursor:pointer;
+    `;
+
+    row.innerHTML = `
+      <div style="
+        width:10px;
+        height:10px;
+        border-radius:50%;
+        background:${status.color};
+      "></div>
+      <div>
+        <div style="font-size:13px;"><b>${id}</b></div>
+        <div style="font-size:11px;color:#666;">${status.label}</div>
+      </div>
+    `;
+
+    // 👉 Click driver → center map
+    row.onclick = () => {
+      map.setView([d.latitude, d.longitude], 15);
+      markers[id]?.openPopup();
+    };
+
+    list.appendChild(row);
+  });
+
+  if (!list.children.length) {
+    list.innerHTML = "<div style='font-size:12px;color:#888'>No active drivers</div>";
+  }
+}
 
 async function refreshMap() {
   const snap = await get(ref(db, "driverStatus"));
   const data = snap.val() || {};
+
+  renderDriverList(data);
 
   Object.entries(data).forEach(([id, d]) => {
     if (!d.latitude || !d.longitude) return;
@@ -349,6 +422,14 @@ async function refreshMap() {
     } else {
       markers[id].setLatLng(pos);
       markers[id].setIcon(icon);
+    }
+  });
+
+  // 🧹 CLEANUP REMOVED DRIVERS
+  Object.keys(markers).forEach(id => {
+    if (!data[id]) {
+      map.removeLayer(markers[id]);
+      delete markers[id];
     }
   });
 }
