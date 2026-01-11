@@ -82,36 +82,6 @@ button {
   border-left:5px solid #ccc;
 }
 
-  .task-form {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
-}
-
-.task-form .full {
-  grid-column: span 2;
-}
-
-.task-form label {
-  font-size: 12px;
-  font-weight: bold;
-  color: #555;
-}
-
-.task-form input,
-.task-form textarea,
-.task-form select {
-  width: 100%;
-  padding: 6px;
-  border-radius: 4px;
-  border: 1px solid #ccc;
-}
-
-.form-actions {
-  grid-column: span 2;
-  margin-top: 10px;
-}
-
 .task.completed { border-left-color:green; }
 .task.pending { border-left-color:orange; }
 
@@ -157,25 +127,6 @@ button {
   border-radius:5px;
 }
 
-.driver-results {
-  border:1px solid #ccc;
-  background:#fff;
-  max-height:160px;
-  overflow-y:auto;
-  margin-top:4px;
-  border-radius:4px;
-  font-size:13px;
-}
-
-.driver-results div {
-  padding:6px 8px;
-  cursor:pointer;
-}
-
-.driver-results div:hover {
-  background:#f0f0f0;
-}
-
 .deleteBtn {
   margin-top:6px;
   background:#b00020;
@@ -203,7 +154,7 @@ button {
 
 <body>
 
-<h2>🧑‍💼 Admin Dashboard V2.1.10</h2>
+<h2>🧑‍💼 Admin Dashboard V2.1.5</h2>
 
 <!-- ===== DASHBOARD ===== -->
 <div class="dashboard">
@@ -350,22 +301,15 @@ function renderTaskDetails(t) {
     <div class="task-form">
 
     <label class="small">ASSIGNED DRIVER</label>
-      
-      <input
-        type="text"
-        class="driver-search"
-        placeholder="Search driver by ID or name"
-        value="${t.driverId ? `${t.driverId} - ${t.AGENTNAME || ""}` : ""}"
-        disabled
-      >
+      <select data-field="driverId" disabled>
+        <option value="">— Unassigned —</option>
+        ${Object.entries(DRIVER_CACHE).map(([id, d]) => `
+          <option value="${id}" ${id === t.driverId ? "selected" : ""}>
+            ${id} - ${d.name || ""}
+          </option>
+        `).join("")}
+      </select>
 
-      <input type="hidden" data-field="AGENTID" value="${t.AGENTID || ""}">
-      <input type="hidden" data-field="AGENTNAME" value="${t.AGENTNAME || ""}">
-      
-      <div class="driver-results" style="display:none;"></div>
-      
-      <input type="hidden" data-field="driverId" value="${t.driverId || ""}">
-      
       <div class="field">
         <label>JOB TYPE</label>
         <input data-field="JOBTYPE" value="${t.JOBTYPE || ""}" disabled>
@@ -442,13 +386,6 @@ window.loadTasks = async function (status) {
     ...raw[k]
   }));
 
-  tasks = tasks.map(t => {
-    if (!t.driverId && t.AGENTID) {
-      t.driverId = t.AGENTID;
-    }
-    return t;
-  });
-
   // ✅ APPLY DRIVER FILTER (FROM MAP)
 if (FILTER_DRIVER) {
   tasks = tasks.filter(t => t.driverId === FILTER_DRIVER);
@@ -456,53 +393,11 @@ if (FILTER_DRIVER) {
 
 window.enableEdit = function (btn) {
   const details = btn.closest(".task-details");
+  const inputs = details.querySelectorAll("input, textarea");
 
-  details.querySelectorAll("input, textarea").forEach(i => {
+  inputs.forEach(i => {
     i.dataset.original = i.value;
     i.disabled = false;
-  });
-
-  const search = details.querySelector(".driver-search");
-  const results = details.querySelector(".driver-results");
-
-  const search = details.querySelector(".driver-search");
-  search.dataset.originalText = search.value;
-
-  search.addEventListener("blur", () => {
-    setTimeout(() => results.style.display = "none", 150);
-  });
-  
-  const driverIdInput = details.querySelector('[data-field="driverId"]');
-  driverIdInput.dataset.original = driverIdInput.value;
-
-  search.oninput = () => {
-    const term = search.value.toLowerCase();
-    results.innerHTML = "";
-    results.style.display = "block";
-
-    Object.entries(DRIVER_CACHE)
-      .filter(([id, d]) =>
-        id.includes(term) ||
-        (d.name || "").toLowerCase().includes(term)
-      )
-      .slice(0, 8)
-      .forEach(([id, d]) => {
-        const row = document.createElement("div");
-        row.textContent = `${id} - ${d.name || ""}`;
-
-        row.onclick = () => {
-          search.value = row.textContent;
-          search.dataset.originalText = search.value;
-          details.querySelector('[data-field="driverId"]').dataset.original =
-            details.querySelector('[data-field="driverId"]').value;
-          details.querySelector('[data-field="driverId"]').value = id;
-          details.querySelector('[data-field="AGENTID"]')?.value = id;
-          details.querySelector('[data-field="AGENTNAME"]')?.value = d.name || "";
-          results.style.display = "none";
-        };
-
-        results.appendChild(row);
-      });
   });
 
   btn.parentElement.innerHTML = `
@@ -511,26 +406,7 @@ window.enableEdit = function (btn) {
       onclick="cancelEdit(this)">❌ Cancel</button>
   `;
 };
-window.cancelEdit = function (btn) {
-  const details = btn.closest(".task-details");
-  details.querySelectorAll("input:not([type=hidden]), textarea").forEach(...)
 
-  const search = details.querySelector(".driver-search");
-  search.value = search.dataset.originalText;
-  
-  const driverIdInput = details.querySelector('[data-field="driverId"]');
-  driverIdInput.value = driverIdInput.dataset.original;
-
-  fields.forEach(el => {
-    el.value = el.dataset.original;
-    el.disabled = true;
-  });
-
-  btn.parentElement.innerHTML = `
-    <button class="toggleBtn" onclick="enableEdit(this)">✏ Modify Task</button>
-  `;
-};
-  
 window.saveEdit = async function (btn) {
   const details = btn.closest(".task-details");
   const taskId = details.dataset.taskId;
@@ -594,9 +470,7 @@ window.saveEdit = async function (btn) {
       <div style="cursor:pointer" class="task-header">
         <b>${t.CUSTOMERNAME || ""}</b>
         <div class="small">${t.ADDRESS || ""}</div>
-        <div class="small">
-          Driver: ${t.driverId || "—"} ${t.AGENTNAME ? `(${t.AGENTNAME})` : ""}
-        </div>
+        <div class="small">Driver: ${t.driverId || "—"}</div>
         ${sla ? `<div class="small ${sla.cls}">⏱ ${sla.text}</div>` : ""}
       </div>
     
