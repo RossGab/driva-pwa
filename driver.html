@@ -138,7 +138,7 @@ import {
   getStorage, ref as sRef, uploadBytes, getDownloadURL
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.3.6";
+const VERSION = "Driver v3.3.7";
 
 /* ================= CONFIG ================= */
 const firebaseConfig = {
@@ -451,57 +451,85 @@ function render(tasks) {
     div.className = `task ${status === "COMPLETED" ? "completed" : ""}`;
 
     div.innerHTML = `
-      <b>${t.name}</b>
-      <div class="small">${t.address}</div>
-      <div class="small"><b>Status:</b> ${status}</div>
-      <div class="radio-group">
-        <b>Delivery Method</b>
-        ${[
-          "D1-Received",
-          "D2-Put in Mailbox",
-          "D3-Inserted in Gate",
-          "D4-Slid Under Door/Window",
-          "D5-Delivered to SA",
-          "D6-Bagsakan"
-        ].map(v => `
-          <label>
-            <input type="radio"
-              name="delivery_${t._key}"
-              value="${v}">
-            ${v}
-          </label>
-        `).join("")}
-      </div>
+  <b>${t.CUSTOMERNAME || "—"}</b>
 
-      ${
-        status === "PENDING"
-          ? `
-            <textarea id="remarks_${t._key}" placeholder="Remarks (optional)"></textarea>          
-            <button class="capture" onclick="takePicture('${t._key}')">
-              📸 Take Picture
-            </button>
-          `
-          : `
-            ${t.remarks ? `<div class="small">📝 ${t.remarks}</div>` : ""}
-            ${
-              status === "COMPLETED"
-                ? `
-                  <button class="toggle"
-                    onclick="this.nextElementSibling.style.display =
-                    this.nextElementSibling.style.display === 'none' ? 'block' : 'none'">
-                    👁 Show / Hide Photo
-                  </button>
-                  <img src="${t.imageUrl}" style="display:none">
-                `
-                : `
-                  <div class="uploading">⏳ Uploading…</div>
-                  ${q ? `<div class="offline-indicator">🕒 Saved offline — upload pending</div>` : ""}
-                `
-            }
-          `
-      }
-    `;
+  <div class="small">
+    📍 ${t.ADDRESS || "—"}
+  </div>
 
+  <div class="small">
+    <b>Account #:</b> ${t.ACCOUNTNUMBER || "—"}
+  </div>
+
+  <div class="small">
+    <b>MRU:</b> ${t.MRU || "—"}
+  </div>
+
+  <div class="small">
+    <b>Meter #:</b> ${t.METERNUMBER || "—"}
+  </div>
+
+  <div class="small">
+    <b>DMZ:</b> ${t.DMZ || "—"}
+  </div>
+
+  <div class="small">
+    <b>Sequence:</b> ${t.SEQUENCE || "—"}
+  </div>
+
+  <div class="small">
+    <b>Job Type:</b> ${t.JOBTYPE || "—"}
+  </div>
+
+  <div class="small">
+    <b>Status:</b> ${status}
+  </div>
+
+  <div class="radio-group">
+    <b>Delivery Method</b>
+    ${[
+      "D1-Received",
+      "D2-Put in Mailbox",
+      "D3-Inserted in Gate",
+      "D4-Slid Under Door/Window",
+      "D5-Delivered to SA",
+      "D6-Bagsakan"
+    ].map(v => `
+      <label>
+        <input type="radio" name="delivery_${t._key}" value="${v}">
+        ${v}
+      </label>
+    `).join("")}
+  </div>
+
+  ${
+    status === "PENDING"
+      ? `
+        <textarea id="remarks_${t._key}" placeholder="Remarks (optional)"></textarea>
+        <button class="capture" onclick="takePicture('${t._key}')">
+          📸 Take Picture
+        </button>
+      `
+      : `
+        ${t.remarks ? `<div class="small">📝 ${t.remarks}</div>` : ""}
+        ${
+          status === "COMPLETED"
+            ? `
+              <button class="toggle"
+                onclick="this.nextElementSibling.style.display =
+                this.nextElementSibling.style.display === 'none' ? 'block' : 'none'">
+                👁 Show / Hide Photo
+              </button>
+              <img src="${t.imageUrl}" style="display:none">
+            `
+            : `
+              <div class="uploading">⏳ Uploading…</div>
+              ${q ? `<div class="offline-indicator">🕒 Saved offline — upload pending</div>` : ""}
+            `
+        }
+      `
+  }
+`;
     list.appendChild(div);
   });
 }
