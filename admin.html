@@ -157,6 +157,25 @@ button {
   border-radius:5px;
 }
 
+.driver-results {
+  border:1px solid #ccc;
+  background:#fff;
+  max-height:160px;
+  overflow-y:auto;
+  margin-top:4px;
+  border-radius:4px;
+  font-size:13px;
+}
+
+.driver-results div {
+  padding:6px 8px;
+  cursor:pointer;
+}
+
+.driver-results div:hover {
+  background:#f0f0f0;
+}
+
 .deleteBtn {
   margin-top:6px;
   background:#b00020;
@@ -184,7 +203,7 @@ button {
 
 <body>
 
-<h2>🧑‍💼 Admin Dashboard V2.1.7</h2>
+<h2>🧑‍💼 Admin Dashboard V2.1.8</h2>
 
 <!-- ===== DASHBOARD ===== -->
 <div class="dashboard">
@@ -331,15 +350,19 @@ function renderTaskDetails(t) {
     <div class="task-form">
 
     <label class="small">ASSIGNED DRIVER</label>
-      <select data-field="driverId" disabled>
-        <option value="">— Unassigned —</option>
-        ${Object.entries(DRIVER_CACHE).map(([id, d]) => `
-          <option value="${id}" ${id === t.driverId ? "selected" : ""}>
-            ${id} - ${d.name || ""}
-          </option>
-        `).join("")}
-      </select>
-
+      
+      <input
+        type="text"
+        class="driver-search"
+        placeholder="Search driver by ID or name"
+        value="${t.driverId ? `${t.driverId} - ${t.AGENTNAME || ""}` : ""}"
+        disabled
+      >
+      
+      <div class="driver-results" style="display:none;"></div>
+      
+      <input type="hidden" data-field="driverId" value="${t.driverId || ""}">
+      
       <div class="field">
         <label>JOB TYPE</label>
         <input data-field="JOBTYPE" value="${t.JOBTYPE || ""}" disabled>
@@ -430,11 +453,40 @@ if (FILTER_DRIVER) {
 
 window.enableEdit = function (btn) {
   const details = btn.closest(".task-details");
-  const fields = details.querySelectorAll("input, textarea, select");
 
-  fields.forEach(el => {
-    el.dataset.original = el.value;
-    el.disabled = false;
+  details.querySelectorAll("input, textarea").forEach(i => {
+    i.dataset.original = i.value;
+    i.disabled = false;
+  });
+
+  const search = details.querySelector(".driver-search");
+  const results = details.querySelector(".driver-results");
+
+  search.addEventListener("input", () => {
+    const term = search.value.toLowerCase();
+    results.innerHTML = "";
+    results.style.display = "block";
+
+    Object.entries(DRIVER_CACHE)
+      .filter(([id, d]) =>
+        id.includes(term) ||
+        (d.name || "").toLowerCase().includes(term)
+      )
+      .slice(0, 8)
+      .forEach(([id, d]) => {
+        const row = document.createElement("div");
+        row.textContent = `${id} - ${d.name || ""}`;
+
+        row.onclick = () => {
+          search.value = row.textContent;
+          details.querySelector('[data-field="driverId"]').value = id;
+          details.querySelector('[data-field="AGENTID"]')?.value = id;
+          details.querySelector('[data-field="AGENTNAME"]')?.value = d.name || "";
+          results.style.display = "none";
+        };
+
+        results.appendChild(row);
+      });
   });
 
   btn.parentElement.innerHTML = `
@@ -443,7 +495,6 @@ window.enableEdit = function (btn) {
       onclick="cancelEdit(this)">❌ Cancel</button>
   `;
 };
-
 window.cancelEdit = function (btn) {
   const details = btn.closest(".task-details");
   const fields = details.querySelectorAll("input, textarea, select");
