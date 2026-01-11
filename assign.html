@@ -64,7 +64,7 @@ button {
 
 <body>
 
-<h2>➕ Assign Task V2.0.0</h2>
+<h2>➕ Assign Task V2.0.1</h2>
 
 <form id="taskForm">
 
@@ -115,14 +115,23 @@ button {
 <input id="LONGITUDE" type="number" step="any">
 
 <!-- ===== DRIVER ===== -->
-<label>AGENT</label>
-<select id="AGENTID" required>
-  <option value="">Select Driver</option>
-</select>
+<label>AGENT (Search)</label>
+<input id="agentSearch" placeholder="Type driver ID or name">
+
+<div id="agentResults" style="
+  background:#fff;
+  border:1px solid #ccc;
+  border-radius:6px;
+  max-height:180px;
+  overflow-y:auto;
+  display:none;
+"></div>
+
+<label>AGENT ID</label>
+<input id="AGENTID" class="readonly" readonly>
 
 <label>AGENT NAME</label>
 <input id="AGENTNAME" class="readonly" readonly>
-
 <!-- ===== READ ONLY (SYSTEM) ===== -->
 <label>START TIME</label>
 <input class="readonly" readonly placeholder="Auto by driver">
@@ -163,6 +172,53 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
+
+let DRIVER_CACHE = {};
+
+async function loadDriverCache() {
+  const snap = await get(ref(db, "drivers"));
+  DRIVER_CACHE = snap.val() || {};
+}
+loadDriverCache();
+
+const searchInput = document.getElementById("agentSearch");
+const resultsBox = document.getElementById("agentResults");
+
+searchInput.addEventListener("input", () => {
+  const q = searchInput.value.toLowerCase().trim();
+  resultsBox.innerHTML = "";
+  if (!q || q.length < 2) {
+    resultsBox.style.display = "none";
+    return;
+  }
+
+  Object.entries(DRIVER_CACHE)
+    .filter(([id, d]) =>
+      id.toLowerCase().includes(q) ||
+      (d.name || "").toLowerCase().includes(q)
+    )
+    .slice(0, 20) // ✅ LIMIT RESULTS
+    .forEach(([id, d]) => {
+      const row = document.createElement("div");
+      row.style.cssText = `
+        padding:8px;
+        cursor:pointer;
+        border-bottom:1px solid #eee;
+      `;
+      row.innerHTML = `<b>${id}</b><br><span style="font-size:12px">${d.name || ""}</span>`;
+
+      row.onclick = () => {
+        AGENTID.value = id;
+        AGENTNAME.value = d.name || "";
+        searchInput.value = `${id} - ${d.name || ""}`;
+        resultsBox.style.display = "none";
+      };
+
+      resultsBox.appendChild(row);
+    });
+
+  resultsBox.style.display = "block";
+});
 
 /* ===== LOAD DRIVERS ===== */
 async function loadDrivers() {
