@@ -138,7 +138,7 @@ import {
   getStorage, ref as sRef, uploadBytes, getDownloadURL
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.4.2";
+const VERSION = "Driver v3.3.6";
 
 /* ================= CONFIG ================= */
 const firebaseConfig = {
@@ -414,19 +414,8 @@ async function loadTasks() {
     const snap = await get(
       query(ref(db, "tasks"), orderByChild("driverId"), equalTo(DRIVER_ID))
     );
-
     const raw = snap.val() || {};
-
-    tasks = Object.keys(raw).map(k => {
-      const t = raw[k];
-
-      if (!t.driverId && t.AGENTID) {
-        t.driverId = String(t.AGENTID);
-      }
-
-      return { _key: k, ...t };
-    });
-
+    tasks = Object.keys(raw).map(k => ({ _key: k, ...raw[k] }));
     localStorage.setItem(TASK_CACHE_KEY, JSON.stringify(tasks));
   }
 
@@ -438,19 +427,9 @@ async function loadTasks() {
 
   render(tasks);
 }
-  
+
 /* ================= RENDER ================= */
 function render(tasks) {
-
-  const list = document.getElementById("taskList");
-  list.innerHTML = "";
-
-  if (!tasks.length) {
-  document.getElementById("taskList").innerHTML =
-    "<div class='small'>No assigned tasks</div>";
-  return;
-}
-  
   const list = document.getElementById("taskList");
   list.innerHTML = "";
 
@@ -472,18 +451,9 @@ function render(tasks) {
     div.className = `task ${status === "COMPLETED" ? "completed" : ""}`;
 
     div.innerHTML = `
-      <b>${t.CUSTOMERNAME || t.name || "—"}</b>
-
-      <div class="small">📍 ${t.ADDRESS || t.address || "—"}</div>
-      <div class="small"><b>Account #:</b> ${t.ACCOUNTNUMBER || "—"}</div>
-      <div class="small"><b>MRU:</b> ${t.MRU || "—"}</div>
-      <div class="small"><b>Meter #:</b> ${t.METERNUMBER || "—"}</div>
-      <div class="small"><b>DMZ:</b> ${t.DMZ || "—"}</div>
-      <div class="small"><b>Sequence:</b> ${t.SEQUENCE || "—"}</div>
-      <div class="small"><b>Job Type:</b> ${t.JOBTYPE || "—"}</div>
-      <div class="small"><b>Assigned SP:</b> ${t.driverId || t.AGENTID || "—"}</div>
+      <b>${t.name}</b>
+      <div class="small">${t.address}</div>
       <div class="small"><b>Status:</b> ${status}</div>
-
       <div class="radio-group">
         <b>Delivery Method</b>
         ${[
@@ -495,7 +465,9 @@ function render(tasks) {
           "D6-Bagsakan"
         ].map(v => `
           <label>
-            <input type="radio" name="delivery_${t._key}" value="${v}">
+            <input type="radio"
+              name="delivery_${t._key}"
+              value="${v}">
             ${v}
           </label>
         `).join("")}
@@ -504,8 +476,10 @@ function render(tasks) {
       ${
         status === "PENDING"
           ? `
-            <textarea id="remarks_${t._key}" placeholder="Remarks (optional)"></textarea>
-            <button class="capture" onclick="takePicture('${t._key}')">📸 Take Picture</button>
+            <textarea id="remarks_${t._key}" placeholder="Remarks (optional)"></textarea>          
+            <button class="capture" onclick="takePicture('${t._key}')">
+              📸 Take Picture
+            </button>
           `
           : `
             ${t.remarks ? `<div class="small">📝 ${t.remarks}</div>` : ""}
@@ -528,11 +502,13 @@ function render(tasks) {
       }
     `;
 
-    ✅ list.appendChild(div);
+    list.appendChild(div);
   });
 }
 
-  
+loadTasks();
+</script>
+
 <script>
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("./sw.js");
