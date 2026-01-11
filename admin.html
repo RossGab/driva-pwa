@@ -184,7 +184,7 @@ button {
 
 <body>
 
-<h2>🧑‍💼 Admin Dashboard V2.1.6</h2>
+<h2>🧑‍💼 Admin Dashboard V2.1.7</h2>
 
 <!-- ===== DASHBOARD ===== -->
 <div class="dashboard">
@@ -416,6 +416,13 @@ window.loadTasks = async function (status) {
     ...raw[k]
   }));
 
+  tasks = tasks.map(t => {
+    if (!t.driverId && t.AGENTID) {
+      t.driverId = t.AGENTID;
+    }
+    return t;
+  });
+
   // ✅ APPLY DRIVER FILTER (FROM MAP)
 if (FILTER_DRIVER) {
   tasks = tasks.filter(t => t.driverId === FILTER_DRIVER);
@@ -514,7 +521,9 @@ window.saveEdit = async function (btn) {
       <div style="cursor:pointer" class="task-header">
         <b>${t.CUSTOMERNAME || ""}</b>
         <div class="small">${t.ADDRESS || ""}</div>
-        <div class="small">Driver: ${t.driverId || "—"}</div>
+        <div class="small">
+          Driver: ${t.driverId || "—"} ${t.AGENTNAME ? `(${t.AGENTNAME})` : ""}
+        </div>
         ${sla ? `<div class="small ${sla.cls}">⏱ ${sla.text}</div>` : ""}
       </div>
     
