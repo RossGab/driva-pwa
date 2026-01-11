@@ -184,7 +184,7 @@ button {
 
 <body>
 
-<h2>🧑‍💼 Admin Dashboard V2.1.7.1</h2>
+<h2>🧑‍💼 Admin Dashboard V2.1.9</h2>
 
 <!-- ===== DASHBOARD ===== -->
 <div class="dashboard">
@@ -546,9 +546,22 @@ window.saveEdit = async function (btn) {
       ` : ""}
 
       ${t.remarks ? `
-        <div class="small" style="margin-top:4px">
+        <div class="small">
           📝 <b>Remarks:</b> ${t.remarks}
         </div>
+      ` : ""}
+
+      ${t.imageUrl ? `
+        <button class="toggleBtn"
+          onclick="this.nextElementSibling.style.display =
+          this.nextElementSibling.style.display === 'none' ? 'block' : 'none'">
+          👁 Show / Hide Photo
+        </button>
+
+        <img
+          src="${t.imageUrl}"
+          style="display:none;width:100%;margin-top:8px;border-radius:6px;"
+        >
       ` : ""}
 
     </div>
