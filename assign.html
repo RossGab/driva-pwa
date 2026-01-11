@@ -64,7 +64,7 @@ button {
 
 <body>
 
-<h2>➕ Assign Task V2.0.3</h2>
+<h2>➕ Assign Task V2.0.4</h2>
 
 <button onclick="location.href='admin.html'"
   style="
@@ -258,10 +258,13 @@ window.uploadCSV = async function () {
   }
 
   const file = fileInput.files[0];
-  status.innerText = "⏳ Reading file...";
+  status.innerText = "📄 Reading file…";
 
   const text = await file.text();
-  const rows = text.split("\n").map(r => r.trim()).filter(r => r);
+  const rows = text
+    .split("\n")
+    .map(r => r.trim())
+    .filter(r => r);
 
   if (rows.length < 2) {
     status.innerText = "❌ CSV has no data rows";
@@ -269,7 +272,8 @@ window.uploadCSV = async function () {
   }
 
   const headers = rows.shift().split(",").map(h => h.trim());
-  let count = 0;
+  const total = rows.length;
+  let uploaded = 0;
 
   for (const row of rows) {
     const values = row.split(",");
@@ -279,7 +283,7 @@ window.uploadCSV = async function () {
       task[h] = values[i]?.trim() || "";
     });
 
-    const taskId = `TASK_${Date.now()}_${count}`;
+    const taskId = `TASK_${Date.now()}_${uploaded}`;
 
     await update(ref(db, `tasks/${taskId}`), {
       ...task,
@@ -287,11 +291,14 @@ window.uploadCSV = async function () {
       createdAt: new Date().toISOString()
     });
 
-    count++;
+    uploaded++;
+
+    const percent = Math.round((uploaded / total) * 100);
+    status.innerText = `⬆ Uploading… ${percent}% (${uploaded} / ${total})`;
   }
 
-  status.innerText = `✅ Uploaded ${count} tasks`;
-};
+  status.innerText = `✅ Upload complete — ${uploaded} tasks added`;
+};;
 
 /* ===== LOAD DRIVERS ===== */
 async function loadDrivers() {
