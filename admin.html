@@ -240,6 +240,7 @@ let CURRENT_STATUS = null;
 let SEARCH_TERM = "";
 let MAP_VISIBLE = false;
 let TASK_STATS = {};
+let FILTER_DRIVER = null;
 
 /* ===== SEARCH ===== */
 searchBox.addEventListener("input", e => {
@@ -284,9 +285,13 @@ window.loadTasks = async function (status) {
   CURRENT_STATUS=status;
   taskList.innerHTML="Loading...";
   const snap=await get(ref(db,"tasks"));
-  let tasks=Object.keys(snap.val()||{})
-    .map(k=>({_key:k,...snap.val()[k]}))
-    .filter(t=>t.status===status);
+  let tasks = Object.keys(snap.val()||{})
+  .map(k=>({_key:k,...snap.val()[k]}))
+  .filter(t => {
+    if (t.status !== status) return false;
+    if (FILTER_DRIVER && t.driverId !== FILTER_DRIVER) return false;
+    return true;
+  });
 
   if(SEARCH_TERM)
     tasks=tasks.filter(t=>JSON.stringify(t).toLowerCase().includes(SEARCH_TERM));
@@ -325,6 +330,18 @@ window.toggleLiveMap = async function () {
     initMap();
     setTimeout(() => map.invalidateSize(), 200);
   }
+};
+
+window.showDriverOpenTasks = function (driverId) {
+  FILTER_DRIVER = driverId;
+
+  // Exit map view
+  MAP_VISIBLE = false;
+  mapContainer.style.display = "none";
+  taskList.style.display = "block";
+
+  // Load open tasks for this driver
+  loadTasks("PENDING");
 };
   
 function initMap(){
@@ -378,7 +395,15 @@ function renderDriverList(drivers) {
           ${status.label}
         </div>
         <div style="font-size:11px;color:#444;margin-top:2px;">
-          🟠 Open: ${stats.open} | ✅ Done: ${stats.completed}
+          <span
+            style="color:orange;cursor:pointer;font-weight:bold"
+            onclick="showDriverOpenTasks('${id}')">
+            🟠 Open: ${stats.open}
+          </span>
+           |
+           <span style="color:green">
+            ✅ Done: ${stats.completed}
+           </span>
         </div>
       </div>
     `;
