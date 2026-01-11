@@ -82,6 +82,36 @@ button {
   border-left:5px solid #ccc;
 }
 
+  .task-form {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.task-form .full {
+  grid-column: span 2;
+}
+
+.task-form label {
+  font-size: 12px;
+  font-weight: bold;
+  color: #555;
+}
+
+.task-form input,
+.task-form textarea,
+.task-form select {
+  width: 100%;
+  padding: 6px;
+  border-radius: 4px;
+  border: 1px solid #ccc;
+}
+
+.form-actions {
+  grid-column: span 2;
+  margin-top: 10px;
+}
+
 .task.completed { border-left-color:green; }
 .task.pending { border-left-color:orange; }
 
@@ -154,7 +184,7 @@ button {
 
 <body>
 
-<h2>🧑‍💼 Admin Dashboard V2.1.5</h2>
+<h2>🧑‍💼 Admin Dashboard V2.1.6</h2>
 
 <!-- ===== DASHBOARD ===== -->
 <div class="dashboard">
@@ -393,11 +423,11 @@ if (FILTER_DRIVER) {
 
 window.enableEdit = function (btn) {
   const details = btn.closest(".task-details");
-  const inputs = details.querySelectorAll("input, textarea");
+  const fields = details.querySelectorAll("input, textarea, select");
 
-  inputs.forEach(i => {
-    i.dataset.original = i.value;
-    i.disabled = false;
+  fields.forEach(el => {
+    el.dataset.original = el.value;
+    el.disabled = false;
   });
 
   btn.parentElement.innerHTML = `
@@ -407,6 +437,20 @@ window.enableEdit = function (btn) {
   `;
 };
 
+window.cancelEdit = function (btn) {
+  const details = btn.closest(".task-details");
+  const fields = details.querySelectorAll("input, textarea, select");
+
+  fields.forEach(el => {
+    el.value = el.dataset.original;
+    el.disabled = true;
+  });
+
+  btn.parentElement.innerHTML = `
+    <button class="toggleBtn" onclick="enableEdit(this)">✏ Modify Task</button>
+  `;
+};
+  
 window.saveEdit = async function (btn) {
   const details = btn.closest(".task-details");
   const taskId = details.dataset.taskId;
