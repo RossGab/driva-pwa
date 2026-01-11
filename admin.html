@@ -184,7 +184,7 @@ button {
 
 <body>
 
-<h2>🧑‍💼 Admin Dashboard V2.1.12</h2>
+<h2>🧑‍💼 Admin Dashboard V2.1.13</h2>
 
 <!-- ===== DASHBOARD ===== -->
 <div class="dashboard">
@@ -429,7 +429,7 @@ if (FILTER_DRIVER) {
 }
 
 window.enableEdit = function (btn) {
-  const details = btn.closest(".task-details")    .querySelector(".form-actions")    .innerHTML = `      <button class="toggleBtn" onclick="enableEdit(this)">        ✏ Modify Task      </button>    `;;
+  const details = btn.closest(".task-details");
   const fields = details.querySelectorAll("input, textarea, select");
 
   fields.forEach(el => {
@@ -437,16 +437,15 @@ window.enableEdit = function (btn) {
     el.disabled = false;
   });
 
-  const actions = details.querySelector(".form-actions");
-  actions.innerHTML = `
+  details.querySelector(".form-actions").innerHTML = `
     <button class="toggleBtn" onclick="saveEdit(this)">💾 Save</button>
     <button class="toggleBtn" style="background:#777"
       onclick="cancelEdit(this)">❌ Cancel</button>
   `;
 };
-
+  
 window.cancelEdit = function (btn) {
-  const details = btn.closest(".task-details")    .querySelector(".form-actions")    .innerHTML = `      <button class="toggleBtn" onclick="enableEdit(this)">        ✏ Modify Task      </button>    `;;
+  const details = btn.closest(".task-details");
   const fields = details.querySelectorAll("input, textarea, select");
 
   fields.forEach(el => {
@@ -462,12 +461,11 @@ window.cancelEdit = function (btn) {
 };
   
 window.saveEdit = async function (btn) {
-  const details = btn.closest(".task-details")    .querySelector(".form-actions")    .innerHTML = `      <button class="toggleBtn" onclick="enableEdit(this)">        ✏ Modify Task      </button>    `;;
+  const details = btn.closest(".task-details");
   const taskId = details.dataset.taskId;
 
   const fields = details.querySelectorAll("input, textarea, select");
   const payload = {};
-
   let selectedDriverId = null;
 
   fields.forEach(el => {
@@ -479,7 +477,6 @@ window.saveEdit = async function (btn) {
     }
   });
 
-  // ✅ Sync agent name
   if (selectedDriverId && DRIVER_CACHE[selectedDriverId]) {
     payload.AGENTID = selectedDriverId;
     payload.AGENTNAME = DRIVER_CACHE[selectedDriverId].name || "";
@@ -492,8 +489,10 @@ window.saveEdit = async function (btn) {
 
   alert("✅ Task updated");
 
-  btn.parentElement.innerHTML = `
-    <button class="toggleBtn" onclick="enableEdit(this)">✏ Modify Task</button>
+  details.querySelector(".form-actions").innerHTML = `
+    <button class="toggleBtn" onclick="enableEdit(this)">
+      ✏ Modify Task
+    </button>
   `;
 
   refreshDashboard();
