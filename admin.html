@@ -184,7 +184,7 @@ button {
 
 <body>
 
-<h2>🧑‍💼 Admin Dashboard V2.1.6</h2>
+<h2>🧑‍💼 Admin Dashboard V2.1.7</h2>
 
 <!-- ===== DASHBOARD ===== -->
 <div class="dashboard">
@@ -519,12 +519,30 @@ window.saveEdit = async function (btn) {
       </div>
     
     <div class="task-details"
-         data-task-id="${t._key}"
-         style="display:none;margin-top:8px;">
-        ${renderTaskDetails(t)}
-    
-      </div>
-    `;
+     data-task-id="${t._key}"
+     style="display:none;margin-top:8px;">
+
+  ${renderTaskDetails(t)}
+
+  ${t.status === "COMPLETED" ? `
+    <div style="margin-top:10px;padding-top:8px;border-top:1px dashed #ccc">
+
+      ${t.deliveryType ? `
+        <div class="small">
+          📦 <b>Delivery Method:</b> ${t.deliveryType}
+        </div>
+      ` : ""}
+
+      ${t.remarks ? `
+        <div class="small" style="margin-top:4px">
+          📝 <b>Remarks:</b> ${t.remarks}
+        </div>
+      ` : ""}
+
+    </div>
+  ` : ""}
+
+</div>
 
 const header = div.querySelector(".task-header");
 const details = div.querySelector(".task-details");
