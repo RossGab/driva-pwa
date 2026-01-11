@@ -281,41 +281,67 @@ window.refreshDashboard = async function () {
 };
 
 /* ===== TASK LIST ===== */
+import {
+  query,
+  orderByChild,
+  equalTo
+} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+
 window.loadTasks = async function (status) {
-  CURRENT_STATUS=status;
-  taskList.innerHTML="Loading...";
-  const snap=await get(ref(db,"tasks"));
-  let tasks = Object.keys(snap.val()||{})
-  .map(k=>({_key:k,...snap.val()[k]}))
-  .filter(t => {
-    if (t.status !== status) return false;
-    if (FILTER_DRIVER && t.driverId !== FILTER_DRIVER) return false;
-    return true;
-  });
+  CURRENT_STATUS = status;
+  taskList.innerHTML = "Loading...";
 
-  if(SEARCH_TERM)
-    tasks=tasks.filter(t=>JSON.stringify(t).toLowerCase().includes(SEARCH_TERM));
+  // ✅ SERVER-SIDE FILTER (FAST)
+  const q = query(
+    ref(db, "tasks"),
+    orderByChild("status"),
+    equalTo(status)
+  );
 
-  if(!tasks.length){taskList.innerHTML="No tasks";return;}
+  const snap = await get(q);
+  const raw = snap.val() || {};
 
-  taskList.innerHTML="";
-  tasks.forEach(t=>{
-    const sla=getSLA(t);
-    const div=document.createElement("div");
-    div.className=`task ${status==="COMPLETED"?"completed":"pending"}`;
-    div.innerHTML=`
-      <b>${t.name}</b>
-      <div class="small">${t.address}</div>
-      <div class="small">Driver: ${t.driverId}</div>
-      ${t.remarks?`<div class="remarks">${t.remarks}</div>`:""}
-      ${sla?`<div class="small ${sla.cls}">⏱ ${sla.text}</div>`:""}
-      ${status==="COMPLETED" && t.deliveryType?
-        `<div class="small">📦 ${t.deliveryType}</div>`:""}
+  let tasks = Object.keys(raw).map(k => ({
+    _key: k,
+    ...raw[k]
+  }));
+
+  // 🔍 Search (client-side, fast now)
+  if (SEARCH_TERM) {
+    const term = SEARCH_TERM.toLowerCase();
+    tasks = tasks.filter(t =>
+      JSON.stringify(t).toLowerCase().includes(term)
+    );
+  }
+
+  if (!tasks.length) {
+    taskList.innerHTML = "No tasks";
+    return;
+  }
+
+  taskList.innerHTML = "";
+
+  tasks.forEach(t => {
+    const sla = getSLA(t);
+
+    const div = document.createElement("div");
+    div.className = `task ${status === "COMPLETED" ? "completed" : "pending"}`;
+
+    div.innerHTML = `
+      <b>${t.CUSTOMERNAME || t.name || ""}</b>
+      <div class="small">${t.ADDRESS || t.address || ""}</div>
+      <div class="small">Driver: ${t.driverId || "—"}</div>
+      ${sla ? `<div class="small ${sla.cls}">⏱ ${sla.text}</div>` : ""}
+      ${
+        status === "COMPLETED" && t.deliveryType
+          ? `<div class="small">📦 ${t.deliveryType}</div>`
+          : ""
+      }
     `;
+
     taskList.appendChild(div);
   });
 };
-
 /* ===== LIVE MAP ===== */
 let map, markers={};
 
