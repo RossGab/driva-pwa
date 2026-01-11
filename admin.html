@@ -154,7 +154,7 @@ button {
 
 <body>
 
-<h2>🧑‍💼 Admin Dashboard V2.0.2</h2>
+<h2>🧑‍💼 Admin Dashboard V2.0.3</h2>
 
 <!-- ===== DASHBOARD ===== -->
 <div class="dashboard">
@@ -289,22 +289,43 @@ import {
 
 function renderTaskDetails(t) {
   return `
-    <div class="small"><b>JOB TYPE:</b> ${t.JOBTYPE || ""}</div>
-    <div class="small"><b>BA:</b> ${t.BA || ""}</div>
-    <div class="small"><b>DMZ:</b> ${t.DMZ || ""}</div>
-    <div class="small"><b>MRU:</b> ${t.MRU || ""}</div>
-    <div class="small"><b>SEQUENCE:</b> ${t.SEQUENCE || ""}</div>
-    <div class="small"><b>METER #:</b> ${t.METERNUMBER || ""}</div>
-    <div class="small"><b>ACCOUNT #:</b> ${t.ACCOUNTNUMBER || ""}</div>
-    <div class="small"><b>CUSTOMER:</b> ${t.CUSTOMERNAME || ""}</div>
-    <div class="small"><b>ADDRESS:</b> ${t.ADDRESS || ""}</div>
-    <div class="small"><b>ZIP:</b> ${t.ZIPCODE || ""}</div>
-    <div class="small"><b>LAT:</b> ${t.LATITUDE || ""}</div>
-    <div class="small"><b>LNG:</b> ${t.LONGITUDE || ""}</div>
-    <div class="small"><b>AGENT:</b> ${t.AGENTID || ""} - ${t.AGENTNAME || ""}</div>
+    <label class="small">JOB TYPE</label>
+    <input value="${t.JOBTYPE || ""}" data-field="JOBTYPE">
+
+    <label class="small">BA</label>
+    <input value="${t.BA || ""}" data-field="BA">
+
+    <label class="small">DMZ</label>
+    <input value="${t.DMZ || ""}" data-field="DMZ">
+
+    <label class="small">MRU</label>
+    <input value="${t.MRU || ""}" data-field="MRU">
+
+    <label class="small">SEQUENCE</label>
+    <input value="${t.SEQUENCE || ""}" data-field="SEQUENCE">
+
+    <label class="small">METER NUMBER</label>
+    <input value="${t.METERNUMBER || ""}" data-field="METERNUMBER">
+
+    <label class="small">ACCOUNT NUMBER</label>
+    <input value="${t.ACCOUNTNUMBER || ""}" data-field="ACCOUNTNUMBER">
+
+    <label class="small">CUSTOMER NAME</label>
+    <input value="${t.CUSTOMERNAME || ""}" data-field="CUSTOMERNAME">
+
+    <label class="small">ADDRESS</label>
+    <textarea data-field="ADDRESS">${t.ADDRESS || ""}</textarea>
+
+    <label class="small">ZIP CODE</label>
+    <input value="${t.ZIPCODE || ""}" data-field="ZIPCODE">
+
+    <label class="small">LATITUDE</label>
+    <input value="${t.LATITUDE || ""}" data-field="LATITUDE">
+
+    <label class="small">LONGITUDE</label>
+    <input value="${t.LONGITUDE || ""}" data-field="LONGITUDE">
   `;
 }
-
 window.loadTasks = async function (status) {
   CURRENT_STATUS = status;
   taskList.innerHTML = "Loading...";
@@ -323,6 +344,69 @@ window.loadTasks = async function (status) {
     _key: k,
     ...raw[k]
   }));
+
+window.enableEdit = function (taskId, btn) {
+  const details = btn.closest(".task-details");
+  const inputs = details.querySelectorAll("input, textarea");
+
+  // Enable inputs
+  inputs.forEach(i => {
+    i.dataset.original = i.value; // store original
+    i.disabled = false;
+  });
+
+  // Replace buttons
+  btn.parentElement.innerHTML = `
+    <button class="toggleBtn" onclick="saveTaskEdit('${taskId}', this)">
+      💾 Save
+    </button>
+    <button class="toggleBtn" style="background:#777"
+      onclick="cancelTaskEdit(this)">
+      ❌ Cancel
+    </button>
+  `;
+};
+
+window.cancelTaskEdit = function (btn) {
+  const details = btn.closest(".task-details");
+  const inputs = details.querySelectorAll("input, textarea");
+
+  // Restore original values
+  inputs.forEach(i => {
+    i.value = i.dataset.original;
+    i.disabled = true;
+  });
+
+  // Restore modify button
+  btn.parentElement.innerHTML = `
+    <button class="toggleBtn" onclick="enableEdit('${details.dataset.taskId}', this)">
+      ✏ Modify Task
+    </button>
+  `;
+};
+
+window.saveTaskEdit = async function (taskId, btn) {
+  const details = btn.closest(".task-details");
+  const inputs = details.querySelectorAll("input, textarea");
+
+  const payload = {};
+
+  inputs.forEach(i => {
+    payload[i.dataset.field] = i.value.trim();
+    i.disabled = true;
+  });
+
+  await update(ref(db, `tasks/${taskId}`), payload);
+
+  alert("✅ Task updated");
+
+  // Restore modify button
+  btn.parentElement.innerHTML = `
+    <button class="toggleBtn" onclick="enableEdit('${taskId}', this)">
+      ✏ Modify Task
+    </button>
+  `;
+};
 
 
 window.enableEdit = function (taskId) {
@@ -347,26 +431,49 @@ window.enableEdit = function (taskId) {
 
   tasks.forEach(t => {
     const sla = getSLA(t);
-
-    const div = document.createElement("div");
-    div.className = `task ${status === "COMPLETED" ? "completed" : "pending"}`;
-
-    div.innerHTML = `
-      <div style="cursor:pointer" class="task-header">
-        <b>${t.CUSTOMERNAME || ""}</b>
-        <div class="small">${t.ADDRESS || ""}</div>
-        <div class="small">Driver: ${t.driverId || "—"}</div>
-        ${sla ? `<div class="small ${sla.cls}">⏱ ${sla.text}</div>` : ""}
-      </div>
-    
-      <div class="task-details" style="display:none;margin-top:8px;">
-        ${renderTaskDetails(t)}
-    
-        <button class="toggleBtn" onclick="enableEdit('${t._key}')">
-          ✏ Modify Task
-        </button>
-      </div>
+  
+    const card = document.createElement("div");
+    card.className = `task ${status === "COMPLETED" ? "completed" : "pending"}`;
+  
+    /* ===== HEADER (ALWAYS VISIBLE) ===== */
+    const header = document.createElement("div");
+    header.innerHTML = `
+      <b>${t.CUSTOMERNAME || ""}</b>
+      <div class="small">${t.ADDRESS || ""}</div>
+      <div class="small">Driver: ${t.driverId || "—"}</div>
+      ${sla ? `<div class="small ${sla.cls}">⏱ ${sla.text}</div>` : ""}
+      <button class="toggleBtn">▼ View Details</button>
     `;
+  
+    /* ===== DETAILS (EXPANDABLE) ===== */
+    const details = document.createElement("div");
+    details.className = "task-details";
+    details.style.display = "none";
+  
+    // ✅ THIS IS THE LINE YOU ARE ASKING ABOUT
+    details.dataset.taskId = t._key;
+  
+    details.innerHTML = `
+      <div class="small"><b>JOB TYPE:</b> ${t.JOBTYPE || ""}</div>
+      <div class="small"><b>METER:</b> ${t.METERNUMBER || ""}</div>
+      <div class="small"><b>ACCOUNT:</b> ${t.ACCOUNTNUMBER || ""}</div>
+      <div class="small"><b>ZIP:</b> ${t.ZIPCODE || ""}</div>
+  
+      <button onclick="enableTaskEdit(this)">✏ Modify</button>
+      <button onclick="saveTaskEdit(this)">💾 Save</button>
+      <button onclick="cancelTaskEdit(this)">✖ Cancel</button>
+    `;
+  
+    /* ===== TOGGLE ===== */
+    header.querySelector(".toggleBtn").onclick = () => {
+      details.style.display =
+        details.style.display === "none" ? "block" : "none";
+    };
+  
+    card.appendChild(header);
+    card.appendChild(details);
+    taskList.appendChild(card);
+  });
 
 const header = div.querySelector(".task-header");
 const details = div.querySelector(".task-details");
