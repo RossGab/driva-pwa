@@ -138,7 +138,7 @@ import {
   getStorage, ref as sRef, uploadBytes, getDownloadURL
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.4.0";
+const VERSION = "Driver v3.4.1";
 
 /* ================= CONFIG ================= */
 const firebaseConfig = {
@@ -452,43 +452,17 @@ function render(tasks) {
 
     div.innerHTML = `
       <b>${t.CUSTOMERNAME || t.name || "—"}</b>
-    
-      <div class="small">
-        📍 ${t.ADDRESS || t.address || "—"}
-      </div>
-    
-      <div class="small">
-        <b>Account #:</b> ${t.ACCOUNTNUMBER || "—"}
-      </div>
-    
-      <div class="small">
-        <b>MRU:</b> ${t.MRU || "—"}
-      </div>
-    
-      <div class="small">
-        <b>Meter #:</b> ${t.METERNUMBER || "—"}
-      </div>
-    
-      <div class="small">
-        <b>DMZ:</b> ${t.DMZ || "—"}
-      </div>
-    
-      <div class="small">
-        <b>Sequence:</b> ${t.SEQUENCE || "—"}
-      </div>
-    
-      <div class="small">
-        <b>Job Type:</b> ${t.JOBTYPE || "—"}
-      </div>
-    
-      <div class="small">
-        <b>Assigned SP:</b> ${t.driverId || t.AGENTID || "—"}
-      </div>
-    
-      <div class="small">
-        <b>Status:</b> ${status}
-      </div>
-    
+
+      <div class="small">📍 ${t.ADDRESS || t.address || "—"}</div>
+      <div class="small"><b>Account #:</b> ${t.ACCOUNTNUMBER || "—"}</div>
+      <div class="small"><b>MRU:</b> ${t.MRU || "—"}</div>
+      <div class="small"><b>Meter #:</b> ${t.METERNUMBER || "—"}</div>
+      <div class="small"><b>DMZ:</b> ${t.DMZ || "—"}</div>
+      <div class="small"><b>Sequence:</b> ${t.SEQUENCE || "—"}</div>
+      <div class="small"><b>Job Type:</b> ${t.JOBTYPE || "—"}</div>
+      <div class="small"><b>Assigned SP:</b> ${t.driverId || t.AGENTID || "—"}</div>
+      <div class="small"><b>Status:</b> ${status}</div>
+
       <div class="radio-group">
         <b>Delivery Method</b>
         ${[
@@ -500,21 +474,17 @@ function render(tasks) {
           "D6-Bagsakan"
         ].map(v => `
           <label>
-            <input type="radio"
-              name="delivery_${t._key}"
-              value="${v}">
+            <input type="radio" name="delivery_${t._key}" value="${v}">
             ${v}
           </label>
         `).join("")}
       </div>
-    
+
       ${
         status === "PENDING"
           ? `
-            <textarea id="remarks_${t._key}" placeholder="Remarks (optional)"></textarea>          
-            <button class="capture" onclick="takePicture('${t._key}')">
-              📸 Take Picture
-            </button>
+            <textarea id="remarks_${t._key}" placeholder="Remarks (optional)"></textarea>
+            <button class="capture" onclick="takePicture('${t._key}')">📸 Take Picture</button>
           `
           : `
             ${t.remarks ? `<div class="small">📝 ${t.remarks}</div>` : ""}
@@ -537,9 +507,11 @@ function render(tasks) {
       }
     `;
 
-loadTasks();
-</script>
+    ✅ list.appendChild(div);
+  });
+}
 
+  
 <script>
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("./sw.js");
