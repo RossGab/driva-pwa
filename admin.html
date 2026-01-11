@@ -208,7 +208,7 @@ button {
   <button class="assign" onclick="toggleLiveMap()">🗺 Live Map</button>
   <button class="assign" onclick="location.href='assign.html'">➕ Assign Task</button>
   <button class="openBtn" onclick="showAllOpenTasks()">📂 Open</button>
-  <button class="doneBtn" onclick="loadTasks('COMPLETED')">✅ Completed</button>
+  <button class="doneBtn" onclick="showCompletedTasks()">✅ Completed</button>
   <button class="assign" onclick="location.href='add-driver.html'">👤 Add Driver</button>
   <button class="refresh" onclick="refreshDashboard()">🔄</button>
 </div>
@@ -397,6 +397,18 @@ function renderTaskDetails(t) {
     </div>
   `;
 }
+
+window.showCompletedTasks = function () {
+  // 🔥 EXIT MAP MODE COMPLETELY
+  MAP_VISIBLE = false;
+  FILTER_DRIVER = null;
+
+  mapContainer.style.display = "none";
+  taskList.style.display = "block";
+
+  loadTasks("COMPLETED");
+};
+
 window.loadTasks = async function (status) {
   CURRENT_STATUS = status;
   taskList.innerHTML = "Loading...";
