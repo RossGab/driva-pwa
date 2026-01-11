@@ -154,7 +154,7 @@ button {
 
 <body>
 
-<h2>🧑‍💼 Admin Dashboard V2.1.3</h2>
+<h2>🧑‍💼 Admin Dashboard V2.1.4</h2>
 
 <!-- ===== DASHBOARD ===== -->
 <div class="dashboard">
@@ -289,42 +289,65 @@ import {
 
 function renderTaskDetails(t) {
   return `
-    <label class="small">JOB TYPE</label>
-    <input data-field="JOBTYPE" value="${t.JOBTYPE || ""}" disabled>
+    <div class="task-form">
 
-    <label class="small">BA</label>
-    <input data-field="BA" value="${t.BA || ""}" disabled>
+      <div class="field">
+        <label>JOB TYPE</label>
+        <input data-field="JOBTYPE" value="${t.JOBTYPE || ""}" disabled>
+      </div>
 
-    <label class="small">DMZ</label>
-    <input data-field="DMZ" value="${t.DMZ || ""}" disabled>
+      <div class="field">
+        <label>BA</label>
+        <input data-field="BA" value="${t.BA || ""}" disabled>
+      </div>
 
-    <label class="small">MRU</label>
-    <input data-field="MRU" value="${t.MRU || ""}" disabled>
+      <div class="field">
+        <label>DMZ</label>
+        <input data-field="DMZ" value="${t.DMZ || ""}" disabled>
+      </div>
 
-    <label class="small">SEQUENCE</label>
-    <input data-field="SEQUENCE" value="${t.SEQUENCE || ""}" disabled>
+      <div class="field">
+        <label>MRU</label>
+        <input data-field="MRU" value="${t.MRU || ""}" disabled>
+      </div>
 
-    <label class="small">METER NUMBER</label>
-    <input data-field="METERNUMBER" value="${t.METERNUMBER || ""}" disabled>
+      <div class="field">
+        <label>SEQUENCE</label>
+        <input data-field="SEQUENCE" value="${t.SEQUENCE || ""}" disabled>
+      </div>
 
-    <label class="small">ACCOUNT NUMBER</label>
-    <input data-field="ACCOUNTNUMBER" value="${t.ACCOUNTNUMBER || ""}" disabled>
+      <div class="field">
+        <label>METER NUMBER</label>
+        <input data-field="METERNUMBER" value="${t.METERNUMBER || ""}" disabled>
+      </div>
 
-    <label class="small">CUSTOMER NAME</label>
-    <input data-field="CUSTOMERNAME" value="${t.CUSTOMERNAME || ""}" disabled>
+      <div class="field">
+        <label>ACCOUNT NUMBER</label>
+        <input data-field="ACCOUNTNUMBER" value="${t.ACCOUNTNUMBER || ""}" disabled>
+      </div>
 
-    <label class="small">ADDRESS</label>
-    <textarea data-field="ADDRESS" disabled>${t.ADDRESS || ""}</textarea>
+      <div class="field">
+        <label>CUSTOMER NAME</label>
+        <input data-field="CUSTOMERNAME" value="${t.CUSTOMERNAME || ""}" disabled>
+      </div>
 
-    <label class="small">ZIP CODE</label>
-    <input data-field="ZIPCODE" value="${t.ZIPCODE || ""}" disabled>
+      <div class="field full">
+        <label>ADDRESS</label>
+        <textarea data-field="ADDRESS" disabled>${t.ADDRESS || ""}</textarea>
+      </div>
 
-    <div style="margin-top:8px">
-      <button class="toggleBtn" onclick="enableEdit(this)">✏ Modify Task</button>
+      <div class="field">
+        <label>ZIP CODE</label>
+        <input data-field="ZIPCODE" value="${t.ZIPCODE || ""}" disabled>
+      </div>
+
+      <div class="form-actions">
+        <button class="toggleBtn" onclick="enableEdit(this)">✏ Modify Task</button>
+      </div>
+
     </div>
   `;
 }
-
 window.loadTasks = async function (status) {
   CURRENT_STATUS = status;
   taskList.innerHTML = "Loading...";
