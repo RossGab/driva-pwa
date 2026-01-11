@@ -154,7 +154,7 @@ button {
 
 <body>
 
-<h2>🧑‍💼 Admin Dashboard V2.0.1</h2>
+<h2>🧑‍💼 Admin Dashboard V2.0.2</h2>
 
 <!-- ===== DASHBOARD ===== -->
 <div class="dashboard">
@@ -287,6 +287,24 @@ import {
   equalTo
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
+function renderTaskDetails(t) {
+  return `
+    <div class="small"><b>JOB TYPE:</b> ${t.JOBTYPE || ""}</div>
+    <div class="small"><b>BA:</b> ${t.BA || ""}</div>
+    <div class="small"><b>DMZ:</b> ${t.DMZ || ""}</div>
+    <div class="small"><b>MRU:</b> ${t.MRU || ""}</div>
+    <div class="small"><b>SEQUENCE:</b> ${t.SEQUENCE || ""}</div>
+    <div class="small"><b>METER #:</b> ${t.METERNUMBER || ""}</div>
+    <div class="small"><b>ACCOUNT #:</b> ${t.ACCOUNTNUMBER || ""}</div>
+    <div class="small"><b>CUSTOMER:</b> ${t.CUSTOMERNAME || ""}</div>
+    <div class="small"><b>ADDRESS:</b> ${t.ADDRESS || ""}</div>
+    <div class="small"><b>ZIP:</b> ${t.ZIPCODE || ""}</div>
+    <div class="small"><b>LAT:</b> ${t.LATITUDE || ""}</div>
+    <div class="small"><b>LNG:</b> ${t.LONGITUDE || ""}</div>
+    <div class="small"><b>AGENT:</b> ${t.AGENTID || ""} - ${t.AGENTNAME || ""}</div>
+  `;
+}
+
 window.loadTasks = async function (status) {
   CURRENT_STATUS = status;
   taskList.innerHTML = "Loading...";
@@ -305,6 +323,12 @@ window.loadTasks = async function (status) {
     _key: k,
     ...raw[k]
   }));
+
+
+window.enableEdit = function (taskId) {
+  alert("Edit UI for task: " + taskId);
+  // Next step: convert fields to inputs + save
+};
 
   // 🔍 Search (client-side, fast now)
   if (SEARCH_TERM) {
@@ -328,16 +352,29 @@ window.loadTasks = async function (status) {
     div.className = `task ${status === "COMPLETED" ? "completed" : "pending"}`;
 
     div.innerHTML = `
-      <b>${t.CUSTOMERNAME || t.name || ""}</b>
-      <div class="small">${t.ADDRESS || t.address || ""}</div>
-      <div class="small">Driver: ${t.driverId || "—"}</div>
-      ${sla ? `<div class="small ${sla.cls}">⏱ ${sla.text}</div>` : ""}
-      ${
-        status === "COMPLETED" && t.deliveryType
-          ? `<div class="small">📦 ${t.deliveryType}</div>`
-          : ""
-      }
+      <div style="cursor:pointer" class="task-header">
+        <b>${t.CUSTOMERNAME || ""}</b>
+        <div class="small">${t.ADDRESS || ""}</div>
+        <div class="small">Driver: ${t.driverId || "—"}</div>
+        ${sla ? `<div class="small ${sla.cls}">⏱ ${sla.text}</div>` : ""}
+      </div>
+    
+      <div class="task-details" style="display:none;margin-top:8px;">
+        ${renderTaskDetails(t)}
+    
+        <button class="toggleBtn" onclick="enableEdit('${t._key}')">
+          ✏ Modify Task
+        </button>
+      </div>
     `;
+
+const header = div.querySelector(".task-header");
+const details = div.querySelector(".task-details");
+
+header.onclick = () => {
+  details.style.display =
+    details.style.display === "none" ? "block" : "none";
+};
 
     taskList.appendChild(div);
   });
