@@ -154,7 +154,7 @@ button {
 
 <body>
 
-<h2>🧑‍💼 Admin Dashboard V2.0.3</h2>
+<h2>🧑‍💼 Admin Dashboard V2.0.4</h2>
 
 <!-- ===== DASHBOARD ===== -->
 <div class="dashboard">
@@ -408,12 +408,6 @@ window.saveTaskEdit = async function (taskId, btn) {
   `;
 };
 
-
-window.enableEdit = function (taskId) {
-  alert("Edit UI for task: " + taskId);
-  // Next step: convert fields to inputs + save
-};
-
   // 🔍 Search (client-side, fast now)
   if (SEARCH_TERM) {
     const term = SEARCH_TERM.toLowerCase();
@@ -449,21 +443,31 @@ window.enableEdit = function (taskId) {
     const details = document.createElement("div");
     details.className = "task-details";
     details.style.display = "none";
-  
-    // ✅ THIS IS THE LINE YOU ARE ASKING ABOUT
+    
+    // ✅ CORRECT LOCATION
     details.dataset.taskId = t._key;
   
     details.innerHTML = `
-      <div class="small"><b>JOB TYPE:</b> ${t.JOBTYPE || ""}</div>
-      <div class="small"><b>METER:</b> ${t.METERNUMBER || ""}</div>
-      <div class="small"><b>ACCOUNT:</b> ${t.ACCOUNTNUMBER || ""}</div>
-      <div class="small"><b>ZIP:</b> ${t.ZIPCODE || ""}</div>
-  
-      <button onclick="enableTaskEdit(this)">✏ Modify</button>
-      <button onclick="saveTaskEdit(this)">💾 Save</button>
-      <button onclick="cancelTaskEdit(this)">✖ Cancel</button>
+      <label class="small">JOB TYPE</label>
+      <input value="${t.JOBTYPE || ""}" data-field="JOBTYPE">
+    
+      <label class="small">METER NUMBER</label>
+      <input value="${t.METERNUMBER || ""}" data-field="METERNUMBER">
+    
+      <label class="small">ACCOUNT NUMBER</label>
+      <input value="${t.ACCOUNTNUMBER || ""}" data-field="ACCOUNTNUMBER">
+    
+      <label class="small">ZIP CODE</label>
+      <input value="${t.ZIPCODE || ""}" data-field="ZIPCODE">
+    
+      <button class="toggleBtn"
+        onclick="enableEdit('${t._key}', this)">
+        ✏ Modify Task
+      </button>
     `;
-  
+    details.querySelectorAll("input, textarea").forEach(i => {
+  i.disabled = true;
+});
     /* ===== TOGGLE ===== */
     header.querySelector(".toggleBtn").onclick = () => {
       details.style.display =
@@ -483,7 +487,7 @@ header.onclick = () => {
     details.style.display === "none" ? "block" : "none";
 };
 
-    taskList.appendChild(div);
+taskList.appendChild(div);
   });
 };
 /* ===== LIVE MAP ===== */
