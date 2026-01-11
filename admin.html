@@ -154,7 +154,7 @@ button {
 
 <body>
 
-<h2>🧑‍💼 Admin Dashboard</h2>
+<h2>🧑‍💼 Admin Dashboard V2.0.1</h2>
 
 <!-- ===== DASHBOARD ===== -->
 <div class="dashboard">
@@ -177,7 +177,7 @@ button {
 <div class="actions">
   <button class="assign" onclick="toggleLiveMap()">🗺 Live Map</button>
   <button class="assign" onclick="location.href='assign.html'">➕ Assign Task</button>
-  <button class="openBtn" onclick="loadTasks('PENDING')">📂 Open</button>
+  <button class="openBtn" onclick="showAllOpenTasks()">📂 Open</button>
   <button class="doneBtn" onclick="loadTasks('COMPLETED')">✅ Completed</button>
   <button class="assign" onclick="location.href='add-driver.html'">👤 Add Driver</button>
   <button class="refresh" onclick="refreshDashboard()">🔄</button>
@@ -342,6 +342,16 @@ window.showDriverOpenTasks = function (driverId) {
 
   // Load open tasks for this driver
   loadTasks("PENDING");
+};
+
+window.showAllOpenTasks = function () {
+  FILTER_DRIVER = null; // 🔥 CLEAR DRIVER FILTER
+  MAP_VISIBLE = false;
+
+  mapContainer.style.display = "none";
+  taskList.style.display = "block";
+
+  loadTasks("PENDING"); // ALL OPEN TASKS
 };
   
 function initMap(){
