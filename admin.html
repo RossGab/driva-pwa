@@ -184,7 +184,7 @@ button {
 
 <body>
 
-<h2>🧑‍💼 Admin Dashboard V2.1.9</h2>
+<h2>🧑‍💼 Admin Dashboard V2.1.10</h2>
 
 <!-- ===== DASHBOARD ===== -->
 <div class="dashboard">
@@ -536,36 +536,42 @@ window.saveEdit = async function (btn) {
 
   ${renderTaskDetails(t)}
 
-  ${t.status === "COMPLETED" ? `
-    <div style="margin-top:10px;padding-top:8px;border-top:1px dashed #ccc">
-
-      ${t.deliveryType ? `
-        <div class="small">
-          📦 <b>Delivery Method:</b> ${t.deliveryType}
-        </div>
-      ` : ""}
-
-      ${t.remarks ? `
-        <div class="small">
-          📝 <b>Remarks:</b> ${t.remarks}
-        </div>
-      ` : ""}
-
-      ${t.imageUrl ? `
-        <button class="toggleBtn"
-          onclick="this.nextElementSibling.style.display =
-          this.nextElementSibling.style.display === 'none' ? 'block' : 'none'">
-          👁 Show / Hide Photo
-        </button>
-
-        <img
-          src="${t.imageUrl}"
-          style="display:none;width:100%;margin-top:8px;border-radius:6px;"
-        >
-      ` : ""}
-
+  <!-- DELIVERY METHOD -->
+  ${t.status === "COMPLETED" && t.deliveryType ? `
+    <div class="small" style="margin-top:6px">
+      📦 <b>Delivery Method:</b> ${t.deliveryType}
     </div>
   ` : ""}
+
+  <!-- REMARKS -->
+  ${t.status === "COMPLETED" && t.remarks ? `
+    <div class="small" style="margin-top:4px">
+      📝 <b>Remarks:</b> ${t.remarks}
+    </div>
+  ` : ""}
+
+  <!-- PHOTO -->
+  ${t.status === "COMPLETED" && t.imageUrl ? `
+    <div style="margin-top:8px">
+
+      <button class="toggleBtn"
+        onclick="this.nextElementSibling.style.display =
+        this.nextElementSibling.style.display === 'none' ? 'block' : 'none'">
+        👁 Show Photo
+      </button>
+
+      <img
+        src="${t.imageUrl}"
+        style="display:none;width:100%;margin-top:8px;border-radius:6px;"
+      >
+    </div>
+  ` : ""}
+
+  <!-- MODIFY TASK (ALWAYS LAST) -->
+  <button class="toggleBtn" style="margin-top:10px"
+    onclick="enableEdit(this)">
+    ✏ Modify Task
+  </button>
 
 </div>
     `;
