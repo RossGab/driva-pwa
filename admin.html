@@ -154,7 +154,7 @@ button {
 
 <body>
 
-<h2>🧑‍💼 Admin Dashboard V2.0.4</h2>
+<h2>🧑‍💼 Admin Dashboard V2.0.5</h2>
 
 <!-- ===== DASHBOARD ===== -->
 <div class="dashboard">
@@ -328,6 +328,9 @@ function renderTaskDetails(t) {
 }
 window.loadTasks = async function (status) {
   CURRENT_STATUS = status;
+  MAP_VISIBLE = false;
+  mapContainer.style.display = "none";
+  taskList.style.display = "block";
   taskList.innerHTML = "Loading...";
 
   // ✅ SERVER-SIDE FILTER (FAST)
@@ -479,17 +482,6 @@ window.saveTaskEdit = async function (taskId, btn) {
     taskList.appendChild(card);
   });
 
-const header = div.querySelector(".task-header");
-const details = div.querySelector(".task-details");
-
-header.onclick = () => {
-  details.style.display =
-    details.style.display === "none" ? "block" : "none";
-};
-
-taskList.appendChild(div);
-  });
-};
 /* ===== LIVE MAP ===== */
 let map, markers={};
 
