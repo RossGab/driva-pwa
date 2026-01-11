@@ -289,19 +289,39 @@ import {
 
 function renderTaskDetails(t) {
   return `
-    <div class="small"><b>JOB TYPE:</b> ${t.JOBTYPE || ""}</div>
-    <div class="small"><b>BA:</b> ${t.BA || ""}</div>
-    <div class="small"><b>DMZ:</b> ${t.DMZ || ""}</div>
-    <div class="small"><b>MRU:</b> ${t.MRU || ""}</div>
-    <div class="small"><b>SEQUENCE:</b> ${t.SEQUENCE || ""}</div>
-    <div class="small"><b>METER #:</b> ${t.METERNUMBER || ""}</div>
-    <div class="small"><b>ACCOUNT #:</b> ${t.ACCOUNTNUMBER || ""}</div>
-    <div class="small"><b>CUSTOMER:</b> ${t.CUSTOMERNAME || ""}</div>
-    <div class="small"><b>ADDRESS:</b> ${t.ADDRESS || ""}</div>
-    <div class="small"><b>ZIP:</b> ${t.ZIPCODE || ""}</div>
-    <div class="small"><b>LAT:</b> ${t.LATITUDE || ""}</div>
-    <div class="small"><b>LNG:</b> ${t.LONGITUDE || ""}</div>
-    <div class="small"><b>AGENT:</b> ${t.AGENTID || ""} - ${t.AGENTNAME || ""}</div>
+    <label class="small">JOB TYPE</label>
+    <input data-field="JOBTYPE" value="${t.JOBTYPE || ""}" disabled>
+
+    <label class="small">BA</label>
+    <input data-field="BA" value="${t.BA || ""}" disabled>
+
+    <label class="small">DMZ</label>
+    <input data-field="DMZ" value="${t.DMZ || ""}" disabled>
+
+    <label class="small">MRU</label>
+    <input data-field="MRU" value="${t.MRU || ""}" disabled>
+
+    <label class="small">SEQUENCE</label>
+    <input data-field="SEQUENCE" value="${t.SEQUENCE || ""}" disabled>
+
+    <label class="small">METER NUMBER</label>
+    <input data-field="METERNUMBER" value="${t.METERNUMBER || ""}" disabled>
+
+    <label class="small">ACCOUNT NUMBER</label>
+    <input data-field="ACCOUNTNUMBER" value="${t.ACCOUNTNUMBER || ""}" disabled>
+
+    <label class="small">CUSTOMER NAME</label>
+    <input data-field="CUSTOMERNAME" value="${t.CUSTOMERNAME || ""}" disabled>
+
+    <label class="small">ADDRESS</label>
+    <textarea data-field="ADDRESS" disabled>${t.ADDRESS || ""}</textarea>
+
+    <label class="small">ZIP CODE</label>
+    <input data-field="ZIPCODE" value="${t.ZIPCODE || ""}" disabled>
+
+    <div style="margin-top:8px">
+      <button class="toggleBtn" onclick="enableEdit(this)">✏ Modify Task</button>
+    </div>
   `;
 }
 
@@ -324,6 +344,56 @@ window.loadTasks = async function (status) {
     ...raw[k]
   }));
 
+window.enableEdit = function (btn) {
+  const details = btn.closest(".task-details");
+  const inputs = details.querySelectorAll("input, textarea");
+
+  inputs.forEach(i => {
+    i.dataset.original = i.value;
+    i.disabled = false;
+  });
+
+  btn.parentElement.innerHTML = `
+    <button class="toggleBtn" onclick="saveEdit(this)">💾 Save</button>
+    <button class="toggleBtn" style="background:#777"
+      onclick="cancelEdit(this)">❌ Cancel</button>
+  `;
+};
+
+window.saveEdit = async function (btn) {
+  const details = btn.closest(".task-details");
+  const taskId = details.dataset.taskId;
+  const inputs = details.querySelectorAll("input, textarea");
+
+  const payload = {};
+
+  inputs.forEach(i => {
+    payload[i.dataset.field] = i.value.trim();
+    i.disabled = true;
+  });
+
+  await update(ref(db, `tasks/${taskId}`), payload);
+
+  alert("✅ Task updated");
+
+  btn.parentElement.innerHTML = `
+    <button class="toggleBtn" onclick="enableEdit(this)">✏ Modify Task</button>
+  `;
+};
+
+window.cancelEdit = function (btn) {
+  const details = btn.closest(".task-details");
+  const inputs = details.querySelectorAll("input, textarea");
+
+  inputs.forEach(i => {
+    i.value = i.dataset.original;
+    i.disabled = true;
+  });
+
+  btn.parentElement.innerHTML = `
+    <button class="toggleBtn" onclick="enableEdit(this)">✏ Modify Task</button>
+  `;
+};
 
 window.enableEdit = function (taskId) {
   alert("Edit UI for task: " + taskId);
@@ -359,7 +429,9 @@ window.enableEdit = function (taskId) {
         ${sla ? `<div class="small ${sla.cls}">⏱ ${sla.text}</div>` : ""}
       </div>
     
-      <div class="task-details" style="display:none;margin-top:8px;">
+    <div class="task-details"
+         data-task-id="${t._key}"
+         style="display:none;margin-top:8px;">
         ${renderTaskDetails(t)}
     
         <button class="toggleBtn" onclick="enableEdit('${t._key}')">
