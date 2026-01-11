@@ -64,7 +64,34 @@ button {
 
 <body>
 
-<h2>➕ Assign Task V2.0.1</h2>
+<h2>➕ Assign Task V2.0.2</h2>
+
+<button onclick="location.href='admin.html'"
+  style="
+    margin-bottom:10px;
+    background:#444;
+    color:#fff;
+    padding:10px;
+    border:none;
+    border-radius:6px;
+    width:100%;
+  ">
+  ⬅ Back to Dashboard
+</button>
+<hr>
+
+<h3>📤 Bulk Upload Tasks</h3>
+
+<input type="file" id="csvFile" accept=".csv">
+
+<button onclick="uploadCSV()"
+  style="background:#007bff;color:#fff;padding:10px;border:none;border-radius:6px;width:100%;margin-top:6px;">
+  Upload CSV
+</button>
+
+<div id="uploadStatus" style="margin-top:6px;font-size:13px;"></div>
+
+<hr>
 
 <form id="taskForm">
 
@@ -219,6 +246,37 @@ searchInput.addEventListener("input", () => {
 
   resultsBox.style.display = "block";
 });
+
+/* ===== BULK UPLOAD ===== */
+async function uploadCSV() {
+  const file = document.getElementById("csvFile").files[0];
+  if (!file) return alert("Select a CSV file");
+
+  const text = await file.text();
+  const rows = text.split("\n").map(r => r.trim()).filter(r => r);
+  const headers = rows.shift().split(",");
+
+  let count = 0;
+
+  for (const row of rows) {
+    const cols = row.split(",");
+    const task = {};
+
+    headers.forEach((h, i) => task[h] = cols[i] || "");
+
+    const taskId = `TASK_${Date.now()}_${count}`;
+
+    await update(ref(db, `tasks/${taskId}`), {
+      ...task,
+      status: "PENDING",
+      createdAt: new Date().toISOString()
+    });
+
+    count++;
+  }
+
+  uploadStatus.innerText = `✅ Uploaded ${count} tasks`;
+}
 
 /* ===== LOAD DRIVERS ===== */
 async function loadDrivers() {
