@@ -79,6 +79,14 @@ textarea {
   resize: vertical;
 }
 
+.radio-group input:disabled {
+  opacity: 0.6;
+}
+
+.radio-group input:disabled + span {
+  color: #999;
+}
+
 .offline-indicator {
   margin-top: 6px;
   font-weight: bold;
@@ -138,7 +146,7 @@ import {
   getStorage, ref as sRef, uploadBytes, getDownloadURL
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.3.7";
+const VERSION = "Driver v3.3.8";
 
 /* ================= CONFIG ================= */
 const firebaseConfig = {
@@ -496,7 +504,11 @@ function render(tasks) {
       "D6-Bagsakan"
     ].map(v => `
       <label>
-        <input type="radio" name="delivery_${t._key}" value="${v}">
+        <input type="radio"
+            name="delivery_${t._key}"
+            value="${v}"
+            ${status !== "PENDING" ? "disabled" : ""}
+          >
         ${v}
       </label>
     `).join("")}
