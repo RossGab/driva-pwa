@@ -64,7 +64,7 @@ button {
 
 <body>
 
-<h2>➕ Assign Task V2.0.4</h2>
+<h2>➕ Assign Task V2.0.5</h2>
 
 <button onclick="location.href='admin.html'"
   style="
@@ -182,7 +182,7 @@ button {
 import { initializeApp } from
   "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 import {
-  getDatabase, ref, push, get
+  getDatabase, ref, push, get, update   // ✅ update added
 } from
   "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
@@ -200,6 +200,7 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 
+/* ===== DRIVER CACHE ===== */
 let DRIVER_CACHE = {};
 
 async function loadDriverCache() {
@@ -208,151 +209,77 @@ async function loadDriverCache() {
 }
 loadDriverCache();
 
-const searchInput = document.getElementById("agentSearch");
-const resultsBox = document.getElementById("agentResults");
-
-searchInput.addEventListener("input", () => {
-  const q = searchInput.value.toLowerCase().trim();
-  resultsBox.innerHTML = "";
-  if (!q || q.length < 2) {
-    resultsBox.style.display = "none";
-    return;
-  }
-
-  Object.entries(DRIVER_CACHE)
-    .filter(([id, d]) =>
-      id.toLowerCase().includes(q) ||
-      (d.name || "").toLowerCase().includes(q)
-    )
-    .slice(0, 20) // ✅ LIMIT RESULTS
-    .forEach(([id, d]) => {
-      const row = document.createElement("div");
-      row.style.cssText = `
-        padding:8px;
-        cursor:pointer;
-        border-bottom:1px solid #eee;
-      `;
-      row.innerHTML = `<b>${id}</b><br><span style="font-size:12px">${d.name || ""}</span>`;
-
-      row.onclick = () => {
-        AGENTID.value = id;
-        AGENTNAME.value = d.name || "";
-        searchInput.value = `${id} - ${d.name || ""}`;
-        resultsBox.style.display = "none";
-      };
-
-      resultsBox.appendChild(row);
-    });
-
-  resultsBox.style.display = "block";
-});
-
 /* ===== BULK UPLOAD ===== */
 window.uploadCSV = async function () {
   const fileInput = document.getElementById("csvFile");
   const status = document.getElementById("uploadStatus");
+  const uploadBtn = event.target;
 
   if (!fileInput.files.length) {
     alert("Please select a CSV file");
     return;
   }
 
-  const file = fileInput.files[0];
-  status.innerText = "📄 Reading file…";
+  // 🔒 Lock button
+  uploadBtn.disabled = true;
+  uploadBtn.style.opacity = "0.6";
+  uploadBtn.innerText = "Uploading…";
 
-  const text = await file.text();
-  const rows = text
-    .split("\n")
-    .map(r => r.trim())
-    .filter(r => r);
+  try {
+    const file = fileInput.files[0];
+    status.innerText = "📄 Reading file…";
 
-  if (rows.length < 2) {
-    status.innerText = "❌ CSV has no data rows";
-    return;
+    const text = await file.text();
+
+    const rows = text
+      .replace(/\r/g, "")          // ✅ Windows-safe
+      .split("\n")
+      .map(r => r.trim())
+      .filter(Boolean);
+
+    if (rows.length < 2) {
+      status.innerText = "❌ CSV has no data rows";
+      return;
+    }
+
+    const headers = rows.shift().split(",").map(h => h.trim());
+    const total = rows.length;
+    let uploaded = 0;
+
+    for (const row of rows) {
+      const values = row.split(",");
+      const task = {};
+
+      headers.forEach((h, i) => {
+        task[h] = values[i]?.trim() || "";
+      });
+
+      const taskId = `TASK_${Date.now()}_${uploaded}`;
+
+      await update(ref(db, `tasks/${taskId}`), {
+        ...task,
+        driverId: task.AGENTID || "",
+        status: "PENDING",
+        createdAt: new Date().toISOString()
+      });
+
+      uploaded++;
+      const percent = Math.round((uploaded / total) * 100);
+      status.innerText = `⬆ Uploading… ${percent}% (${uploaded}/${total})`;
+    }
+
+    status.innerText = `✅ Upload complete — ${uploaded} tasks added`;
+    uploadBtn.innerText = "✔ Done";
+
+  } catch (err) {
+    console.error(err);
+    alert("Upload failed. Check console.");
+    status.innerText = "❌ Upload failed";
+    uploadBtn.disabled = false;
+    uploadBtn.style.opacity = "1";
+    uploadBtn.innerText = "Upload CSV";
   }
-
-  const headers = rows.shift().split(",").map(h => h.trim());
-  const total = rows.length;
-  let uploaded = 0;
-
-  for (const row of rows) {
-    const values = row.split(",");
-    const task = {};
-
-    headers.forEach((h, i) => {
-      task[h] = values[i]?.trim() || "";
-    });
-
-    const taskId = `TASK_${Date.now()}_${uploaded}`;
-
-    await update(ref(db, `tasks/${taskId}`), {
-      ...task,
-      status: "PENDING",
-      createdAt: new Date().toISOString()
-    });
-
-    uploaded++;
-
-    const percent = Math.round((uploaded / total) * 100);
-    status.innerText = `⬆ Uploading… ${percent}% (${uploaded} / ${total})`;
-  }
-
-  status.innerText = `✅ Upload complete — ${uploaded} tasks added`;
-};;
-
-/* ===== LOAD DRIVERS ===== */
-async function loadDrivers() {
-  const snap = await get(ref(db, "drivers"));
-  const drivers = snap.val() || {};
-  const sel = document.getElementById("AGENTID");
-
-  Object.entries(drivers).forEach(([id, d]) => {
-    const opt = document.createElement("option");
-    opt.value = id;
-    opt.textContent = `${id} - ${d.name || ""}`;
-    opt.dataset.name = d.name || "";
-    sel.appendChild(opt);
-  });
-}
-
-AGENTID.addEventListener("change", e => {
-  const opt = e.target.selectedOptions[0];
-  AGENTNAME.value = opt?.dataset.name || "";
-});
-
-/* ===== SAVE TASK ===== */
-taskForm.addEventListener("submit", async e => {
-  e.preventDefault();
-
-  const task = {
-    JOBTYPE: JOBTYPE.value,
-    BA: BA.value,
-    DMZ: DMZ.value,
-    MRU: MRU.value,
-    SEQUENCE: SEQUENCE.value,
-    METERNUMBER: METERNUMBER.value,
-    ACCOUNTNUMBER: ACCOUNTNUMBER.value,
-    CUSTOMERNAME: CUSTOMERNAME.value,
-    ADDRESS: ADDRESS.value,
-    ZIPCODE: ZIPCODE.value,
-    LATITUDE: LATITUDE.value,
-    LONGITUDE: LONGITUDE.value,
-    AGENTID: AGENTID.value,
-    AGENTNAME: AGENTNAME.value,
-
-    // system
-    driverId: AGENTID.value,
-    status: "PENDING",
-    createdAt: new Date().toISOString()
-  };
-
-  await push(ref(db, "tasks"), task);
-  alert("Task created");
-  location.href = "admin.html";
-});
-
-loadDrivers();
+};
 </script>
-
 </body>
 </html>
