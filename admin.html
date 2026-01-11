@@ -203,7 +203,7 @@ button {
 
 <body>
 
-<h2>🧑‍💼 Admin Dashboard V2.1.9</h2>
+<h2>🧑‍💼 Admin Dashboard V2.1.10</h2>
 
 <!-- ===== DASHBOARD ===== -->
 <div class="dashboard">
@@ -465,6 +465,16 @@ window.enableEdit = function (btn) {
   const search = details.querySelector(".driver-search");
   const results = details.querySelector(".driver-results");
 
+  const search = details.querySelector(".driver-search");
+  search.dataset.originalText = search.value;
+
+  search.addEventListener("blur", () => {
+    setTimeout(() => results.style.display = "none", 150);
+  });
+  
+  const driverIdInput = details.querySelector('[data-field="driverId"]');
+  driverIdInput.dataset.original = driverIdInput.value;
+
   search.oninput = () => {
     const term = search.value.toLowerCase();
     results.innerHTML = "";
@@ -503,7 +513,7 @@ window.enableEdit = function (btn) {
 };
 window.cancelEdit = function (btn) {
   const details = btn.closest(".task-details");
-  const fields = details.querySelectorAll("input, textarea, select");
+  details.querySelectorAll("input:not([type=hidden]), textarea").forEach(...)
 
   const search = details.querySelector(".driver-search");
   search.value = search.dataset.originalText;
