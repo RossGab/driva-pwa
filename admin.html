@@ -203,7 +203,7 @@ button {
 
 <body>
 
-<h2>🧑‍💼 Admin Dashboard V2.1.8</h2>
+<h2>🧑‍💼 Admin Dashboard V2.1.9</h2>
 
 <!-- ===== DASHBOARD ===== -->
 <div class="dashboard">
@@ -358,6 +358,9 @@ function renderTaskDetails(t) {
         value="${t.driverId ? `${t.driverId} - ${t.AGENTNAME || ""}` : ""}"
         disabled
       >
+
+      <input type="hidden" data-field="AGENTID" value="${t.AGENTID || ""}">
+      <input type="hidden" data-field="AGENTNAME" value="${t.AGENTNAME || ""}">
       
       <div class="driver-results" style="display:none;"></div>
       
@@ -462,7 +465,7 @@ window.enableEdit = function (btn) {
   const search = details.querySelector(".driver-search");
   const results = details.querySelector(".driver-results");
 
-  search.addEventListener("input", () => {
+  search.oninput = () => {
     const term = search.value.toLowerCase();
     results.innerHTML = "";
     results.style.display = "block";
@@ -479,6 +482,9 @@ window.enableEdit = function (btn) {
 
         row.onclick = () => {
           search.value = row.textContent;
+          search.dataset.originalText = search.value;
+          details.querySelector('[data-field="driverId"]').dataset.original =
+            details.querySelector('[data-field="driverId"]').value;
           details.querySelector('[data-field="driverId"]').value = id;
           details.querySelector('[data-field="AGENTID"]')?.value = id;
           details.querySelector('[data-field="AGENTNAME"]')?.value = d.name || "";
@@ -498,6 +504,12 @@ window.enableEdit = function (btn) {
 window.cancelEdit = function (btn) {
   const details = btn.closest(".task-details");
   const fields = details.querySelectorAll("input, textarea, select");
+
+  const search = details.querySelector(".driver-search");
+  search.value = search.dataset.originalText;
+  
+  const driverIdInput = details.querySelector('[data-field="driverId"]');
+  driverIdInput.value = driverIdInput.dataset.original;
 
   fields.forEach(el => {
     el.value = el.dataset.original;
