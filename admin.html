@@ -154,7 +154,7 @@ button {
 
 <body>
 
-<h2>🧑‍💼 Admin Dashboard V2.1.4</h2>
+<h2>🧑‍💼 Admin Dashboard V2.1.5</h2>
 
 <!-- ===== DASHBOARD ===== -->
 <div class="dashboard">
@@ -257,6 +257,15 @@ function getSLA(task) {
   return { text:"SLA Breached", cls:"sla-breach" };
 }
 
+let DRIVER_CACHE = {};
+
+async function loadDrivers() {
+  const snap = await get(ref(db, "drivers"));
+  DRIVER_CACHE = snap.val() || {};
+}
+
+loadDrivers();
+
 /* ===== DASHBOARD ===== */
 window.refreshDashboard = async function () {
   const snap = await get(ref(db,"tasks"));
@@ -290,6 +299,16 @@ import {
 function renderTaskDetails(t) {
   return `
     <div class="task-form">
+
+    <label class="small">ASSIGNED DRIVER</label>
+      <select data-field="driverId" disabled>
+        <option value="">— Unassigned —</option>
+        ${Object.entries(DRIVER_CACHE).map(([id, d]) => `
+          <option value="${id}" ${id === t.driverId ? "selected" : ""}>
+            ${id} - ${d.name || ""}
+          </option>
+        `).join("")}
+      </select>
 
       <div class="field">
         <label>JOB TYPE</label>
@@ -391,14 +410,29 @@ window.enableEdit = function (btn) {
 window.saveEdit = async function (btn) {
   const details = btn.closest(".task-details");
   const taskId = details.dataset.taskId;
-  const inputs = details.querySelectorAll("input, textarea");
 
+  const fields = details.querySelectorAll("input, textarea, select");
   const payload = {};
 
-  inputs.forEach(i => {
-    payload[i.dataset.field] = i.value.trim();
-    i.disabled = true;
+  let selectedDriverId = null;
+
+  fields.forEach(el => {
+    payload[el.dataset.field] = el.value;
+    el.disabled = true;
+
+    if (el.dataset.field === "driverId") {
+      selectedDriverId = el.value;
+    }
   });
+
+  // ✅ Sync agent name
+  if (selectedDriverId && DRIVER_CACHE[selectedDriverId]) {
+    payload.AGENTID = selectedDriverId;
+    payload.AGENTNAME = DRIVER_CACHE[selectedDriverId].name || "";
+  } else {
+    payload.AGENTID = "";
+    payload.AGENTNAME = "";
+  }
 
   await update(ref(db, `tasks/${taskId}`), payload);
 
@@ -407,20 +441,8 @@ window.saveEdit = async function (btn) {
   btn.parentElement.innerHTML = `
     <button class="toggleBtn" onclick="enableEdit(this)">✏ Modify Task</button>
   `;
-};
 
-window.cancelEdit = function (btn) {
-  const details = btn.closest(".task-details");
-  const inputs = details.querySelectorAll("input, textarea");
-
-  inputs.forEach(i => {
-    i.value = i.dataset.original;
-    i.disabled = true;
-  });
-
-  btn.parentElement.innerHTML = `
-    <button class="toggleBtn" onclick="enableEdit(this)">✏ Modify Task</button>
-  `;
+  refreshDashboard();
 };
   
   // 🔍 Search (client-side, fast now)
