@@ -64,7 +64,7 @@ button {
 
 <body>
 
-<h2>➕ Assign Task V2.0.2</h2>
+<h2>➕ Assign Task V2.0.3</h2>
 
 <button onclick="location.href='admin.html'"
   style="
@@ -248,21 +248,36 @@ searchInput.addEventListener("input", () => {
 });
 
 /* ===== BULK UPLOAD ===== */
-async function uploadCSV() {
-  const file = document.getElementById("csvFile").files[0];
-  if (!file) return alert("Select a CSV file");
+window.uploadCSV = async function () {
+  const fileInput = document.getElementById("csvFile");
+  const status = document.getElementById("uploadStatus");
+
+  if (!fileInput.files.length) {
+    alert("Please select a CSV file");
+    return;
+  }
+
+  const file = fileInput.files[0];
+  status.innerText = "⏳ Reading file...";
 
   const text = await file.text();
   const rows = text.split("\n").map(r => r.trim()).filter(r => r);
-  const headers = rows.shift().split(",");
 
+  if (rows.length < 2) {
+    status.innerText = "❌ CSV has no data rows";
+    return;
+  }
+
+  const headers = rows.shift().split(",").map(h => h.trim());
   let count = 0;
 
   for (const row of rows) {
-    const cols = row.split(",");
+    const values = row.split(",");
     const task = {};
 
-    headers.forEach((h, i) => task[h] = cols[i] || "");
+    headers.forEach((h, i) => {
+      task[h] = values[i]?.trim() || "";
+    });
 
     const taskId = `TASK_${Date.now()}_${count}`;
 
@@ -275,8 +290,8 @@ async function uploadCSV() {
     count++;
   }
 
-  uploadStatus.innerText = `✅ Uploaded ${count} tasks`;
-}
+  status.innerText = `✅ Uploaded ${count} tasks`;
+};
 
 /* ===== LOAD DRIVERS ===== */
 async function loadDrivers() {
