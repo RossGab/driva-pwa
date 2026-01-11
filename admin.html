@@ -367,6 +367,11 @@ window.loadTasks = async function (status) {
     ...raw[k]
   }));
 
+  // ✅ APPLY DRIVER FILTER (FROM MAP)
+if (FILTER_DRIVER) {
+  tasks = tasks.filter(t => t.driverId === FILTER_DRIVER);
+}
+
 window.enableEdit = function (btn) {
   const details = btn.closest(".task-details");
   const inputs = details.querySelectorAll("input, textarea");
