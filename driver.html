@@ -146,7 +146,7 @@ import {
   getStorage, ref as sRef, uploadBytes, getDownloadURL
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.3.8";
+const VERSION = "Driver v3.4.0";
 
 /* ================= CONFIG ================= */
 const firebaseConfig = {
@@ -300,6 +300,11 @@ const camera = document.getElementById("cameraInput");
 
 window.takePicture = key => {
   CURRENT_TASK = key;
+
+  if (isBillingJob(key) && !validateBilling(key)) {
+    return;
+  }
+
   camera.value = "";
   camera.click();
 };
@@ -342,7 +347,12 @@ camera.addEventListener("change", async e => {
       longitude: coords?.longitude,
       remarks,
       deliveryType,
-      filename
+      filename,
+    
+      // ✅ billing extras
+      receivedBy: document.getElementById(`receivedBy_${CURRENT_TASK}`)?.value || "",
+      relationship: document.getElementById(`relationship_${CURRENT_TASK}`)?.value || "",
+      gateColor: document.getElementById(`boxColor_${CURRENT_TASK}`)?.value || ""
     });
     setQueue(q);
     loadTasks();
@@ -378,7 +388,10 @@ async function uploadNow(taskKey, blob, takenAt, coords, remarks, deliveryType, 
     longitude: coords?.longitude,
     remarks,
     deliveryType,
-    filename
+    filename,
+    receivedBy: document.getElementById(`receivedBy_${taskKey}`)?.value || "",
+    relationship: document.getElementById(`relationship_${taskKey}`)?.value || "",
+    gateColor: document.getElementById(`boxColor_${taskKey}`)?.value || ""
   });
 
   loadTasks();
@@ -402,7 +415,10 @@ setInterval(async () => {
         { latitude: i.latitude, longitude: i.longitude },
         i.remarks,
         i.deliveryType,
-        i.filename
+        i.filename,
+        i.receivedBy,
+        i.relationship,
+        i.gateColor
       );
     } catch (err) {
       console.error("Retry upload failed", err);
@@ -454,6 +470,7 @@ function render(tasks) {
   tasks.forEach(t => {
     const q = offlineMap[t._key];
     const status = resolveStatus(t, q);
+    const isBilling = (t.JOBTYPE || "").toUpperCase().includes("BILLING");
 
     const div = document.createElement("div");
     div.className = `task ${status === "COMPLETED" ? "completed" : ""}`;
@@ -493,35 +510,20 @@ function render(tasks) {
     <b>Status:</b> ${status}
   </div>
 
-  <div class="radio-group">
-    <b>Delivery Method</b>
-    ${[
-      "D1-Received",
-      "D2-Put in Mailbox",
-      "D3-Inserted in Gate",
-      "D4-Slid Under Door/Window",
-      "D5-Delivered to SA",
-      "D6-Bagsakan"
-    ].map(v => `
-      <label>
-        <input type="radio"
-            name="delivery_${t._key}"
-            value="${v}"
-            ${status !== "PENDING" ? "disabled" : ""}
-          >
-        ${v}
-      </label>
-    `).join("")}
-  </div>
 
   ${
-    status === "PENDING"
-      ? `
+  status === "PENDING"
+    ? `
+      ${isBilling ? renderBillingDelivery(t) : ""}
+
+      ${!isBilling ? `
         <textarea id="remarks_${t._key}" placeholder="Remarks (optional)"></textarea>
-        <button class="capture" onclick="takePicture('${t._key}')">
-          📸 Take Picture
-        </button>
-      `
+      ` : ""}
+
+      <button class="capture" onclick="takePicture('${t._key}')">
+        📸 Take Picture
+      </button>
+    `
       : `
         ${t.remarks ? `<div class="small">📝 ${t.remarks}</div>` : ""}
         ${
@@ -546,8 +548,103 @@ function render(tasks) {
   });
 }
 
+function renderBillingDelivery(t) {
+  return `
+    <div class="radio-group">
+      <b>Delivery Method</b>
+
+      ${billingOption(t, "D1-Received")}
+      ${billingOption(t, "D2-Put in Mailbox")}
+      ${billingOption(t, "D3-Inserted in Gate")}
+      ${billingOption(t, "D4-Slid Under Door/Window")}
+      ${billingOption(t, "D5-Delivered to SA")}
+      ${billingOption(t, "D6-Bagsakan")}
+    </div>
+
+    <div id="billing_extra_${t._key}"></div>
+  `;
+}
+
+function billingOption(t, value) {
+  const disabled = t.status === "COMPLETED" ? "disabled" : "";
+
+  return `
+    <label>
+      <input type="radio"
+        name="delivery_${t._key}"
+        value="${value}"
+        ${disabled}
+        onchange="showBillingFields('${t._key}', '${value}')">
+      ${value}
+    </label>
+  `;
+}
+  
+window.showBillingFields = function (taskKey, value) {
+  const box = document.getElementById(`billing_extra_${taskKey}`);
+  if (!box) return;
+
+  let html = "";
+
+  if (value === "D1-Received") {
+    html = `
+      <input id="receivedBy_${taskKey}" placeholder="Received by *">
+      <input id="relationship_${taskKey}" placeholder="Relationship to owner *">
+      <textarea id="remarks_${taskKey}" placeholder="Other remarks"></textarea>
+    `;
+  }
+
+  else if (value === "D2-Put in Mailbox" || value === "D3-Inserted in Gate") {
+    html = `
+      <input id="boxColor_${taskKey}" placeholder="Gate / Mailbox Color *">
+      <textarea id="remarks_${taskKey}" placeholder="Other remarks"></textarea>
+    `;
+  }
+
+  else {
+    html = `
+      <textarea id="remarks_${taskKey}" placeholder="Other remarks"></textarea>
+    `;
+  }
+
+  box.innerHTML = html;
+};
+
+function isBillingJob(taskKey) {
+  const cached = JSON.parse(localStorage.getItem("cachedTasks") || "[]");
+  const t = cached.find(x => x._key === taskKey);
+  return (t?.JOBTYPE || "").toUpperCase().includes("BILLING");
+}
+
+function validateBilling(taskKey) {
+  const selected = document.querySelector(`input[name="delivery_${taskKey}"]:checked`);
+  if (!selected) {
+    alert("Please select delivery method");
+    return false;
+  }
+
+  if (selected.value === "D1-Received") {
+    if (!document.getElementById(`receivedBy_${taskKey}`)?.value ||
+        !document.getElementById(`relationship_${taskKey}`)?.value) {
+      alert("Received by and relationship are required");
+      return false;
+    }
+  }
+
+  if (["D2-Put in Mailbox", "D3-Inserted in Gate"].includes(selected.value)) {
+    if (!document.getElementById(`boxColor_${taskKey}`)?.value) {
+      alert("Gate/Mailbox color is required");
+      return false;
+    }
+  }
+
+  return true;
+}
+
 loadTasks();
 </script>
+
+
 
 <script>
 if ("serviceWorker" in navigator) {
