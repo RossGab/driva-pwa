@@ -148,7 +148,7 @@ import {
   getStorage, ref as sRef, uploadBytes, getDownloadURL
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.4.12";
+const VERSION = "Driver v3.4.13";
   // 🔒 Billing data cache (per task)
 const BILLING_CACHE = {};
 
@@ -357,12 +357,20 @@ loadTasks();
 let blob;
 try {
   blob = await compressImage(e.target.files[0]);
-  saveToGallery(blob, filename);
-} finally {
+} catch (e) {
+  alert("Image processing failed");
   delete processingMap[CURRENT_TASK];
   loadTasks();
+  return;
 }
 
+// 📸 SAVE TO GALLERY STILL COUNTS AS PROCESSING
+saveToGallery(blob, filename);
+
+// ✅ NOW processing is DONE
+delete processingMap[CURRENT_TASK];
+loadTasks();
+  
 // ================= OFFLINE =================
 if (!navigator.onLine) {
   const q = getQueue();
