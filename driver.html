@@ -148,7 +148,7 @@ import {
   getStorage, ref as sRef, uploadBytes, getDownloadURL
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.4.3";
+const VERSION = "Driver v3.4.4";
   // 🔒 Billing data cache (per task)
 const BILLING_CACHE = {};
 
@@ -369,7 +369,20 @@ camera.addEventListener("change", async e => {
   loadTasks();
 
   try {
-    await uploadNow(CURRENT_TASK, blob, takenAt, coords, remarks, deliveryType, filename);
+    const billing = BILLING_CACHE[CURRENT_TASK] || {};
+
+    await uploadNow(
+      CURRENT_TASK,
+      blob,
+      takenAt,
+      coords,
+      billing.remarks || remarks || "",
+      billing.deliveryType || deliveryType || "",
+      filename,
+      billing.receivedBy || "",
+      billing.relationship || "",
+      billing.gateColor || ""
+    );
   } catch {
     alert("Upload failed. Please retake the photo.");
   }
