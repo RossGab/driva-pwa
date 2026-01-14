@@ -148,7 +148,7 @@ import {
   getStorage, ref as sRef, uploadBytes, getDownloadURL
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.4.8";
+const VERSION = "Driver v3.4.2";
   // 🔒 Billing data cache (per task)
 const BILLING_CACHE = {};
 
@@ -170,14 +170,7 @@ const storage = getStorage(app);
 /* ================= CONSTANTS ================= */
 const QUEUE_KEY = "offlineQueue";
 const TASK_CACHE_KEY = "cachedTasks";
-const PRIORITY = {
-  PENDING: 1,
-  PROCESSING: 1.5,
-  UPLOADING: 2,
-  SAVED: 2,
-  COMPLETED: 3
-};
-const processingMap = {};
+const PRIORITY = { PENDING: 1, UPLOADING: 2, SAVED: 2, COMPLETED: 3 };
 const uploadingMap = {};
 let SEARCH_TERM = "";
 
@@ -299,25 +292,17 @@ function saveToGallery(blob, filename) {
 
 /* ================= STATUS ================= */
 function resolveStatus(task, offlineItem) {
-  const key = task._key;
-
-  if (processingMap && processingMap[key] === true) return "PROCESSING";
   if (task.status === "COMPLETED") return "COMPLETED";
-  if (uploadingMap && uploadingMap[key] === true) return "UPLOADING";
+  if (uploadingMap[task._key]) return "UPLOADING";
   if (offlineItem || task.imageUrl) return "SAVED";
   return "PENDING";
 }
-  
+
 /* ================= CAMERA ================= */
 let CURRENT_TASK = null;
 const camera = document.getElementById("cameraInput");
 
 window.takePicture = key => {
-  // 🛑 HARD GUARD: prevent double tap / race
-  if (processingMap[key] || uploadingMap[key]) {
-    return;
-  }
-
   CURRENT_TASK = key;
 
   if (isBillingJob(key) && !validateBilling(key)) {
@@ -327,7 +312,7 @@ window.takePicture = key => {
   camera.value = "";
   camera.click();
 };
-  
+
 camera.addEventListener("change", async e => {
   if (!e.target.files[0] || !CURRENT_TASK) return;
 
@@ -343,20 +328,9 @@ camera.addEventListener("change", async e => {
     return;
   }
 
-  
-  processingMap[CURRENT_TASK] = true;
-    loadTasks();
-    
-    let blob;
-    try {
-      blob = await compressImage(e.target.files[0]);
-    } finally {
-      delete processingMap[CURRENT_TASK];
-      loadTasks();
-    }
-
-const coords = await getLocation();
-const takenAt = new Date().toISOString();
+  const blob = await compressImage(e.target.files[0]);
+  const coords = await getLocation();
+  const takenAt = new Date().toISOString();
 
   const cached = JSON.parse(localStorage.getItem(TASK_CACHE_KEY) || "[]");
   const task = cached.find(t => t._key === CURRENT_TASK);
@@ -366,7 +340,6 @@ const takenAt = new Date().toISOString();
     `${safe(task?.name)}_${safe(task?.address)}_${coords?.latitude || "0"}_${coords?.longitude || "0"}_${takenAt.replace(/[:.]/g, "-")}_${DRIVER_ID}.jpg`;
 
   saveToGallery(blob, filename);
-  
 
   if (!navigator.onLine) {
     const q = getQueue();
@@ -396,20 +369,7 @@ const takenAt = new Date().toISOString();
   loadTasks();
 
   try {
-    const billing = BILLING_CACHE[CURRENT_TASK] || {};
-
-    await uploadNow(
-      CURRENT_TASK,
-      blob,
-      takenAt,
-      coords,
-      billing.remarks || remarks || "",
-      billing.deliveryType || deliveryType || "",
-      filename,
-      billing.receivedBy || "",
-      billing.relationship || "",
-      billing.gateColor || ""
-    );
+    await uploadNow(CURRENT_TASK, blob, takenAt, coords, remarks, deliveryType, filename);
   } catch {
     alert("Upload failed. Please retake the photo.");
   }
@@ -580,32 +540,14 @@ function render(tasks) {
         <textarea id="remarks_${t._key}" placeholder="Remarks (optional)"></textarea>
       ` : ""}
 
-      <button
-        class="capture"
-        ${processingMap[t._key] || uploadingMap[t._key] ? "disabled" : ""}
-        onclick="takePicture('${t._key}')">
+      <button class="capture" onclick="takePicture('${t._key}')">
         📸 Take Picture
       </button>
     `
       : `
         ${t.remarks ? `<div class="small">📝 ${t.remarks}</div>` : ""}
-
-          ${status === "PROCESSING"
-            ? `<div class="uploading">🛠 Preparing photo…</div>`
-            : ""
-          }
-          
-          ${status === "UPLOADING"
-            ? `<div class="uploading">⏳ Uploading…</div>`
-            : ""
-          }
-          
-          ${q && status !== "COMPLETED"
-            ? `<div class="offline-indicator">🕒 Saved offline — upload pending</div>`
-            : ""
-          }
-          
-          ${status === "COMPLETED"
+        ${
+          status === "COMPLETED"
             ? `
               <button class="toggle"
                 onclick="this.nextElementSibling.style.display =
@@ -614,8 +556,13 @@ function render(tasks) {
               </button>
               <img src="${t.imageUrl}" style="display:none">
             `
-            : ""
-          }
+            : `
+              <div class="uploading">⏳ Uploading…</div>
+              ${q ? `<div class="offline-indicator">🕒 Saved offline — upload pending</div>` : ""}
+            `
+        }
+      `
+  }
 `;
     list.appendChild(div);
   });
@@ -714,45 +661,23 @@ function isBillingJob(taskKey) {
 }
 
 function validateBilling(taskKey) {
-  // 🔁 Ensure cache exists
-  if (!BILLING_CACHE[taskKey]) {
-    BILLING_CACHE[taskKey] = {};
-  }
+  const data = BILLING_CACHE[taskKey];
 
-  const cache = BILLING_CACHE[taskKey];
-
-  // 🔁 SYNC FROM DOM → CACHE (CRITICAL FIX)
-  cache.receivedBy =
-    cache.receivedBy ||
-    document.querySelector(`#billing_extra_${taskKey} input[placeholder^="Received"]`)?.value || "";
-
-  cache.relationship =
-    cache.relationship ||
-    document.querySelector(`#billing_extra_${taskKey} input[placeholder^="Relationship"]`)?.value || "";
-
-  cache.gateColor =
-    cache.gateColor ||
-    document.querySelector(`#billing_extra_${taskKey} input[placeholder^="Gate"]`)?.value || "";
-
-  cache.remarks =
-    cache.remarks ||
-    document.querySelector(`#billing_extra_${taskKey} textarea`)?.value || "";
-
-  if (!cache.deliveryType) {
+  if (!data || !data.deliveryType) {
     alert("Please select delivery method");
     return false;
   }
 
-  if (cache.deliveryType === "D1-Received") {
-    if (!cache.receivedBy || !cache.relationship) {
+  if (data.deliveryType === "D1-Received") {
+    if (!data.receivedBy || !data.relationship) {
       alert("Received by and relationship are required");
       return false;
     }
   }
 
   if (
-    ["D2-Put in Mailbox", "D3-Inserted in Gate"].includes(cache.deliveryType)
-    && !cache.gateColor
+    ["D2-Put in Mailbox", "D3-Inserted in Gate"].includes(data.deliveryType)
+    && !data.gateColor
   ) {
     alert("Gate / Mailbox color is required");
     return false;
@@ -760,19 +685,9 @@ function validateBilling(taskKey) {
 
   return true;
 }
-
-// 🔁 ANDROID PWA RESUME FIX (STEP 1)
-document.addEventListener("visibilitychange", () => {
-  if (document.visibilityState === "visible") {
-    console.log("App resumed → reloading tasks");
-    loadTasks();
-  }
-});
   
 loadTasks();
 </script>
-
-
 
 
 
@@ -781,8 +696,6 @@ if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("./sw.js");
 }
 </script>
-
-
 
 </body>
 </html>
