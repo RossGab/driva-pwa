@@ -148,7 +148,7 @@ import {
   getStorage, ref as sRef, uploadBytes, getDownloadURL
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.4.6";
+const VERSION = "Driver v3.4.7";
   // 🔒 Billing data cache (per task)
 const BILLING_CACHE = {};
 
@@ -299,9 +299,11 @@ function saveToGallery(blob, filename) {
 
 /* ================= STATUS ================= */
 function resolveStatus(task, offlineItem) {
-  if (processingMap[task._key]) return "PROCESSING";
+  const key = task._key;
+
+  if (processingMap && processingMap[key] === true) return "PROCESSING";
   if (task.status === "COMPLETED") return "COMPLETED";
-  if (uploadingMap[task._key]) return "UPLOADING";
+  if (uploadingMap && uploadingMap[key] === true) return "UPLOADING";
   if (offlineItem || task.imageUrl) return "SAVED";
   return "PENDING";
 }
@@ -576,8 +578,7 @@ function render(tasks) {
       <button
         class="capture"
         ${processingMap[t._key] || uploadingMap[t._key] ? "disabled" : ""}
-        onclick="takePicture('${t._key}')"
-      >
+        onclick="takePicture('${t._key}')">
         📸 Take Picture
       </button>
     `
