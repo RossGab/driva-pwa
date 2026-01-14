@@ -188,7 +188,7 @@ button {
 
 <body>
 
-<h2>🧑‍💼 Admin Dashboard V2.1.17</h2>
+<h2>🧑‍💼 Admin Dashboard V2.1.18</h2>
 
 <!-- ===== DASHBOARD ===== -->
 <div class="dashboard">
@@ -334,7 +334,8 @@ function renderTaskDetails(t) {
   return `
     <div class="task-form">
 
-    <label class="small">ASSIGNED DRIVER</label>
+      <!-- ASSIGNED DRIVER -->
+      <label class="small">ASSIGNED DRIVER</label>
       <select data-field="driverId" disabled>
         <option value="">— Unassigned —</option>
         ${Object.entries(DRIVER_CACHE).map(([id, d]) => `
@@ -393,6 +394,44 @@ function renderTaskDetails(t) {
         <label>ZIP CODE</label>
         <input data-field="ZIPCODE" value="${t.ZIPCODE || ""}" disabled>
       </div>
+
+      <!-- 📦 DELIVERY FIELDS -->
+      <div class="field">
+        <label>DELIVERY METHOD</label>
+        <input data-field="deliveryType" value="${t.deliveryType || ""}" disabled>
+      </div>
+
+      <div class="field">
+        <label>RECEIVED BY</label>
+        <input data-field="receivedBy" value="${t.receivedBy || ""}" disabled>
+      </div>
+
+      <div class="field">
+        <label>RELATIONSHIP</label>
+        <input data-field="relationship" value="${t.relationship || ""}" disabled>
+      </div>
+
+      <div class="field">
+        <label>GATE / MAILBOX COLOR</label>
+        <input data-field="gateColor" value="${t.gateColor || ""}" disabled>
+      </div>
+
+      <div class="field full">
+        <label>REMARKS</label>
+        <textarea data-field="remarks" disabled>${t.remarks || ""}</textarea>
+      </div>
+
+      <!-- 📍 GEO LOCATION -->
+      <div class="field">
+        <label>LATITUDE</label>
+        <input data-field="latitude" value="${t.latitude || ""}" disabled>
+      </div>
+
+      <div class="field">
+        <label>LONGITUDE</label>
+        <input data-field="longitude" value="${t.longitude || ""}" disabled>
+      </div>
+
     </div>
   `;
 }
@@ -549,14 +588,6 @@ div.innerHTML = `
         border-radius:6px;
         font-size:13px;
       ">
-        <b>📦 Delivery Summary</b><br>
-        <div>Method: <b>${t.deliveryType}</b></div>
-        ${t.gateColor ? `<div>Gate / Mailbox Color: <b>${t.gateColor}</b></div>` : ""}
-        ${t.receivedBy ? `<div>Received By: <b>${t.receivedBy}</b></div>` : ""}
-        ${t.relationship ? `<div>Relationship: <b>${t.relationship}</b></div>` : ""}
-        ${t.takenAt ? `<div>Taken At: ${new Date(t.takenAt).toLocaleString()}</div>` : ""}
-        ${t.uploadedAt ? `<div>Uploaded At: ${new Date(t.uploadedAt).toLocaleString()}</div>` : ""}
-      </div>
     ` : ""}
 
     ${t.status === "COMPLETED" && t.remarks ? `
