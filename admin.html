@@ -188,7 +188,7 @@ button {
 
 <body>
 
-<h2>🧑‍💼 Admin Dashboard V2.1.19</h2>
+<h2>🧑‍💼 Admin Dashboard V2.1.20</h2>
 
 <!-- ===== DASHBOARD ===== -->
 <div class="dashboard">
@@ -334,8 +334,7 @@ function renderTaskDetails(t) {
   return `
     <div class="task-form">
 
-      <!-- ASSIGNED DRIVER -->
-      <label class="small">ASSIGNED DRIVER</label>
+      <label>ASSIGNED DRIVER</label>
       <select data-field="driverId" disabled>
         <option value="">— Unassigned —</option>
         ${Object.entries(DRIVER_CACHE).map(([id, d]) => `
@@ -345,97 +344,61 @@ function renderTaskDetails(t) {
         `).join("")}
       </select>
 
-      <div class="field">
-        <label>JOB TYPE</label>
-        <input data-field="JOBTYPE" value="${t.JOBTYPE || ""}" disabled>
-      </div>
+      <label>JOB TYPE</label>
+      <input data-field="JOBTYPE" value="${t.JOBTYPE || ""}" disabled>
 
-      <div class="field">
-        <label>BA</label>
-        <input data-field="BA" value="${t.BA || ""}" disabled>
-      </div>
+      <label>BA</label>
+      <input data-field="BA" value="${t.BA || ""}" disabled>
 
-      <div class="field">
-        <label>DMZ</label>
-        <input data-field="DMZ" value="${t.DMZ || ""}" disabled>
-      </div>
+      <label>DMZ</label>
+      <input data-field="DMZ" value="${t.DMZ || ""}" disabled>
 
-      <div class="field">
-        <label>MRU</label>
-        <input data-field="MRU" value="${t.MRU || ""}" disabled>
-      </div>
+      <label>MRU</label>
+      <input data-field="MRU" value="${t.MRU || ""}" disabled>
 
-      <div class="field">
-        <label>SEQUENCE</label>
-        <input data-field="SEQUENCE" value="${t.SEQUENCE || ""}" disabled>
-      </div>
+      <label>SEQUENCE</label>
+      <input data-field="SEQUENCE" value="${t.SEQUENCE || ""}" disabled>
 
-      <div class="field">
-        <label>METER NUMBER</label>
-        <input data-field="METERNUMBER" value="${t.METERNUMBER || ""}" disabled>
-      </div>
+      <label>METER NUMBER</label>
+      <input data-field="METERNUMBER" value="${t.METERNUMBER || ""}" disabled>
 
-      <div class="field">
-        <label>ACCOUNT NUMBER</label>
-        <input data-field="ACCOUNTNUMBER" value="${t.ACCOUNTNUMBER || ""}" disabled>
-      </div>
+      <label>ACCOUNT NUMBER</label>
+      <input data-field="ACCOUNTNUMBER" value="${t.ACCOUNTNUMBER || ""}" disabled>
 
-      <div class="field">
-        <label>CUSTOMER NAME</label>
-        <input data-field="CUSTOMERNAME" value="${t.CUSTOMERNAME || ""}" disabled>
-      </div>
+      <label>CUSTOMER NAME</label>
+      <input data-field="CUSTOMERNAME" value="${t.CUSTOMERNAME || ""}" disabled>
 
-      <div class="field full">
-        <label>ADDRESS</label>
-        <textarea data-field="ADDRESS" disabled>${t.ADDRESS || ""}</textarea>
-      </div>
+      <label class="full">ADDRESS</label>
+      <textarea class="full" data-field="ADDRESS" disabled>${t.ADDRESS || ""}</textarea>
 
-      <div class="field">
-        <label>ZIP CODE</label>
-        <input data-field="ZIPCODE" value="${t.ZIPCODE || ""}" disabled>
-      </div>
+      <label>ZIP CODE</label>
+      <input data-field="ZIPCODE" value="${t.ZIPCODE || ""}" disabled>
 
-      <!-- 📦 DELIVERY FIELDS -->
-      <div class="field">
-        <label>DELIVERY METHOD</label>
-        <input data-field="deliveryType" value="${t.deliveryType || ""}" disabled>
-      </div>
+      <label>DELIVERY TYPE</label>
+      <input data-field="deliveryType" value="${t.deliveryType || ""}" disabled>
 
-      <div class="field">
-        <label>RECEIVED BY</label>
-        <input data-field="receivedBy" value="${t.receivedBy || ""}" disabled>
-      </div>
+      <label>RECEIVED BY</label>
+      <input data-field="receivedBy" value="${t.receivedBy || ""}" disabled>
 
-      <div class="field">
-        <label>RELATIONSHIP</label>
-        <input data-field="relationship" value="${t.relationship || ""}" disabled>
-      </div>
+      <label>RELATIONSHIP</label>
+      <input data-field="relationship" value="${t.relationship || ""}" disabled>
 
-      <div class="field">
-        <label>GATE / MAILBOX COLOR</label>
-        <input data-field="gateColor" value="${t.gateColor || ""}" disabled>
-      </div>
+      <label>GATE / MAILBOX COLOR</label>
+      <input data-field="gateColor" value="${t.gateColor || ""}" disabled>
 
-      <div class="field full">
-        <label>REMARKS</label>
-        <textarea data-field="remarks" disabled>${t.remarks || ""}</textarea>
-      </div>
+      <label class="full">REMARKS</label>
+      <textarea class="full" data-field="remarks" disabled>${t.remarks || ""}</textarea>
 
-      <!-- 📍 GEO LOCATION -->
-      <div class="field">
-        <label>LATITUDE</label>
-        <input data-field="latitude" value="${t.latitude || ""}" disabled>
-      </div>
+      <label>LATITUDE</label>
+      <input data-field="latitude" value="${t.latitude || ""}" disabled>
 
-      <div class="field">
-        <label>LONGITUDE</label>
-        <input data-field="longitude" value="${t.longitude || ""}" disabled>
-      </div>
+      <label>LONGITUDE</label>
+      <input data-field="longitude" value="${t.longitude || ""}" disabled>
 
     </div>
   `;
 }
-
+  
 window.showCompletedTasks = function () {
   // 🔥 EXIT MAP MODE COMPLETELY
   MAP_VISIBLE = false;
