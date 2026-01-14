@@ -148,7 +148,7 @@ import {
   getStorage, ref as sRef, uploadBytes, getDownloadURL
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.4.4";
+const VERSION = "Driver v3.4.5";
   // 🔒 Billing data cache (per task)
 const BILLING_CACHE = {};
 
@@ -170,7 +170,14 @@ const storage = getStorage(app);
 /* ================= CONSTANTS ================= */
 const QUEUE_KEY = "offlineQueue";
 const TASK_CACHE_KEY = "cachedTasks";
-const PRIORITY = { PENDING: 1, UPLOADING: 2, SAVED: 2, COMPLETED: 3 };
+const PRIORITY = {
+  PENDING: 1,
+  PROCESSING: 1.5,
+  UPLOADING: 2,
+  SAVED: 2,
+  COMPLETED: 3
+};
+const processingMap = {};
 const uploadingMap = {};
 let SEARCH_TERM = "";
 
@@ -292,12 +299,13 @@ function saveToGallery(blob, filename) {
 
 /* ================= STATUS ================= */
 function resolveStatus(task, offlineItem) {
+  if (processingMap[task._key]) return "PROCESSING";
   if (task.status === "COMPLETED") return "COMPLETED";
   if (uploadingMap[task._key]) return "UPLOADING";
   if (offlineItem || task.imageUrl) return "SAVED";
   return "PENDING";
 }
-
+  
 /* ================= CAMERA ================= */
 let CURRENT_TASK = null;
 const camera = document.getElementById("cameraInput");
@@ -328,6 +336,9 @@ camera.addEventListener("change", async e => {
     return;
   }
 
+  
+  processingMap[CURRENT_TASK] = true;
+  loadTasks();
   const blob = await compressImage(e.target.files[0]);
   const coords = await getLocation();
   const takenAt = new Date().toISOString();
@@ -340,6 +351,8 @@ camera.addEventListener("change", async e => {
     `${safe(task?.name)}_${safe(task?.address)}_${coords?.latitude || "0"}_${coords?.longitude || "0"}_${takenAt.replace(/[:.]/g, "-")}_${DRIVER_ID}.jpg`;
 
   saveToGallery(blob, filename);
+  delete processingMap[CURRENT_TASK];
+  loadTasks();
 
   if (!navigator.onLine) {
     const q = getQueue();
@@ -559,8 +572,23 @@ function render(tasks) {
     `
       : `
         ${t.remarks ? `<div class="small">📝 ${t.remarks}</div>` : ""}
-        ${
-          status === "COMPLETED"
+
+          ${status === "PROCESSING"
+            ? `<div class="uploading">🛠 Preparing photo…</div>`
+            : ""
+          }
+          
+          ${status === "UPLOADING"
+            ? `<div class="uploading">⏳ Uploading…</div>`
+            : ""
+          }
+          
+          ${q && status !== "COMPLETED"
+            ? `<div class="offline-indicator">🕒 Saved offline — upload pending</div>`
+            : ""
+          }
+          
+          ${status === "COMPLETED"
             ? `
               <button class="toggle"
                 onclick="this.nextElementSibling.style.display =
@@ -569,13 +597,8 @@ function render(tasks) {
               </button>
               <img src="${t.imageUrl}" style="display:none">
             `
-            : `
-              <div class="uploading">⏳ Uploading…</div>
-              ${q ? `<div class="offline-indicator">🕒 Saved offline — upload pending</div>` : ""}
-            `
-        }
-      `
-  }
+            : ""
+          }
 `;
     list.appendChild(div);
   });
