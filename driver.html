@@ -148,7 +148,7 @@ import {
   getStorage, ref as sRef, uploadBytes, getDownloadURL
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.4.7";
+const VERSION = "Driver v3.4.8";
   // 🔒 Billing data cache (per task)
 const BILLING_CACHE = {};
 
@@ -313,6 +313,11 @@ let CURRENT_TASK = null;
 const camera = document.getElementById("cameraInput");
 
 window.takePicture = key => {
+  // 🛑 HARD GUARD: prevent double tap / race
+  if (processingMap[key] || uploadingMap[key]) {
+    return;
+  }
+
   CURRENT_TASK = key;
 
   if (isBillingJob(key) && !validateBilling(key)) {
@@ -322,7 +327,7 @@ window.takePicture = key => {
   camera.value = "";
   camera.click();
 };
-
+  
 camera.addEventListener("change", async e => {
   if (!e.target.files[0] || !CURRENT_TASK) return;
 
