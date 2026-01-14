@@ -148,7 +148,7 @@ import {
   getStorage, ref as sRef, uploadBytes, getDownloadURL
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.4.11";
+const VERSION = "Driver v3.4.12";
   // 🔒 Billing data cache (per task)
 const BILLING_CACHE = {};
 
@@ -568,39 +568,42 @@ function render(tasks) {
 
 
   ${
-  status === "PENDING"
-    ? `
-      ${isBilling ? renderBillingDelivery(t) : ""}
-
-      ${!isBilling ? `
-        <textarea id="remarks_${t._key}" placeholder="Remarks (optional)"></textarea>
-      ` : ""}
-
-      <button
-        class="capture"
-        ${processingMap[t._key] || uploadingMap[t._key] ? "disabled" : ""}
-        onclick="takePicture('${t._key}')">
-    `
-      : `
-        ${t.remarks ? `<div class="small">📝 ${t.remarks}</div>` : ""}
-        ${status === "PROCESSING"
-            ? `<div class="uploading">🛠 Preparing photo…</div>`
-            : status === "UPLOADING"
-              ? `<div class="uploading">⏳ Uploading…</div>`
-              : status === "COMPLETED"
-                ? `
-                  <button class="toggle"
-                    onclick="this.nextElementSibling.style.display =
-                    this.nextElementSibling.style.display === 'none' ? 'block' : 'none'">
-                    👁 Show / Hide Photo
-                  </button>
-                  <img src="${t.imageUrl}" style="display:none">
-                `
-                : q
-                  ? `<div class="offline-indicator">🕒 Saved offline — upload pending</div>`
-                  : ""
-          }
+    status === "PENDING"
+      ? `
+        ${isBilling ? renderBillingDelivery(t) : ""}
+  
+        ${!isBilling ? `
+          <textarea id="remarks_${t._key}" placeholder="Remarks (optional)"></textarea>
+        ` : ""}
+  
+        <button class="capture" onclick="takePicture('${t._key}')">
+          📸 Take Picture
+        </button>
       `
+      : status === "PROCESSING"
+      ? `
+        <div class="uploading">🛠 Preparing photo…</div>
+      `
+      : status === "UPLOADING"
+      ? `
+        <div class="uploading">⏳ Uploading photo…</div>
+      `
+      : status === "SAVED"
+      ? `
+        <div class="offline-indicator">🕒 Saved offline — upload pending</div>
+      `
+      : status === "COMPLETED"
+      ? `
+        ${t.remarks ? `<div class="small">📝 ${t.remarks}</div>` : ""}
+  
+        <button class="toggle"
+          onclick="this.nextElementSibling.style.display =
+          this.nextElementSibling.style.display === 'none' ? 'block' : 'none'">
+          👁 Show / Hide Photo
+        </button>
+        <img src="${t.imageUrl}" style="display:none">
+      `
+      : ""
   }
 `;
     list.appendChild(div);
