@@ -135,6 +135,9 @@ img {
 
 <input type="file" id="cameraInput" accept="image/*" capture="environment" hidden>
 
+// 🔒 Billing data cache (per task)
+const BILLING_CACHE = {};
+
 <script type="module">
   
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
@@ -146,7 +149,7 @@ import {
   getStorage, ref as sRef, uploadBytes, getDownloadURL
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.4.0";
+const VERSION = "Driver v3.4.1";
 
 /* ================= CONFIG ================= */
 const firebaseConfig = {
@@ -389,9 +392,11 @@ async function uploadNow(taskKey, blob, takenAt, coords, remarks, deliveryType, 
     remarks,
     deliveryType,
     filename,
-    receivedBy: document.getElementById(`receivedBy_${taskKey}`)?.value || "",
-    relationship: document.getElementById(`relationship_${taskKey}`)?.value || "",
-    gateColor: document.getElementById(`boxColor_${taskKey}`)?.value || ""
+    deliveryType: billing.deliveryType || "",
+    remarks: billing.remarks || "",
+    receivedBy: billing.receivedBy || "",
+    relationship: billing.relationship || "",
+    gateColor: billing.gateColor || ""
   });
 
   loadTasks();
@@ -579,35 +584,59 @@ function billingOption(t, value) {
     </label>
   `;
 }
+  window.showBillingFields = function (taskKey, value) {
+    if (!BILLING_CACHE[taskKey]) {
+      BILLING_CACHE[taskKey] = {};
+    }
   
-window.showBillingFields = function (taskKey, value) {
-  const box = document.getElementById(`billing_extra_${taskKey}`);
-  if (!box) return;
-
-  let html = "";
-
-  if (value === "D1-Received") {
-    html = `
-      <input id="receivedBy_${taskKey}" placeholder="Received by *">
-      <input id="relationship_${taskKey}" placeholder="Relationship to owner *">
-      <textarea id="remarks_${taskKey}" placeholder="Other remarks"></textarea>
-    `;
-  }
-
-  else if (value === "D2-Put in Mailbox" || value === "D3-Inserted in Gate") {
-    html = `
-      <input id="boxColor_${taskKey}" placeholder="Gate / Mailbox Color *">
-      <textarea id="remarks_${taskKey}" placeholder="Other remarks"></textarea>
-    `;
-  }
-
-  else {
-    html = `
-      <textarea id="remarks_${taskKey}" placeholder="Other remarks"></textarea>
-    `;
-  }
-
-  box.innerHTML = html;
+    BILLING_CACHE[taskKey].deliveryType = value;
+  
+    const box = document.getElementById(`billing_extra_${taskKey}`);
+    if (!box) return;
+  
+    let html = "";
+  
+    if (value === "D1-Received") {
+      html = `
+        <input
+          placeholder="Received by *"
+          oninput="BILLING_CACHE['${taskKey}'].receivedBy = this.value"
+        >
+        <input
+          placeholder="Relationship to owner *"
+          oninput="BILLING_CACHE['${taskKey}'].relationship = this.value"
+        >
+        <textarea
+          placeholder="Other remarks"
+          oninput="BILLING_CACHE['${taskKey}'].remarks = this.value"
+        ></textarea>
+      `;
+    }
+  
+    else if (value === "D2-Put in Mailbox" || value === "D3-Inserted in Gate") {
+      html = `
+        <input
+          placeholder="Gate / Mailbox Color *"
+          oninput="BILLING_CACHE['${taskKey}'].gateColor = this.value"
+        >
+        <textarea
+          placeholder="Other remarks"
+          oninput="BILLING_CACHE['${taskKey}'].remarks = this.value"
+        ></textarea>
+      `;
+    }
+  
+    else {
+      html = `
+        <textarea
+          placeholder="Other remarks"
+          oninput="BILLING_CACHE['${taskKey}'].remarks = this.value"
+        ></textarea>
+      `;
+    }
+  
+    box.innerHTML = html;
+  };
 };
 
 function isBillingJob(taskKey) {
@@ -617,30 +646,31 @@ function isBillingJob(taskKey) {
 }
 
 function validateBilling(taskKey) {
-  const selected = document.querySelector(`input[name="delivery_${taskKey}"]:checked`);
-  if (!selected) {
+  const data = BILLING_CACHE[taskKey];
+
+  if (!data || !data.deliveryType) {
     alert("Please select delivery method");
     return false;
   }
 
-  if (selected.value === "D1-Received") {
-    if (!document.getElementById(`receivedBy_${taskKey}`)?.value ||
-        !document.getElementById(`relationship_${taskKey}`)?.value) {
+  if (data.deliveryType === "D1-Received") {
+    if (!data.receivedBy || !data.relationship) {
       alert("Received by and relationship are required");
       return false;
     }
   }
 
-  if (["D2-Put in Mailbox", "D3-Inserted in Gate"].includes(selected.value)) {
-    if (!document.getElementById(`boxColor_${taskKey}`)?.value) {
-      alert("Gate/Mailbox color is required");
-      return false;
-    }
+  if (
+    ["D2-Put in Mailbox", "D3-Inserted in Gate"].includes(data.deliveryType)
+    && !data.gateColor
+  ) {
+    alert("Gate / Mailbox color is required");
+    return false;
   }
 
   return true;
 }
-
+  
 loadTasks();
 </script>
 
