@@ -148,7 +148,7 @@ import {
   getStorage, ref as sRef, uploadBytes, getDownloadURL
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.4.1";
+const VERSION = "Driver v3.4.2";
   // 🔒 Billing data cache (per task)
 const BILLING_CACHE = {};
 
@@ -343,21 +343,23 @@ camera.addEventListener("change", async e => {
 
   if (!navigator.onLine) {
     const q = getQueue();
-    q.push({
-      taskKey: CURRENT_TASK,
-      image: await toBase64(blob),
-      takenAt,
-      latitude: coords?.latitude,
-      longitude: coords?.longitude,
-      remarks,
-      deliveryType,
-      filename,
-    
-      // ✅ billing extras
-      receivedBy: document.getElementById(`receivedBy_${CURRENT_TASK}`)?.value || "",
-      relationship: document.getElementById(`relationship_${CURRENT_TASK}`)?.value || "",
-      gateColor: document.getElementById(`boxColor_${CURRENT_TASK}`)?.value || ""
-    });
+    const billing = BILLING_CACHE[CURRENT_TASK] || {};
+
+      q.push({
+        taskKey: CURRENT_TASK,
+        image: await toBase64(blob),
+        takenAt,
+        latitude: coords?.latitude,
+        longitude: coords?.longitude,
+        filename,
+      
+        // ✅ persist ALL billing data
+        deliveryType: billing.deliveryType || "",
+        remarks: billing.remarks || "",
+        receivedBy: billing.receivedBy || "",
+        relationship: billing.relationship || "",
+        gateColor: billing.gateColor || ""
+      });
     setQueue(q);
     loadTasks();
     return;
@@ -376,7 +378,18 @@ camera.addEventListener("change", async e => {
 });
 
 /* ================= UPLOAD ================= */
-async function uploadNow(taskKey, blob, takenAt, coords, remarks, deliveryType, filename) {
+async function uploadNow(
+      taskKey,
+      blob,
+      takenAt,
+      coords,
+      remarks,
+      deliveryType,
+      filename,
+      receivedBy = "",
+      relationship = "",
+      gateColor = ""
+    ) {
   const uploadedAt = new Date().toISOString();
   const imgRef = sRef(storage, `tasks/${taskKey}/${filename}`);
 
@@ -386,19 +399,20 @@ async function uploadNow(taskKey, blob, takenAt, coords, remarks, deliveryType, 
   const billing = BILLING_CACHE[taskKey] || {};
 
   await update(ref(db, `tasks/${taskKey}`), {
-    status: "COMPLETED",
-    imageUrl: url,
-    takenAt,
-    uploadedAt,
-    latitude: coords?.latitude,
-    longitude: coords?.longitude,
-    filename,
-    deliveryType: billing.deliveryType || "",
-    remarks: billing.remarks || "",
-    receivedBy: billing.receivedBy || "",
-    relationship: billing.relationship || "",
-    gateColor: billing.gateColor || ""
-  });
+  status: "COMPLETED",
+  imageUrl: url,
+  takenAt,
+  uploadedAt,
+  latitude: coords?.latitude,
+  longitude: coords?.longitude,
+  filename,
+
+  deliveryType,
+  remarks,
+  receivedBy,
+  relationship,
+  gateColor
+});
 
   loadTasks();
 }
