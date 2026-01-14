@@ -760,9 +760,19 @@ function validateBilling(taskKey) {
 
   return true;
 }
+
+// 🔁 ANDROID PWA RESUME FIX (STEP 1)
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") {
+    console.log("App resumed → reloading tasks");
+    loadTasks();
+  }
+});
   
 loadTasks();
 </script>
+
+
 
 
 
@@ -771,6 +781,8 @@ if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("./sw.js");
 }
 </script>
+
+
 
 </body>
 </html>
