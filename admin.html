@@ -184,7 +184,7 @@ button {
 
 <body>
 
-<h2>🧑‍💼 Admin Dashboard V2.1.15</h2>
+<h2>🧑‍💼 Admin Dashboard V2.1.16</h2>
 
 <!-- ===== DASHBOARD ===== -->
 <div class="dashboard">
@@ -530,24 +530,6 @@ window.saveEdit = async function (btn) {
         ${sla ? `<div class="small ${sla.cls}">⏱ ${sla.text}</div>` : ""}
       </div>
     
-    <div class="task-details"
-          ${t.status === "COMPLETED" ? `
-        <details style="margin-bottom:8px">
-          <summary style="cursor:pointer;font-size:12px;color:#666">
-            🔍 Debug: Raw Saved Data
-          </summary>
-          <pre style="
-            font-size:11px;
-            background:#f7f7f7;
-            padding:6px;
-            border-radius:4px;
-            overflow:auto;
-            max-height:220px;
-          ">${JSON.stringify(t, null, 2)}</pre>
-        </details>
-      ` : ""}
-     data-task-id="${t._key}"
-     style="display:none;margin-top:8px;">
 
   ${renderTaskDetails(t)}
 
