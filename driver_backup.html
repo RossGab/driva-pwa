@@ -148,7 +148,7 @@ import {
   getStorage, ref as sRef, uploadBytes, getDownloadURL
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.4.4";
+const VERSION = "Driver v3.4.16";
   // 🔒 Billing data cache (per task)
 const BILLING_CACHE = {};
 
@@ -170,7 +170,15 @@ const storage = getStorage(app);
 /* ================= CONSTANTS ================= */
 const QUEUE_KEY = "offlineQueue";
 const TASK_CACHE_KEY = "cachedTasks";
-const PRIORITY = { PENDING: 1, UPLOADING: 2, SAVED: 2, COMPLETED: 3 };
+const PRIORITY = {
+  PENDING: 1,
+  PROCESSING: 1.5,
+  UPLOADING: 2,
+  SAVED: 2,
+  COMPLETED: 3
+};
+
+const processingMap = {};
 const uploadingMap = {};
 let SEARCH_TERM = "";
 
@@ -292,12 +300,15 @@ function saveToGallery(blob, filename) {
 
 /* ================= STATUS ================= */
 function resolveStatus(task, offlineItem) {
+  const key = task._key;
+
+  if (processingMap[key]) return "PROCESSING";
   if (task.status === "COMPLETED") return "COMPLETED";
-  if (uploadingMap[task._key]) return "UPLOADING";
+  if (uploadingMap[key]) return "UPLOADING";
   if (offlineItem || task.imageUrl) return "SAVED";
   return "PENDING";
 }
-
+  
 /* ================= CAMERA ================= */
 let CURRENT_TASK = null;
 const camera = document.getElementById("cameraInput");
@@ -328,66 +339,93 @@ camera.addEventListener("change", async e => {
     return;
   }
 
-  const blob = await compressImage(e.target.files[0]);
-  const coords = await getLocation();
+ // 🔒 START PROCESSING (ONLY ONCE)
+  processingMap[CURRENT_TASK] = true;
+  loadTasks();
+  
+  // ✅ DEFINE takenAt FIRST (CRITICAL)
   const takenAt = new Date().toISOString();
-
+  
+  let coords;
+  try {
+    coords = await getLocation();
+  } catch {
+    coords = null;
+  }
+  
   const cached = JSON.parse(localStorage.getItem(TASK_CACHE_KEY) || "[]");
   const task = cached.find(t => t._key === CURRENT_TASK);
-
+  
   const safe = v => String(v || "").toLowerCase().replace(/[^a-z0-9]/g, "_");
   const filename =
     `${safe(task?.name)}_${safe(task?.address)}_${coords?.latitude || "0"}_${coords?.longitude || "0"}_${takenAt.replace(/[:.]/g, "-")}_${DRIVER_ID}.jpg`;
-
-  saveToGallery(blob, filename);
-
-  if (!navigator.onLine) {
-    const q = getQueue();
-    const billing = BILLING_CACHE[CURRENT_TASK] || {};
-
-      q.push({
-        taskKey: CURRENT_TASK,
-        image: await toBase64(blob),
-        takenAt,
-        latitude: coords?.latitude,
-        longitude: coords?.longitude,
-        filename,
-      
-        // ✅ persist ALL billing data
-        deliveryType: billing.deliveryType || "",
-        remarks: billing.remarks || "",
-        receivedBy: billing.receivedBy || "",
-        relationship: billing.relationship || "",
-        gateColor: billing.gateColor || ""
-      });
-    setQueue(q);
+  
+  let blob;
+  try {
+    blob = await compressImage(e.target.files[0]);
+    saveToGallery(blob, filename);
+  } catch (e) {
+    alert("Image processing failed");
+    delete processingMap[CURRENT_TASK];
     loadTasks();
     return;
   }
-
-  uploadingMap[CURRENT_TASK] = true;
+  
+  // ✅ PROCESSING DONE — ALWAYS CLEAR
+  delete processingMap[CURRENT_TASK];
   loadTasks();
 
-  try {
-    const billing = BILLING_CACHE[CURRENT_TASK] || {};
+// ================= OFFLINE =================
+if (!navigator.onLine) {
+  const q = getQueue();
+  const billing = BILLING_CACHE[CURRENT_TASK] || {};
 
-    await uploadNow(
-      CURRENT_TASK,
-      blob,
-      takenAt,
-      coords,
-      billing.remarks || remarks || "",
-      billing.deliveryType || deliveryType || "",
-      filename,
-      billing.receivedBy || "",
-      billing.relationship || "",
-      billing.gateColor || ""
-    );
-  } catch {
-    alert("Upload failed. Please retake the photo.");
-  }
+  q.push({
+    taskKey: CURRENT_TASK,
+    image: await toBase64(blob),
+    takenAt,
+    latitude: coords?.latitude,
+    longitude: coords?.longitude,
+    filename,
+    deliveryType: billing.deliveryType || "",
+    remarks: billing.remarks || "",
+    receivedBy: billing.receivedBy || "",
+    relationship: billing.relationship || "",
+    gateColor: billing.gateColor || ""
+  });
 
+  setQueue(q);
+
+  // 🔑 DO NOT touch uploadingMap when offline
+  loadTasks();
+  return;
+}
+
+// ================= ONLINE =================
+uploadingMap[CURRENT_TASK] = true;
+loadTasks();
+
+try {
+  const billing = BILLING_CACHE[CURRENT_TASK] || {};
+
+  await uploadNow(
+    CURRENT_TASK,
+    blob,
+    takenAt,
+    coords,
+    billing.remarks || remarks || "",
+    billing.deliveryType || deliveryType || "",
+    filename,
+    billing.receivedBy || "",
+    billing.relationship || "",
+    billing.gateColor || ""
+  );
+} catch {
+  alert("Upload failed. Please retake the photo.");
+} finally {
   delete uploadingMap[CURRENT_TASK];
+  loadTasks();
+}
 });
 
 /* ================= UPLOAD ================= */
@@ -545,36 +583,42 @@ function render(tasks) {
 
 
   ${
-  status === "PENDING"
-    ? `
-      ${isBilling ? renderBillingDelivery(t) : ""}
-
-      ${!isBilling ? `
-        <textarea id="remarks_${t._key}" placeholder="Remarks (optional)"></textarea>
-      ` : ""}
-
-      <button class="capture" onclick="takePicture('${t._key}')">
-        📸 Take Picture
-      </button>
-    `
-      : `
-        ${t.remarks ? `<div class="small">📝 ${t.remarks}</div>` : ""}
-        ${
-          status === "COMPLETED"
-            ? `
-              <button class="toggle"
-                onclick="this.nextElementSibling.style.display =
-                this.nextElementSibling.style.display === 'none' ? 'block' : 'none'">
-                👁 Show / Hide Photo
-              </button>
-              <img src="${t.imageUrl}" style="display:none">
-            `
-            : `
-              <div class="uploading">⏳ Uploading…</div>
-              ${q ? `<div class="offline-indicator">🕒 Saved offline — upload pending</div>` : ""}
-            `
-        }
+    status === "PENDING"
+      ? `
+        ${isBilling ? renderBillingDelivery(t) : ""}
+  
+        ${!isBilling ? `
+          <textarea id="remarks_${t._key}" placeholder="Remarks (optional)"></textarea>
+        ` : ""}
+  
+        <button class="capture" onclick="takePicture('${t._key}')">
+          📸 Take Picture
+        </button>
       `
+      : status === "PROCESSING"
+      ? `
+        <div class="uploading">🛠 Preparing photo…</div>
+      `
+      : status === "UPLOADING"
+      ? `
+        <div class="uploading">⏳ Uploading photo…</div>
+      `
+      : status === "SAVED"
+      ? `
+        <div class="offline-indicator">🕒 Saved offline — upload pending</div>
+      `
+      : status === "COMPLETED"
+      ? `
+        ${t.remarks ? `<div class="small">📝 ${t.remarks}</div>` : ""}
+  
+        <button class="toggle"
+          onclick="this.nextElementSibling.style.display =
+          this.nextElementSibling.style.display === 'none' ? 'block' : 'none'">
+          👁 Show / Hide Photo
+        </button>
+        <img src="${t.imageUrl}" style="display:none">
+      `
+      : ""
   }
 `;
     list.appendChild(div);
