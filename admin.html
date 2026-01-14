@@ -64,6 +64,10 @@ button {
 .doneBtn { background:green; color:#fff; }
 .refresh { background:#444; color:#fff; }
 
+.task-header {
+  cursor: pointer;
+}
+
 #searchBox {
   width:100%;
   padding:10px;
@@ -184,7 +188,7 @@ button {
 
 <body>
 
-<h2>🧑‍💼 Admin Dashboard V2.1.16</h2>
+<h2>🧑‍💼 Admin Dashboard V2.1.17</h2>
 
 <!-- ===== DASHBOARD ===== -->
 <div class="dashboard">
@@ -522,68 +526,66 @@ window.saveEdit = async function (btn) {
     const div = document.createElement("div");
     div.className = `task ${status === "COMPLETED" ? "completed" : "pending"}`;
 
-    div.innerHTML = `
-      <div style="cursor:pointer" class="task-header">
-        <b>${t.CUSTOMERNAME || ""}</b>
-        <div class="small">${t.ADDRESS || ""}</div>
-        <div class="small">Driver: ${t.driverId || "—"}</div>
-        ${sla ? `<div class="small ${sla.cls}">⏱ ${sla.text}</div>` : ""}
-      </div>
-    
 
-  ${renderTaskDetails(t)}
-
-  <!-- DELIVERY METHOD -->
-  ${t.status === "COMPLETED" && t.deliveryType ? `
-  <div style="
-    margin-top:10px;
-    padding:8px;
-    background:#f7f7f7;
-    border-left:4px solid #007bff;
-    border-radius:6px;
-    font-size:13px;
-  ">
-    <b>📦 Delivery Summary</b><br>
-    <div>Method: <b>${t.deliveryType}</b></div>
-    ${t.gateColor ? `<div>Gate / Mailbox Color: <b>${t.gateColor}</b></div>` : ""}
-    ${t.receivedBy ? `<div>Received By: <b>${t.receivedBy}</b></div>` : ""}
-    ${t.relationship ? `<div>Relationship: <b>${t.relationship}</b></div>` : ""}
-    ${t.takenAt ? `<div>Taken At: ${new Date(t.takenAt).toLocaleString()}</div>` : ""}
-    ${t.uploadedAt ? `<div>Uploaded At: ${new Date(t.uploadedAt).toLocaleString()}</div>` : ""}
+div.innerHTML = `
+  <div style="cursor:pointer" class="task-header">
+    <b>${t.CUSTOMERNAME || ""}</b>
+    <div class="small">${t.ADDRESS || ""}</div>
+    <div class="small">Driver: ${t.driverId || "—"}</div>
+    ${sla ? `<div class="small ${sla.cls}">⏱ ${sla.text}</div>` : ""}
   </div>
-` : ""}
 
-  <!-- REMARKS -->
-  ${t.status === "COMPLETED" && t.remarks ? `
-    <div class="small" style="margin-top:4px">
-      📝 <b>Remarks:</b> ${t.remarks}
-    </div>
-  ` : ""}
+  <!-- 🔽 EVERYTHING BELOW FOLDS -->
+  <div class="task-details" style="display:none; margin-top:8px">
 
-  <!-- PHOTO -->
-  ${t.status === "COMPLETED" && t.imageUrl ? `
-    <div style="margin-top:8px">
+    ${renderTaskDetails(t)}
 
-      <button class="toggleBtn"
-        onclick="this.nextElementSibling.style.display =
-        this.nextElementSibling.style.display === 'none' ? 'block' : 'none'">
-        👁 Show Photo
+    ${t.status === "COMPLETED" && t.deliveryType ? `
+      <div style="
+        margin-top:10px;
+        padding:8px;
+        background:#f7f7f7;
+        border-left:4px solid #007bff;
+        border-radius:6px;
+        font-size:13px;
+      ">
+        <b>📦 Delivery Summary</b><br>
+        <div>Method: <b>${t.deliveryType}</b></div>
+        ${t.gateColor ? `<div>Gate / Mailbox Color: <b>${t.gateColor}</b></div>` : ""}
+        ${t.receivedBy ? `<div>Received By: <b>${t.receivedBy}</b></div>` : ""}
+        ${t.relationship ? `<div>Relationship: <b>${t.relationship}</b></div>` : ""}
+        ${t.takenAt ? `<div>Taken At: ${new Date(t.takenAt).toLocaleString()}</div>` : ""}
+        ${t.uploadedAt ? `<div>Uploaded At: ${new Date(t.uploadedAt).toLocaleString()}</div>` : ""}
+      </div>
+    ` : ""}
+
+    ${t.status === "COMPLETED" && t.remarks ? `
+      <div class="small" style="margin-top:4px">
+        📝 <b>Remarks:</b> ${t.remarks}
+      </div>
+    ` : ""}
+
+    ${t.status === "COMPLETED" && t.imageUrl ? `
+      <div style="margin-top:8px">
+        <button class="toggleBtn"
+          onclick="this.nextElementSibling.style.display =
+          this.nextElementSibling.style.display === 'none' ? 'block' : 'none'">
+          👁 Show Photo
+        </button>
+        <img src="${t.imageUrl}"
+          style="display:none;width:100%;margin-top:8px;border-radius:6px;">
+      </div>
+    ` : ""}
+
+    <div class="form-actions">
+      <button class="toggleBtn" onclick="enableEdit(this)">
+        ✏ Modify Task
       </button>
-
-      <img
-        src="${t.imageUrl}"
-        style="display:none;width:100%;margin-top:8px;border-radius:6px;"
-      >
     </div>
-  ` : ""}
 
-  <!-- MODIFY TASK (ALWAYS LAST) -->
-  <div class="form-actions">
-  <button class="toggleBtn" onclick="enableEdit(this)">
-    ✏ Modify Task
-  </button>
-</div>
-    `;
+  </div>
+`;
+    
 
 const header = div.querySelector(".task-header");
 const details = div.querySelector(".task-details");
