@@ -373,6 +373,7 @@ camera.addEventListener("change", async e => {
   
   // ✅ PROCESSING DONE — ALWAYS CLEAR
   delete processingMap[CURRENT_TASK];
+  CURRENT_TASK = null;
   loadTasks();
 
 // ================= ONLINE =================
