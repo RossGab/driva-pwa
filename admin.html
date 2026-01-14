@@ -188,7 +188,7 @@ button {
 
 <body>
 
-<h2>🧑‍💼 Admin Dashboard V2.1.20</h2>
+<h2>🧑‍💼 Admin Dashboard V2.1.21</h2>
 
 <!-- ===== DASHBOARD ===== -->
 <div class="dashboard">
@@ -470,6 +470,8 @@ window.saveEdit = async function (btn) {
   const details = btn.closest(".task-details");
   const taskId = details.dataset.taskId;
 
+  alert("Saving task: " + taskId);
+
   const fields = details.querySelectorAll("input, textarea, select");
   const payload = {};
   let selectedDriverId = null;
@@ -538,46 +540,32 @@ div.innerHTML = `
   </div>
 
   <!-- 🔽 EVERYTHING BELOW FOLDS -->
-  <div class="task-details" style="display:none; margin-top:8px">
+  <div class="task-details" 
+     data-task-id="${t._key}" 
+     style="display:none;margin-top:8px;">
 
-    ${renderTaskDetails(t)}
+  ${renderTaskDetails(t)}
 
-    ${t.status === "COMPLETED" && t.deliveryType ? `
-      <div style="
-        margin-top:10px;
-        padding:8px;
-        background:#f7f7f7;
-        border-left:4px solid #007bff;
-        border-radius:6px;
-        font-size:13px;
-      ">
-    ` : ""}
-
-    ${t.status === "COMPLETED" && t.remarks ? `
-      <div class="small" style="margin-top:4px">
-        📝 <b>Remarks:</b> ${t.remarks}
-      </div>
-    ` : ""}
-
-    ${t.status === "COMPLETED" && t.imageUrl ? `
-      <div style="margin-top:8px">
-        <button class="toggleBtn"
-          onclick="this.nextElementSibling.style.display =
-          this.nextElementSibling.style.display === 'none' ? 'block' : 'none'">
-          👁 Show Photo
-        </button>
-        <img src="${t.imageUrl}"
-          style="display:none;width:100%;margin-top:8px;border-radius:6px;">
-      </div>
-    ` : ""}
-
-    <div class="form-actions">
-      <button class="toggleBtn" onclick="enableEdit(this)">
-        ✏ Modify Task
+  <!-- PHOTO -->
+  ${t.status === "COMPLETED" && t.imageUrl ? `
+    <div style="margin-top:8px">
+      <button class="toggleBtn"
+        onclick="this.nextElementSibling.style.display =
+        this.nextElementSibling.style.display === 'none' ? 'block' : 'none'">
+        👁 Show Photo
       </button>
+      <img src="${t.imageUrl}"
+           style="display:none;width:100%;margin-top:8px;border-radius:6px;">
     </div>
+  ` : ""}
 
+  <div class="form-actions">
+    <button class="toggleBtn" onclick="enableEdit(this)">
+      ✏ Modify Task
+    </button>
   </div>
+
+</div>
 `;
     
 
