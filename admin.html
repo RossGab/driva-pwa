@@ -184,7 +184,7 @@ button {
 
 <body>
 
-<h2>🧑‍💼 Admin Dashboard V2.1.14</h2>
+<h2>🧑‍💼 Admin Dashboard V2.1.15</h2>
 
 <!-- ===== DASHBOARD ===== -->
 <div class="dashboard">
@@ -553,10 +553,23 @@ window.saveEdit = async function (btn) {
 
   <!-- DELIVERY METHOD -->
   ${t.status === "COMPLETED" && t.deliveryType ? `
-    <div class="small" style="margin-top:6px">
-      📦 <b>Delivery Method:</b> ${t.deliveryType}
-    </div>
-  ` : ""}
+  <div style="
+    margin-top:10px;
+    padding:8px;
+    background:#f7f7f7;
+    border-left:4px solid #007bff;
+    border-radius:6px;
+    font-size:13px;
+  ">
+    <b>📦 Delivery Summary</b><br>
+    <div>Method: <b>${t.deliveryType}</b></div>
+    ${t.gateColor ? `<div>Gate / Mailbox Color: <b>${t.gateColor}</b></div>` : ""}
+    ${t.receivedBy ? `<div>Received By: <b>${t.receivedBy}</b></div>` : ""}
+    ${t.relationship ? `<div>Relationship: <b>${t.relationship}</b></div>` : ""}
+    ${t.takenAt ? `<div>Taken At: ${new Date(t.takenAt).toLocaleString()}</div>` : ""}
+    ${t.uploadedAt ? `<div>Uploaded At: ${new Date(t.uploadedAt).toLocaleString()}</div>` : ""}
+  </div>
+` : ""}
 
   <!-- REMARKS -->
   ${t.status === "COMPLETED" && t.remarks ? `
