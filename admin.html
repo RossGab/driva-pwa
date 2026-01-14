@@ -188,7 +188,7 @@ button {
 
 <body>
 
-<h2>🧑‍💼 Admin Dashboard V2.1.18</h2>
+<h2>🧑‍💼 Admin Dashboard V2.1.19</h2>
 
 <!-- ===== DASHBOARD ===== -->
 <div class="dashboard">
@@ -527,7 +527,7 @@ window.saveEdit = async function (btn) {
     payload.AGENTID = "";
     payload.AGENTNAME = "";
   }
-
+  alert(JSON.stringify(payload, null, 2));
   await update(ref(db, `tasks/${taskId}`), payload);
 
   alert("✅ Task updated");
