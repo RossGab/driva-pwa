@@ -135,8 +135,7 @@ img {
 
 <input type="file" id="cameraInput" accept="image/*" capture="environment" hidden>
 
-// 🔒 Billing data cache (per task)
-const BILLING_CACHE = {};
+
 
 <script type="module">
   
@@ -150,6 +149,8 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
 const VERSION = "Driver v3.4.1";
+  // 🔒 Billing data cache (per task)
+const BILLING_CACHE = {};
 
 /* ================= CONFIG ================= */
 const firebaseConfig = {
@@ -382,6 +383,8 @@ async function uploadNow(taskKey, blob, takenAt, coords, remarks, deliveryType, 
   await uploadBytes(imgRef, blob);
   const url = await getDownloadURL(imgRef);
 
+  const billing = BILLING_CACHE[taskKey] || {};
+
   await update(ref(db, `tasks/${taskKey}`), {
     status: "COMPLETED",
     imageUrl: url,
@@ -389,8 +392,6 @@ async function uploadNow(taskKey, blob, takenAt, coords, remarks, deliveryType, 
     uploadedAt,
     latitude: coords?.latitude,
     longitude: coords?.longitude,
-    remarks,
-    deliveryType,
     filename,
     deliveryType: billing.deliveryType || "",
     remarks: billing.remarks || "",
@@ -636,7 +637,7 @@ function billingOption(t, value) {
     }
   
     box.innerHTML = html;
-  };
+
 };
 
 function isBillingJob(taskKey) {
