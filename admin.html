@@ -207,7 +207,7 @@ button {
 
 <body>
 
-<h2>🧑‍💼 Admin Dashboard V2.2.3</h2>
+<h2>🧑‍💼 Admin Dashboard V2.2.4</h2>
 
 <!-- ===== DASHBOARD ===== -->
 <div class="dashboard">
@@ -510,6 +510,8 @@ window.loadTasks = async function (status) {
     ...raw[k]
   }));
 
+  window.ALL_TASKS = tasks;
+
   // ✅ APPLY DRIVER FILTER (FROM MAP)
 if (FILTER_DRIVER) {
   tasks = tasks.filter(t => t.driverId === FILTER_DRIVER);
@@ -597,17 +599,18 @@ window.saveEdit = async function (btn) {
     );
   }
 
-  // 🧩 BA FILTER
-if (FILTER_BA.size) {
-  tasks = tasks.filter(t => FILTER_BA.has(t.BA));
-}
 
-  if (!tasks.length) {
-    taskList.innerHTML = "No tasks";
-    return;
+  buildBAFilters(window.ALL_TASKS);
+
+    // 🧩 BA FILTER
+  if (FILTER_BA.size) {
+    tasks = tasks.filter(t => FILTER_BA.has(t.BA));
   }
-
-  buildBAFilters(tasks);
+  
+    if (!tasks.length) {
+      taskList.innerHTML = "No tasks";
+      return;
+    }
 
   taskList.innerHTML = "";
 
