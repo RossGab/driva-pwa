@@ -86,7 +86,7 @@ button.back {
 
 <button class="back" onclick="location.href='index.html'">⬅ Back to Dashboard</button>
 
-<h2>📊 Completed Tasks ReportV1.0.2</h2>
+<h2>📊 Completed Tasks ReportV1.0.3</h2>
 
 <div class="filters">
   <select id="filterJobType">
@@ -216,7 +216,8 @@ window.exportReportXLSX = async function () {
         LONGITUDE: t.longitude || "",
         DRIVER_ID: t.AGENTID || "",
         DRIVER_NAME: t.AGENTNAME || "",
-        COMPLETED_AT: t.completedAt || ""
+        COMPLETED_AT: t.completedAt || "",
+        IMAGE_URL: t.imageUrl || ""
       });
     });
 
