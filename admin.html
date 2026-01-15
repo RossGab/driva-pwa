@@ -3,53 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Admin Dashboard V 2.0.0</title>function buildBAFilters(tasks) {
-  const container = document.getElementById("baFilters");
-  const box = document.getElementById("baCheckboxes");
-
-  box.innerHTML = "";
-  FILTER_BA.clear();
-
-  // 🔢 Count BA occurrences
-  const baCount = {};
-  tasks.forEach(t => {
-    if (!t.BA) return;
-    baCount[t.BA] = (baCount[t.BA] || 0) + 1;
-  });
-
-  const bas = Object.keys(baCount);
-
-  if (!bas.length) {
-    container.style.display = "none";
-    return;
-  }
-
-  container.style.display = "block";
-
-  bas.sort().forEach(ba => {
-    const count = baCount[ba];
-
-    const label = document.createElement("label");
-    label.style.cssText =
-      "font-size:13px;display:flex;align-items:center;gap:4px;";
-
-    label.innerHTML = `
-      <input type="checkbox" value="${ba}">
-      <span>${ba} (${count})</span>
-    `;
-
-    const input = label.querySelector("input");
-    input.onchange = () => {
-      if (input.checked) FILTER_BA.add(ba);
-      else FILTER_BA.delete(ba);
-
-      loadTasks(CURRENT_STATUS);
-    };
-
-    box.appendChild(label);
-  });
-}
-
+<title>Admin Dashboard V 2.0.0</title>
 <!-- ===== LEAFLET (OPTION 2 MAP) ===== -->
 <link
   rel="stylesheet"
@@ -253,7 +207,7 @@ button {
 
 <body>
 
-<h2>🧑‍💼 Admin Dashboard V2.2.2</h2>
+<h2>🧑‍💼 Admin Dashboard V2.2.3</h2>
 
 <!-- ===== DASHBOARD ===== -->
 <div class="dashboard">
@@ -362,53 +316,53 @@ searchBox.addEventListener("input", e => {
   if (CURRENT_STATUS) loadTasks(CURRENT_STATUS);
 });
 
-  function buildBAFilters(tasks) {
-    const container = document.getElementById("baFilters");
-    const box = document.getElementById("baCheckboxes");
-  
-    box.innerHTML = "";
-    FILTER_BA.clear();
-  
-    // 🔢 Count BA occurrences
-    const baCount = {};
-    tasks.forEach(t => {
-      if (!t.BA) return;
-      baCount[t.BA] = (baCount[t.BA] || 0) + 1;
-    });
-  
-    const bas = Object.keys(baCount);
-  
-    if (!bas.length) {
-      container.style.display = "none";
-      return;
-    }
-  
-    container.style.display = "block";
-  
-    bas.sort().forEach(ba => {
-      const count = baCount[ba];
-  
-      const label = document.createElement("label");
-      label.style.cssText =
-        "font-size:13px;display:flex;align-items:center;gap:4px;";
-  
-      label.innerHTML = `
-        <input type="checkbox" value="${ba}">
-        <span>${ba} (${count})</span>
-      `;
-  
-      const input = label.querySelector("input");
-      input.onchange = () => {
-        if (input.checked) FILTER_BA.add(ba);
-        else FILTER_BA.delete(ba);
-  
-        loadTasks(CURRENT_STATUS);
-      };
-  
-      box.appendChild(label);
-    });
+function buildBAFilters(tasks) {
+  const container = document.getElementById("baFilters");
+  const box = document.getElementById("baCheckboxes");
+
+  box.innerHTML = "";
+  FILTER_BA.clear();
+
+  // 🔢 Count BA occurrences
+  const baCount = {};
+  tasks.forEach(t => {
+    if (!t.BA) return;
+    baCount[t.BA] = (baCount[t.BA] || 0) + 1;
+  });
+
+  const bas = Object.keys(baCount);
+
+  if (!bas.length) {
+    container.style.display = "none";
+    return;
   }
 
+  container.style.display = "block";
+
+  bas.sort().forEach(ba => {
+    const count = baCount[ba];
+
+    const label = document.createElement("label");
+    label.style.cssText =
+      "font-size:13px;display:flex;align-items:center;gap:4px;";
+
+    label.innerHTML = `
+      <input type="checkbox" value="${ba}">
+      <span>${ba} (${count})</span>
+    `;
+
+    const input = label.querySelector("input");
+    input.onchange = () => {
+      if (input.checked) FILTER_BA.add(ba);
+      else FILTER_BA.delete(ba);
+
+      loadTasks(CURRENT_STATUS);
+    };
+
+    box.appendChild(label);
+  });
+}
+  
 /* ===== SLA ===== */
 function getSLA(task) {
   if (!task.createdAt || task.status === "COMPLETED") return null;
