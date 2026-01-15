@@ -248,7 +248,7 @@ button {
 
 <body>
 
-<h2>🧑‍💼 Admin Dashboard V2.2.12</h2>
+<h2>🧑‍💼 Admin Dashboard V2.2.13</h2>
 
 <!-- ===== DASHBOARD ===== -->
 <div class="dashboard">
@@ -478,6 +478,9 @@ async function loadDrivers() {
 }
 
 
+window.onerror = (msg, src, line) => {
+  alert(`JS Error:\n${msg}\nLine: ${line}`);
+};
 
 /* ===== DASHBOARD ===== */
 window.refreshDashboard = async function () {
@@ -773,57 +776,7 @@ window.saveEdit = async function (btn) {
 
   refreshDashboard();
   loadTasks(CURRENT_STATUS);
-};
- 
-
-div.innerHTML = `
-  <div style="cursor:pointer" class="task-header">
-    <b>${t.CUSTOMERNAME || ""}</b>
-    <div class="small">${t.ADDRESS || ""}</div>
-    <div class="small">Driver: ${t.driverId || "—"}</div>
-    ${sla ? `<div class="small ${sla.cls}">⏱ ${sla.text}</div>` : ""}
-  </div>
-
-  <!-- 🔽 EVERYTHING BELOW FOLDS -->
-  <div class="task-details" 
-     data-task-id="${t._key}" 
-     style="display:none;margin-top:8px;">
-
-  ${renderTaskDetails(t)}
-
-  <!-- PHOTO -->
-  ${t.status === "COMPLETED" && t.imageUrl ? `
-    <div style="margin-top:8px">
-      <button class="toggleBtn"
-        onclick="this.nextElementSibling.style.display =
-        this.nextElementSibling.style.display === 'none' ? 'block' : 'none'">
-        👁 Show Photo
-      </button>
-      <img src="${t.imageUrl}"
-           style="display:none;width:100%;margin-top:8px;border-radius:6px;">
-    </div>
-  ` : ""}
-
-  <div class="form-actions">
-    <button class="toggleBtn" onclick="enableEdit(this)">
-      ✏ Modify Task
-    </button>
-  </div>
-
-</div>
-`;
-    
-
-const header = div.querySelector(".task-header");
-const details = div.querySelector(".task-details");
-
-header.onclick = () => {
-  details.style.display =
-    details.style.display === "none" ? "block" : "none";
-};
-
-    taskList.appendChild(div);
-  });
+  
 };
 /* ===== LIVE MAP ===== */
 let map, markers={};
