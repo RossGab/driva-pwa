@@ -207,7 +207,7 @@ button {
 
 <body>
 
-<h2>🧑‍💼 Admin Dashboard V2.2.5</h2>
+<h2>🧑‍💼 Admin Dashboard V2.2.6</h2>
 
 <!-- ===== DASHBOARD ===== -->
 <div class="dashboard">
@@ -351,6 +351,9 @@ function buildBAFilters(tasks) {
     `;
 
     const input = label.querySelector("input");
+
+    input.checked = FILTER_BA.has(ba);
+    
     input.onchange = () => {
       if (input.checked) FILTER_BA.add(ba);
       else FILTER_BA.delete(ba);
