@@ -87,6 +87,40 @@ button {
   cursor: pointer;
 }
 
+/* ===== LOADING SCREEN ===== */
+#loadingScreen {
+  position: fixed;
+  inset: 0;
+  background: rgba(255, 255, 255, 0.95);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.loader-box {
+  text-align: center;
+}
+
+.spinner {
+  width: 42px;
+  height: 42px;
+  border: 4px solid #ddd;
+  border-top: 4px solid #007bff;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin: 0 auto 10px;
+}
+
+.loader-text {
+  font-size: 14px;
+  color: #555;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
 #searchBox {
   width:100%;
   padding:10px;
@@ -207,7 +241,7 @@ button {
 
 <body>
 
-<h2>🧑‍💼 Admin Dashboard V2.2.6</h2>
+<h2>🧑‍💼 Admin Dashboard V2.2.7</h2>
 
 <!-- ===== DASHBOARD ===== -->
 <div class="dashboard">
@@ -235,6 +269,13 @@ button {
   <button class="assign" onclick="location.href='add-driver.html'">👤 Add Driver</button>
   <button class="refresh" onclick="refreshDashboard()">🔄</button>
   <button class="assign" onclick="openReport()">📊 Report</button>
+</div>
+
+<div id="loadingScreen">
+  <div class="loader-box">
+    <div class="spinner"></div>
+    <div class="loader-text">Loading dashboard…</div>
+  </div>
 </div>
 
 <input id="searchBox" placeholder="Search name, address, driver, remarks, etc.">
