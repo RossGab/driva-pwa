@@ -208,7 +208,7 @@ button {
 
 <body>
 
-<h2>🧑‍💼 Admin Dashboard V2.2.0</h2>
+<h2>🧑‍💼 Admin Dashboard V2.2.1</h2>
 
 <!-- ===== DASHBOARD ===== -->
 <div class="dashboard">
@@ -239,6 +239,19 @@ button {
 </div>
 
 <input id="searchBox" placeholder="Search name, address, driver, remarks, etc.">
+<div id="baFilters" style="
+  display:none;
+  background:#fff;
+  padding:8px;
+  border-radius:6px;
+  margin-bottom:12px;
+  box-shadow:0 0 4px rgba(0,0,0,.1);
+">
+  <div style="font-size:13px;font-weight:bold;margin-bottom:6px;">
+    Filter by BA
+  </div>
+  <div id="baCheckboxes" style="display:flex;flex-wrap:wrap;gap:10px;"></div>
+</div>
 
 <!-- ===== TASK LIST ===== -->
 <div id="taskList">Select Open or Completed</div>
@@ -292,6 +305,7 @@ const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 
 let CURRENT_STATUS = null;
+let FILTER_BA = new Set();
 let SEARCH_TERM = "";
 let MAP_VISIBLE = false;
 let TASK_STATS = {};
@@ -302,6 +316,45 @@ searchBox.addEventListener("input", e => {
   SEARCH_TERM = e.target.value.toLowerCase();
   if (CURRENT_STATUS) loadTasks(CURRENT_STATUS);
 });
+
+function buildBAFilters(tasks) {
+  const container = document.getElementById("baFilters");
+  const box = document.getElementById("baCheckboxes");
+
+  box.innerHTML = "";
+  FILTER_BA.clear();
+
+  const bas = [...new Set(tasks.map(t => t.BA).filter(Boolean))];
+
+  if (!bas.length) {
+    container.style.display = "none";
+    return;
+  }
+
+  container.style.display = "block";
+
+  bas.sort().forEach(ba => {
+    const id = `ba_${ba}`;
+
+    const label = document.createElement("label");
+    label.style.cssText = "font-size:13px;display:flex;align-items:center;gap:4px;";
+
+    label.innerHTML = `
+      <input type="checkbox" value="${ba}">
+      <span>${ba}</span>
+    `;
+
+    const input = label.querySelector("input");
+    input.onchange = () => {
+      if (input.checked) FILTER_BA.add(ba);
+      else FILTER_BA.delete(ba);
+
+      loadTasks(CURRENT_STATUS);
+    };
+
+    box.appendChild(label);
+  });
+}
 
 /* ===== SLA ===== */
 function getSLA(task) {
@@ -455,6 +508,8 @@ if (FILTER_DRIVER) {
   tasks = tasks.filter(t => t.driverId === FILTER_DRIVER);
 }
 
+
+
 window.enableEdit = function (btn) {
   const details = btn.closest(".task-details");
   const fields = details.querySelectorAll("input, textarea, select");
@@ -535,10 +590,17 @@ window.saveEdit = async function (btn) {
     );
   }
 
+  // 🧩 BA FILTER
+if (FILTER_BA.size) {
+  tasks = tasks.filter(t => FILTER_BA.has(t.BA));
+}
+
   if (!tasks.length) {
     taskList.innerHTML = "No tasks";
     return;
   }
+
+  buildBAFilters(tasks);
 
   taskList.innerHTML = "";
 
