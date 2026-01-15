@@ -1,14 +1,69 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <title>Task Report</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Completed Task Report</title>
+
+<style>
+body {
+  font-family: Arial, sans-serif;
+  background:#f3f3f3;
+  padding:10px;
+}
+
+h2 {
+  text-align:center;
+  margin-bottom:10px;
+}
+
+.filters {
+  display:flex;
+  gap:8px;
+  margin-bottom:12px;
+}
+
+select, button {
+  padding:8px;
+  font-size:14px;
+  border-radius:6px;
+  border:1px solid #ccc;
+}
+
+button {
+  background:#007bff;
+  color:#fff;
+  border:none;
+  cursor:pointer;
+}
+
+.stats {
+  margin-bottom:10px;
+  font-size:14px;
+  font-weight:bold;
+}
+
+.report-item {
+  background:#fff;
+  padding:10px;
+  margin-bottom:8px;
+  border-radius:6px;
+  box-shadow:0 0 4px rgba(0,0,0,.1);
+  font-size:13px;
+}
+
+.small {
+  color:#555;
+  margin-top:4px;
+}
+</style>
 </head>
+
 <body>
 
-<h2>📊 Completed Task Report</h2>
+<h2>📊 Completed Task ReportV1.0.0</h2>
 
-<div style="display:flex; gap:8px; margin-bottom:10px">
+<div class="filters">
   <select id="jobTypeFilter">
     <option value="">All Job Types</option>
   </select>
@@ -24,9 +79,121 @@
   <button onclick="applyFilters()">Apply</button>
 </div>
 
-<div id="reportStats"></div>
-<div id="reportList">Loading…</div>
+<div class="stats" id="reportStats">Loading…</div>
+<div id="reportList">Loading completed tasks…</div>
 
-<script type="module" src="report.js"></script>
+<script type="module">
+import { initializeApp } from
+  "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import {
+  getDatabase, ref, get
+} from
+  "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+
+/* ===== FIREBASE CONFIG ===== */
+const firebaseConfig = {
+  apiKey: "AIzaSyDFW61pnwLvh6HGKWt10zLYNr860fI8vkg",
+  authDomain: "driva-pwa.firebaseapp.com",
+  databaseURL: "https://driva-pwa-default-rtdb.firebaseio.com",
+  projectId: "driva-pwa",
+  storageBucket: "driva-pwa.firebasestorage.app",
+  messagingSenderId: "299138219722",
+  appId: "1:299138219722:web:623ff6b0a067ea822dfe33"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
+
+/* ===== STATE ===== */
+let ALL_COMPLETED = [];
+
+/* ===== LOAD COMPLETED TASKS ===== */
+async function loadCompletedTasks() {
+  try {
+    const snap = await get(ref(db, "tasks"));
+    const raw = snap.val() || {};
+
+    ALL_COMPLETED = Object.values(raw)
+      .filter(t => t.status === "COMPLETED");
+
+    buildFilters();
+    renderReport(ALL_COMPLETED);
+  } catch (e) {
+    reportList.innerHTML = "⚠️ Failed to load report data";
+  }
+}
+
+/* ===== BUILD FILTERS ===== */
+function buildFilters() {
+  fillSelect("jobTypeFilter", "JOBTYPE");
+  fillSelect("baFilter", "BA");
+  fillSelect("dmzFilter", "DMZ");
+}
+
+function fillSelect(id, field) {
+  const select = document.getElementById(id);
+  const values = [...new Set(
+    ALL_COMPLETED.map(t => t[field]).filter(Boolean)
+  )];
+
+  values.sort().forEach(v => {
+    const opt = document.createElement("option");
+    opt.value = v;
+    opt.textContent = v;
+    select.appendChild(opt);
+  });
+}
+
+/* ===== APPLY FILTERS ===== */
+window.applyFilters = function () {
+  const jobType = jobTypeFilter.value;
+  const ba = baFilter.value;
+  const dmz = dmzFilter.value;
+
+  let filtered = ALL_COMPLETED;
+
+  if (jobType) filtered = filtered.filter(t => t.JOBTYPE === jobType);
+  if (ba) filtered = filtered.filter(t => t.BA === ba);
+  if (dmz) filtered = filtered.filter(t => t.DMZ === dmz);
+
+  renderReport(filtered);
+};
+
+/* ===== RENDER REPORT ===== */
+function renderReport(tasks) {
+  reportStats.innerHTML = `Total Records: ${tasks.length}`;
+  reportList.innerHTML = "";
+
+  if (!tasks.length) {
+    reportList.innerHTML = "No records found";
+    return;
+  }
+
+  tasks.forEach(t => {
+    const div = document.createElement("div");
+    div.className = "report-item";
+
+    div.innerHTML = `
+      <b>${t.CUSTOMERNAME || "—"}</b>
+      <div class="small">${t.ADDRESS || ""}</div>
+      <div class="small">
+        Job: ${t.JOBTYPE || "-"} |
+        BA: ${t.BA || "-"} |
+        DMZ: ${t.DMZ || "-"}
+      </div>
+      <div class="small">
+        Lat: ${t.latitude || "-"} |
+        Lng: ${t.longitude || "-"}
+      </div>
+    `;
+
+    reportList.appendChild(div);
+  });
+}
+
+/* ===== INIT ===== */
+loadCompletedTasks();
+</script>
+
 </body>
 </html>
