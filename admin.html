@@ -96,6 +96,13 @@ button {
   display: flex;
   align-items: center;
   justify-content: center;
+  opacity: 1;
+  transition: opacity 0.4s ease;
+}
+  
+#loadingScreen.hide {
+  opacity: 0;
+  pointer-events: none;
 }
 
 .loader-box {
@@ -241,7 +248,7 @@ button {
 
 <body>
 
-<h2>🧑‍💼 Admin Dashboard V2.2.7</h2>
+<h2>🧑‍💼 Admin Dashboard V2.2.8</h2>
 
 <!-- ===== DASHBOARD ===== -->
 <div class="dashboard">
@@ -341,8 +348,23 @@ const firebaseConfig = {
   appId: "1:299138219722:web:623ff6b0a067ea822dfe33"
 };
 
+function showLoader(text = "Loading…") {
+  const el = document.getElementById("loadingScreen");
+  if (!el) return;
+  setLoaderText(text);
+  el.classList.remove("hide");
+  el.style.display = "flex";
+}
+
+function hideLoader() {
+  const el = document.getElementById("loadingScreen");
+  if (!el || el.classList.contains("hide")) return;
+  el.classList.add("hide");
+  setTimeout(() => el.style.display = "none", 400);
+}
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
+
 
 let CURRENT_STATUS = null;
 let FILTER_BA = new Set();
@@ -422,7 +444,7 @@ async function loadDrivers() {
   DRIVER_CACHE = snap.val() || {};
 }
 
-loadDrivers();
+
 
 /* ===== DASHBOARD ===== */
 window.refreshDashboard = async function () {
@@ -609,6 +631,17 @@ window.cancelEdit = function (btn) {
     </button>
   `;
 };
+
+window.refreshDashboard = async function () {
+  showLoader();
+  try {
+    const snap = await get(ref(db,"tasks"));
+    const tasks = Object.values(snap.val()||{});
+    ...
+  } finally {
+    hideLoader();
+  }
+};
   
 window.saveEdit = async function (btn) {
   const details = btn.closest(".task-details");
@@ -651,12 +684,10 @@ window.saveEdit = async function (btn) {
   loadTasks(CURRENT_STATUS);
 };
   
-  
-  
-    if (!tasks.length) {
-      taskList.innerHTML = "No tasks";
-      return;
-    }
+   if (!tasks.length) {
+  taskList.innerHTML = "No tasks";
+  return;
+}
 
   taskList.innerHTML = "";
 
@@ -925,7 +956,25 @@ window.scrollToTop = function () {
 };
 
 /* INIT */
-refreshDashboard();
+let INITIAL_LOAD_DONE = false;
+function setLoaderText(txt) {
+  const el = document.querySelector(".loader-text");
+  if (el) el.textContent = txt;
+}
+
+(async function init() {
+  showLoader();
+  try {
+    setLoaderText("Loading drivers…");
+    await loadDrivers();
+    setLoaderText("Loading dashboard…");
+    await refreshDashboard();
+    setLoaderText("Loading tasks…");
+    await loadTasks("PENDING");
+  } finally {
+    hideLoader();
+  }
+})();
 </script>
 
 <button id="scrollTopBtn" onclick="scrollToTop()">⬆</button>
