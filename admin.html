@@ -248,7 +248,7 @@ button {
 
 <body>
 
-<h2>🧑‍💼 Admin Dashboard V2.2.14</h2>
+<h2>🧑‍💼 Admin Dashboard V2.2.15</h2>
 
 <!-- ===== DASHBOARD ===== -->
 <div class="dashboard">
@@ -797,13 +797,16 @@ window.toggleLiveMap = async function () {
   mapContainer.style.display = MAP_VISIBLE ? "block" : "none";
   taskList.style.display = MAP_VISIBLE ? "none" : "block";
 
-  if (MAP_VISIBLE) {
-    await buildTaskStats();   // ⭐ ADD THIS
-    initMap();
-    setTimeout(() => map.invalidateSize(), 200);
-  }
-};
+  if (!MAP_VISIBLE) return;
 
+  // 1️⃣ Always show map immediately
+  initMap();
+  setTimeout(() => map.invalidateSize(), 200);
+
+  // 2️⃣ Fetch LIVE data in background (non-blocking)
+  buildTaskStatsLive();   // no await
+  refreshMap();           // no await
+};
 window.showDriverOpenTasks = function (driverId) {
   FILTER_DRIVER = driverId;
 
