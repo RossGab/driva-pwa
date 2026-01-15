@@ -248,7 +248,7 @@ button {
 
 <body>
 
-<h2>🧑‍💼 Admin Dashboard V2.3.0.1</h2>
+<h2>🧑‍💼 Admin Dashboard V2.3.0.2</h2>
 
 <!-- ===== DASHBOARD ===== -->
 <div class="dashboard">
@@ -376,9 +376,9 @@ function withTimeout(promise, ms = 8000) {
   ]);
 }
 
-function openReport() {
+window.openReport = function () {
   window.location.href = "report.html";
-}
+};
 
 function getCachedTasks() {
   try {
