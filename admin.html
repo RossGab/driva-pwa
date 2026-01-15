@@ -460,20 +460,28 @@ async function loadDrivers() {
 
 /* ===== DASHBOARD ===== */
 window.refreshDashboard = async function () {
-  const snap = await withTimeout(get(ref(db,"tasks")), 8000);
+  const snap = await withTimeout(get(ref(db,"tasks")), 60000);
   const tasks = Object.values(snap.val()||{});
   let open=0,done=0,ok=0,warn=0,breach=0;
 
-  tasks.forEach(t=>{
-    if(t.status==="COMPLETED"){done++;return;}
-    open++;
-    const sla=getSLA(t);
-    if(!sla)return;
-    if(sla.cls==="sla-ok")ok++;
-    else if(sla.cls==="sla-warn")warn++;
-    else breach++;
-  });
+  tasks.forEach(t => {
+  if (t.status === "COMPLETED") {
+    done++;
+    return;
+  }
 
+  if (t.status === "PENDING") {
+    open++;
+
+    const sla = getSLA(t);
+    if (!sla) return;
+
+    if (sla.cls === "sla-ok") ok++;
+    else if (sla.cls === "sla-warn") warn++;
+    else breach++;
+  }
+});
+  
   openCount.innerText=open;
   doneCount.innerText=done;
   slaOk.innerText=ok;
@@ -581,7 +589,7 @@ window.loadTasks = async function (status) {
 
   let snap;
   try {
-    snap = await withTimeout(get(q), 8000);
+    snap = await withTimeout(get(q), 60000);
   } catch (e) {
     taskList.innerHTML = "⚠️ Failed to load tasks (offline or slow network)";
     hideLoader();
