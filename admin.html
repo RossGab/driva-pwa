@@ -207,7 +207,7 @@ button {
 
 <body>
 
-<h2>🧑‍💼 Admin Dashboard V2.2.4</h2>
+<h2>🧑‍💼 Admin Dashboard V2.2.5</h2>
 
 <!-- ===== DASHBOARD ===== -->
 <div class="dashboard">
@@ -321,7 +321,6 @@ function buildBAFilters(tasks) {
   const box = document.getElementById("baCheckboxes");
 
   box.innerHTML = "";
-  FILTER_BA.clear();
 
   // 🔢 Count BA occurrences
   const baCount = {};
@@ -510,11 +509,27 @@ window.loadTasks = async function (status) {
     ...raw[k]
   }));
 
-  window.ALL_TASKS = tasks;
+window.ALL_TASKS = tasks;
 
-  // ✅ APPLY DRIVER FILTER (FROM MAP)
+// 1️⃣ Driver filter
 if (FILTER_DRIVER) {
   tasks = tasks.filter(t => t.driverId === FILTER_DRIVER);
+}
+
+// 2️⃣ Search filter
+if (SEARCH_TERM) {
+  const term = SEARCH_TERM.toLowerCase();
+  tasks = tasks.filter(t =>
+    JSON.stringify(t).toLowerCase().includes(term)
+  );
+}
+
+// 3️⃣ Build BA filters (from ALL_TASKS only)
+buildBAFilters(window.ALL_TASKS);
+
+// 4️⃣ Apply BA filter (display only)
+if (FILTER_BA.size) {
+  tasks = tasks.filter(t => FILTER_BA.has(t.BA));
 }
 
 
@@ -589,23 +604,10 @@ window.saveEdit = async function (btn) {
   `;
 
   refreshDashboard();
+  loadTasks(CURRENT_STATUS);
 };
   
-  // 🔍 Search (client-side, fast now)
-  if (SEARCH_TERM) {
-    const term = SEARCH_TERM.toLowerCase();
-    tasks = tasks.filter(t =>
-      JSON.stringify(t).toLowerCase().includes(term)
-    );
-  }
-
-
-  buildBAFilters(window.ALL_TASKS);
-
-    // 🧩 BA FILTER
-  if (FILTER_BA.size) {
-    tasks = tasks.filter(t => FILTER_BA.has(t.BA));
-  }
+  
   
     if (!tasks.length) {
       taskList.innerHTML = "No tasks";
