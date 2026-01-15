@@ -248,7 +248,7 @@ button {
 
 <body>
 
-<h2>🧑‍💼 Admin Dashboard V2.2.13</h2>
+<h2>🧑‍💼 Admin Dashboard V2.2.14</h2>
 
 <!-- ===== DASHBOARD ===== -->
 <div class="dashboard">
@@ -766,14 +766,24 @@ window.saveEdit = async function (btn) {
   alert(JSON.stringify(payload, null, 2));
   await update(ref(db, `tasks/${taskId}`), payload);
 
+  /* 🔥 ADD THIS BLOCK — UPDATE LOCAL CACHE */
+  const cached = getCachedTasks() || [];
+  const idx = cached.findIndex(t => t._key === taskId);
+  
+  if (idx !== -1) {
+    cached[idx] = { ...cached[idx], ...payload };
+    setCachedTasks(cached);
+  }
+  /* 🔥 END CACHE UPDATE */
+  
   alert("✅ Task updated");
-
+  
   details.querySelector(".form-actions").innerHTML = `
     <button class="toggleBtn" onclick="enableEdit(this)">
       ✏ Modify Task
     </button>
   `;
-
+  
   refreshDashboard();
   loadTasks(CURRENT_STATUS);
   
