@@ -248,7 +248,7 @@ button {
 
 <body>
 
-<h2>🧑‍💼 Admin Dashboard V2.2.11</h2>
+<h2>🧑‍💼 Admin Dashboard V2.2.12</h2>
 
 <!-- ===== DASHBOARD ===== -->
 <div class="dashboard">
@@ -611,19 +611,6 @@ window.showCompletedTasks = function () {
   loadTasks("COMPLETED");
 };
 
-window.loadTasks = async function (status, forceRefresh = false) {
-  CURRENT_STATUS = status;
-  taskList.innerHTML = "Loading...";
-
-  let allTasks;
-
-  // ✅ USE CACHE FIRST
-  if (!forceRefresh) {
-    const cached = getCachedTasks();
-    if (cached) {
-      allTasks = cached;
-    }
-  }
 
   // 🌐 FETCH ONLY IF NEEDED
   if (!allTasks) {
@@ -666,30 +653,7 @@ window.loadTasks = async function (status, forceRefresh = false) {
 };
 
   // ✅ SERVER-SIDE FILTER (FAST)
-  const q = query(
-    ref(db, "tasks"),
-    orderByChild("status"),
-    equalTo(status)
-  );
-
-  let snap;
-  try {
-    snap = await withTimeout(get(q), 60000);
-  } catch (e) {
-    taskList.innerHTML = "⚠️ Failed to load tasks (offline or slow network)";
-    hideLoader();
-    return;
-  }
-    
-  const raw = snap.val() || {};
-
-  let tasks = Object.keys(raw).map(k => ({
-    _key: k,
-    ...raw[k]
-  }));
-
-window.ALL_TASKS = tasks;
-
+  
 // 1️⃣ Driver filter
 if (FILTER_DRIVER) {
   tasks = tasks.filter(t => t.driverId === FILTER_DRIVER);
