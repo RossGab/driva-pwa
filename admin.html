@@ -248,7 +248,7 @@ button {
 
 <body>
 
-<h2>🧑‍💼 Admin Dashboard V2.2.11</h2>
+<h2>🧑‍💼 Admin Dashboard V2.2.12</h2>
 
 <!-- ===== DASHBOARD ===== -->
 <div class="dashboard">
@@ -328,8 +328,6 @@ button {
 
   </div>
 </div>
-
-const TASK_CACHE_KEY = "ADMIN_TASK_CACHE_V1";
 
 <script type="module">
 import { initializeApp } from
@@ -777,24 +775,6 @@ window.saveEdit = async function (btn) {
   loadTasks(CURRENT_STATUS);
 };
  
-
-  if (!tasks.length) {
-  taskList.innerHTML = "No tasks found";
-  hideLoader();
-  return;
-}
-  
-  taskList.innerHTML = "";
-
-  tasks.forEach(t => {
-    if (t.status === "COMPLETED") {
-      console.log("ADMIN COMPLETED TASK:", t);
-    }
-    const sla = getSLA(t);
-
-    const div = document.createElement("div");
-    div.className = `task ${status === "COMPLETED" ? "completed" : "pending"}`;
-
 
 div.innerHTML = `
   <div style="cursor:pointer" class="task-header">
