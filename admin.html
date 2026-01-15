@@ -248,7 +248,7 @@ button {
 
 <body>
 
-<h2>🧑‍💼 Admin Dashboard V2.2.8</h2>
+<h2>🧑‍💼 Admin Dashboard V2.2.9</h2>
 
 <!-- ===== DASHBOARD ===== -->
 <div class="dashboard">
@@ -360,8 +360,21 @@ function hideLoader() {
   const el = document.getElementById("loadingScreen");
   if (!el || el.classList.contains("hide")) return;
   el.classList.add("hide");
-  setTimeout(() => el.style.display = "none", 400);
+  setTimeout(() => {
+    el.style.display = "none";
+  }, 400);
 }
+
+function withTimeout(promise, ms = 8000) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) =>
+      setTimeout(() => reject(new Error("Timeout")), ms)
+    )
+  ]);
+}
+
+
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 
@@ -805,6 +818,16 @@ function getDriverStatus(lastSeen) {
   return { label: "Offline", color: "red" };
 }
 
+function log(msg) {
+  const box = document.getElementById("debugLog");
+  if (!box) return;
+
+  box.style.display = "block";
+  const time = new Date().toLocaleTimeString();
+  box.innerHTML += `[${time}] ${msg}<br>`;
+  box.scrollTop = box.scrollHeight;
+}
+
 function renderDriverList(drivers) {
   const list = document.getElementById("driverItems");
   list.innerHTML = "";
@@ -963,21 +986,38 @@ function setLoaderText(txt) {
 }
 
 (async function init() {
-  showLoader();
+  showLoader("Loading drivers…");
   try {
-    setLoaderText("Loading drivers…");
-    await loadDrivers();
-    setLoaderText("Loading dashboard…");
-    await refreshDashboard();
-    setLoaderText("Loading tasks…");
-    await loadTasks("PENDING");
+    await withTimeout(loadDrivers());
+
+    showLoader("Loading dashboard…");
+    await withTimeout(refreshDashboard());
+
+    showLoader("Loading tasks…");
+    await withTimeout(loadTasks("PENDING"));
+  } catch (e) {
+    console.error("Init failed:", e);
+    alert("Dashboard failed to load. Please refresh.");
   } finally {
-    hideLoader();
+    hideLoader(); // 🔥 ALWAYS executes
   }
-})();
-</script>
+})();</script>
 
 <button id="scrollTopBtn" onclick="scrollToTop()">⬆</button>
 
+<div id="debugLog" style="
+  position:fixed;
+  bottom:0;
+  left:0;
+  right:0;
+  max-height:40%;
+  overflow:auto;
+  background:#111;
+  color:#0f0;
+  font-size:11px;
+  padding:6px;
+  z-index:10000;
+  display:none;
+"></div>
 </body>
 </html>
