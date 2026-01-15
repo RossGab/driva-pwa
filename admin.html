@@ -248,7 +248,7 @@ button {
 
 <body>
 
-<h2>🧑‍💼 Admin Dashboard V2.2.12</h2>
+<h2>🧑‍💼 Admin Dashboard V2.2.11</h2>
 
 <!-- ===== DASHBOARD ===== -->
 <div class="dashboard">
@@ -329,6 +329,8 @@ button {
   </div>
 </div>
 
+const TASK_CACHE_KEY = "ADMIN_TASK_CACHE_V1";
+
 <script type="module">
 import { initializeApp } from
   "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
@@ -336,6 +338,8 @@ import {
   getDatabase, ref, get, update, remove
 } from
   "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+
+const TASK_CACHE_KEY = "ADMIN_TASK_CACHE_V1";
 
 /* ===== FIREBASE ===== */
 const firebaseConfig = {
@@ -347,30 +351,6 @@ const firebaseConfig = {
   messagingSenderId: "299138219722",
   appId: "1:299138219722:web:623ff6b0a067ea822dfe33"
 };
-
-function getCachedTasks() {
-  try {
-    const raw = localStorage.getItem(TASK_CACHE_KEY);
-    if (!raw) return null;
-
-    const time = Number(localStorage.getItem(TASK_CACHE_TIME_KEY) || 0);
-    if (Date.now() - time > CACHE_TTL) return null; // optional expiry
-
-    return JSON.parse(raw);
-  } catch {
-    return null;
-  }
-}
-
-function setCachedTasks(tasks) {
-  localStorage.setItem(TASK_CACHE_KEY, JSON.stringify(tasks));
-  localStorage.setItem(TASK_CACHE_TIME_KEY, Date.now());
-}
-
-function clearTaskCache() {
-  localStorage.removeItem(TASK_CACHE_KEY);
-  localStorage.removeItem(TASK_CACHE_TIME_KEY);
-}
 
 function showLoader(text = "Loading…") {
   const el = document.getElementById("loadingScreen");
@@ -396,6 +376,25 @@ function withTimeout(promise, ms = 8000) {
       setTimeout(() => reject(new Error("Timeout")), ms)
     )
   ]);
+}
+
+function getCachedTasks() {
+  try {
+    const raw = localStorage.getItem(TASK_CACHE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function setCachedTasks(tasks) {
+  try {
+    localStorage.setItem(TASK_CACHE_KEY, JSON.stringify(tasks));
+  } catch {}
+}
+
+function clearTaskCache() {
+  localStorage.removeItem(TASK_CACHE_KEY);
 }
 
 const app = initializeApp(firebaseConfig);
@@ -480,17 +479,6 @@ async function loadDrivers() {
   DRIVER_CACHE = snap.val() || {};
 }
 
-window.hardRefresh = async function () {
-  clearTaskCache();
-  showLoader("Refreshing data…");
-
-  try {
-    await refreshDashboard();
-    await loadTasks(CURRENT_STATUS || "PENDING", true); // force fetch
-  } finally {
-    hideLoader();
-  }
-};
 
 
 /* ===== DASHBOARD ===== */
@@ -611,21 +599,38 @@ window.showCompletedTasks = function () {
   loadTasks("COMPLETED");
 };
 
+window.hardRefresh = async function () {
+  clearTaskCache();
+  showLoader("Refreshing data…");
 
-  // 🌐 FETCH ONLY IF NEEDED
+  try {
+    await refreshDashboard();
+    await loadTasks(CURRENT_STATUS || "PENDING");
+  } finally {
+    hideLoader();
+  }
+};
+
+window.loadTasks = async function (status) {
+  CURRENT_STATUS = status;
+  taskList.innerHTML = "Loading...";
+
+  let allTasks = getCachedTasks();
+
+  // 🔁 FETCH ONLY IF NO CACHE
   if (!allTasks) {
     try {
-      const snap = await withTimeout(get(ref(db, "tasks")), 8000);
+      const snap = await withTimeout(get(ref(db, "tasks")), 60000);
       const raw = snap.val() || {};
       allTasks = Object.keys(raw).map(k => ({ _key: k, ...raw[k] }));
-      setCachedTasks(allTasks); // 💾 cache it
+      setCachedTasks(allTasks);
     } catch (e) {
-      taskList.innerHTML = "⚠️ Offline / failed to load tasks";
+      taskList.innerHTML = "⚠️ Failed to load tasks";
       return;
     }
   }
 
-  // 🧠 FILTER LOCALLY (FAST)
+  // ✅ FILTER LOCALLY (FAST)
   let tasks = allTasks.filter(t => t.status === status);
 
   window.ALL_TASKS = tasks;
@@ -649,32 +654,53 @@ window.showCompletedTasks = function () {
     tasks = tasks.filter(t => FILTER_BA.has(t.BA));
   }
 
-  renderTaskList(tasks, status); // 👇 move render logic here
+  // 🔽 render (your existing logic untouched)
+  taskList.innerHTML = "";
+  if (!tasks.length) {
+    taskList.innerHTML = "No tasks found";
+    return;
+  }
+
+  tasks.forEach(t => {
+    const sla = getSLA(t);
+
+    const div = document.createElement("div");
+    div.className = `task ${status === "COMPLETED" ? "completed" : "pending"}`;
+
+    div.innerHTML = `
+      <div class="task-header">
+        <b>${t.CUSTOMERNAME || ""}</b>
+        <div class="small">${t.ADDRESS || ""}</div>
+        <div class="small">Driver: ${t.driverId || "—"}</div>
+        ${sla ? `<div class="small ${sla.cls}">⏱ ${sla.text}</div>` : ""}
+      </div>
+
+      <div class="task-details" data-task-id="${t._key}" style="display:none">
+        ${renderTaskDetails(t)}
+
+        ${t.status === "COMPLETED" && t.imageUrl ? `
+          <button class="toggleBtn"
+            onclick="this.nextElementSibling.style.display =
+            this.nextElementSibling.style.display === 'none' ? 'block' : 'none'">
+            👁 Show Photo
+          </button>
+          <img src="${t.imageUrl}" style="display:none;width:100%">
+        ` : ""}
+
+        <div class="form-actions">
+          <button class="toggleBtn" onclick="enableEdit(this)">✏ Modify Task</button>
+        </div>
+      </div>
+    `;
+
+    const header = div.querySelector(".task-header");
+    const details = div.querySelector(".task-details");
+    header.onclick = () =>
+      details.style.display = details.style.display === "none" ? "block" : "none";
+
+    taskList.appendChild(div);
+  });
 };
-
-  // ✅ SERVER-SIDE FILTER (FAST)
-  
-// 1️⃣ Driver filter
-if (FILTER_DRIVER) {
-  tasks = tasks.filter(t => t.driverId === FILTER_DRIVER);
-}
-
-// 2️⃣ Search filter
-if (SEARCH_TERM) {
-  const term = SEARCH_TERM.toLowerCase();
-  tasks = tasks.filter(t =>
-    JSON.stringify(t).toLowerCase().includes(term)
-  );
-}
-
-// 3️⃣ Build BA filters (from ALL_TASKS only)
-buildBAFilters(window.ALL_TASKS);
-
-// 4️⃣ Apply BA filter (display only)
-if (FILTER_BA.size) {
-  tasks = tasks.filter(t => FILTER_BA.has(t.BA));
-}
-
 
 
 window.enableEdit = function (btn) {
@@ -856,55 +882,6 @@ window.showAllOpenTasks = function () {
 
   loadTasks("PENDING"); // ALL OPEN TASKS
 };
-
-function renderTaskList(tasks, status) {
-  taskList.innerHTML = "";
-
-  if (!tasks.length) {
-    taskList.innerHTML = "No tasks";
-    return;
-  }
-
-  tasks.forEach(t => {
-    const sla = getSLA(t);
-
-    const div = document.createElement("div");
-    div.className = `task ${status === "COMPLETED" ? "completed" : "pending"}`;
-
-    div.innerHTML = `
-      <div class="task-header">
-        <b>${t.CUSTOMERNAME || ""}</b>
-        <div class="small">${t.ADDRESS || ""}</div>
-        <div class="small">Driver: ${t.driverId || "—"}</div>
-        ${sla ? `<div class="small ${sla.cls}">⏱ ${sla.text}</div>` : ""}
-      </div>
-
-      <div class="task-details" data-task-id="${t._key}" style="display:none">
-        ${renderTaskDetails(t)}
-
-        ${t.status === "COMPLETED" && t.imageUrl ? `
-          <button class="toggleBtn"
-            onclick="this.nextElementSibling.style.display =
-            this.nextElementSibling.style.display === 'none' ? 'block' : 'none'">
-            👁 Show Photo
-          </button>
-          <img src="${t.imageUrl}" style="display:none;width:100%">
-        ` : ""}
-
-        <div class="form-actions">
-          <button class="toggleBtn" onclick="enableEdit(this)">✏ Modify Task</button>
-        </div>
-      </div>
-    `;
-
-    const header = div.querySelector(".task-header");
-    const details = div.querySelector(".task-details");
-    header.onclick = () =>
-      details.style.display = details.style.display === "none" ? "block" : "none";
-
-    taskList.appendChild(div);
-  });
-}
   
 function initMap(){
   if(map) return;
