@@ -248,7 +248,7 @@ button {
 
 <body>
 
-<h2>🧑‍💼 Admin Dashboard V2.2.9</h2>
+<h2>🧑‍💼 Admin Dashboard V2.2.10</h2>
 
 <!-- ===== DASHBOARD ===== -->
 <div class="dashboard">
@@ -374,7 +374,6 @@ function withTimeout(promise, ms = 8000) {
   ]);
 }
 
-
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 
@@ -453,7 +452,7 @@ function getSLA(task) {
 let DRIVER_CACHE = {};
 
 async function loadDrivers() {
-  const snap = await get(ref(db, "drivers"));
+  const snap = await withTimeout(get(ref(db, "drivers")), 8000);
   DRIVER_CACHE = snap.val() || {};
 }
 
@@ -461,7 +460,7 @@ async function loadDrivers() {
 
 /* ===== DASHBOARD ===== */
 window.refreshDashboard = async function () {
-  const snap = await get(ref(db,"tasks"));
+  const snap = await withTimeout(get(ref(db,"tasks")), 8000);
   const tasks = Object.values(snap.val()||{});
   let open=0,done=0,ok=0,warn=0,breach=0;
 
@@ -580,7 +579,15 @@ window.loadTasks = async function (status) {
     equalTo(status)
   );
 
-  const snap = await get(q);
+  let snap;
+  try {
+    snap = await withTimeout(get(q), 8000);
+  } catch (e) {
+    taskList.innerHTML = "⚠️ Failed to load tasks (offline or slow network)";
+    hideLoader();
+    return;
+  }
+    
   const raw = snap.val() || {};
 
   let tasks = Object.keys(raw).map(k => ({
@@ -645,16 +652,6 @@ window.cancelEdit = function (btn) {
   `;
 };
 
-window.refreshDashboard = async function () {
-  showLoader();
-  try {
-    const snap = await get(ref(db,"tasks"));
-    const tasks = Object.values(snap.val()||{});
-    ...
-  } finally {
-    hideLoader();
-  }
-};
   
 window.saveEdit = async function (btn) {
   const details = btn.closest(".task-details");
@@ -696,12 +693,14 @@ window.saveEdit = async function (btn) {
   refreshDashboard();
   loadTasks(CURRENT_STATUS);
 };
-  
-   if (!tasks.length) {
-  taskList.innerHTML = "No tasks";
+ 
+
+  if (!tasks.length) {
+  taskList.innerHTML = "No tasks found";
+  hideLoader();
   return;
 }
-
+  
   taskList.innerHTML = "";
 
   tasks.forEach(t => {
@@ -890,7 +889,7 @@ function renderDriverList(drivers) {
 }
   
 async function buildTaskStats() {
-  const snap = await get(ref(db, "tasks"));
+  const snap = await withTimeout(get(ref(db, "tasks")), 8000);
   const tasks = snap.val() || {};
 
   const stats = {};
@@ -913,7 +912,7 @@ async function buildTaskStats() {
 }
 
 async function refreshMap() {
-  const snap = await get(ref(db, "driverStatus"));
+  const snap = await withTimeout(get(ref(db, "driverStatus")), 8000);
   const data = snap.val() || {};
 
   renderDriverList(data);
@@ -988,20 +987,20 @@ function setLoaderText(txt) {
 (async function init() {
   showLoader("Loading drivers…");
   try {
-    await withTimeout(loadDrivers());
+    await loadDrivers();
 
     showLoader("Loading dashboard…");
-    await withTimeout(refreshDashboard());
+    await refreshDashboard();
 
     showLoader("Loading tasks…");
-    await withTimeout(loadTasks("PENDING"));
+    await loadTasks("PENDING");
   } catch (e) {
-    console.error("Init failed:", e);
     alert("Dashboard failed to load. Please refresh.");
   } finally {
-    hideLoader(); // 🔥 ALWAYS executes
+    hideLoader();
   }
-})();</script>
+})();
+</script>
 
 <button id="scrollTopBtn" onclick="scrollToTop()">⬆</button>
 
