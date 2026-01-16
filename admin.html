@@ -248,7 +248,7 @@ button {
 
 <body>
 
-<h2>🧑‍💼 Admin Dashboard V2.3.0.7</h2>
+<h2>🧑‍💼 Admin Dashboard V2.3.0.8</h2>
 
 <!-- ===== DASHBOARD ===== -->
 <div class="dashboard">
@@ -937,12 +937,19 @@ function renderDriverList(drivers) {
 
   Object.entries(drivers).forEach(([id, d]) => {
 
-  // 🔥 BA FILTER
+    // 🔥 BA FILTER (LIVE MAP)
     if (!driverMatchesBA(id)) return;
+
+    // 🔥 Must have location to show on map
     if (!d.latitude || !d.longitude) return;
 
     const status = getDriverStatus(d.lastSeen);
     const stats = TASK_STATS[id] || { open: 0, completed: 0 };
+
+    // 👤 Driver info from driver cache
+    const driverInfo = DRIVER_CACHE[id] || {};
+    const driverName = driverInfo.name || "Unknown Driver";
+    const driverContact = driverInfo.contact || "—";
 
     const row = document.createElement("div");
     row.style.cssText = `
@@ -951,36 +958,49 @@ function renderDriverList(drivers) {
       padding:8px 0;
       border-bottom:1px solid #eee;
       cursor:pointer;
+      align-items:flex-start;
     `;
 
     row.innerHTML = `
+      <!-- STATUS DOT -->
       <div style="
         width:10px;
         height:10px;
         margin-top:4px;
         border-radius:50%;
         background:${status.color};
+        flex-shrink:0;
       "></div>
 
+      <!-- DRIVER INFO -->
       <div style="flex:1">
-        <div style="font-size:13px;font-weight:bold;">${id}</div>
-        <div style="font-size:11px;color:#666;">
-          ${status.label}
+        <div style="font-size:13px;font-weight:bold;">
+          ${driverName}
         </div>
-        <div style="font-size:11px;color:#444;margin-top:2px;">
+
+        <div style="font-size:12px;color:#444;">
+          📞 ${driverContact}
+        </div>
+
+        <div style="font-size:11px;color:#666;margin-top:2px;">
+          ${id} · ${status.label}
+        </div>
+
+        <div style="font-size:11px;color:#444;margin-top:4px;">
           <span
             style="color:orange;cursor:pointer;font-weight:bold"
-            onclick="showDriverOpenTasks('${id}')">
+            onclick="event.stopPropagation(); showDriverOpenTasks('${id}')">
             🟠 Open: ${stats.open}
           </span>
-           |
-           <span style="color:green">
+          |
+          <span style="color:green">
             ✅ Done: ${stats.completed}
-           </span>
+          </span>
         </div>
       </div>
     `;
 
+    // 🗺 Click row → focus map
     row.onclick = () => {
       map.setView([d.latitude, d.longitude], 15);
       markers[id]?.openPopup();
@@ -989,12 +1009,15 @@ function renderDriverList(drivers) {
     list.appendChild(row);
   });
 
+  // 💤 Empty state
   if (!list.children.length) {
-    list.innerHTML =
-      "<div style='font-size:12px;color:#888'>No active drivers</div>";
+    list.innerHTML = `
+      <div style="font-size:12px;color:#888;padding:6px 0;">
+        No active drivers
+      </div>
+    `;
   }
-}
-  
+}  
 async function buildTaskStats() {
   const snap = await withTimeout(get(ref(db, "tasks")), 8000);
   const tasks = snap.val() || {};
