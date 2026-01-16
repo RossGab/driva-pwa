@@ -248,7 +248,7 @@ button {
 
 <body>
 
-<h2>🧑‍💼 Admin Dashboard V2.3.0.6</h2>
+<h2>🧑‍💼 Admin Dashboard V2.3.0.7</h2>
 
 <!-- ===== DASHBOARD ===== -->
 <div class="dashboard">
@@ -307,6 +307,19 @@ button {
 <div id="mapContainer" style="display:none;">
   <div style="display:flex; gap:10px;">
 
+    <div id="mapBAFilter" style="
+      background:#fff;
+      padding:8px;
+      border-radius:6px;
+      margin-bottom:8px;
+      box-shadow:0 0 4px rgba(0,0,0,.1);
+    ">
+      <b style="font-size:13px;">Filter Drivers by BA</b>
+      <div id="mapBACheckboxes"
+           style="display:flex;flex-wrap:wrap;gap:10px;margin-top:6px;">
+      </div>
+    </div>
+
     <!-- 🗺 MAP (BLUE AREA) -->
     <div id="map" style="flex:3; height:420px; border-radius:10px;"></div>
 
@@ -356,6 +369,40 @@ function showLoader(text = "Loading…") {
   setLoaderText(text);
   el.classList.remove("hide");
   el.style.display = "flex";
+}
+
+function buildLiveMapBAFilters() {
+  const box = document.getElementById("mapBACheckboxes");
+  box.innerHTML = "";
+
+  const allBAs = new Set();
+
+  Object.values(DRIVER_BA_MAP).forEach(baList => {
+    baList.forEach(ba => allBAs.add(ba));
+  });
+
+  [...allBAs].sort().forEach(ba => {
+    const label = document.createElement("label");
+    label.style.cssText =
+      "font-size:12px;display:flex;align-items:center;gap:4px;";
+
+    label.innerHTML = `
+      <input type="checkbox" value="${ba}">
+      <span>${ba}</span>
+    `;
+
+    const input = label.querySelector("input");
+    input.checked = FILTER_BA.has(ba);
+
+    input.onchange = () => {
+      if (input.checked) FILTER_BA.add(ba);
+      else FILTER_BA.delete(ba);
+
+      refreshMap();        // 🔥 refresh markers
+    };
+
+    box.appendChild(label);
+  });
 }
 
 function driverMatchesBA(driverId) {
@@ -831,6 +878,7 @@ window.toggleLiveMap = async function () {
 
   await buildTaskStatsLive();
   await buildDriverBAMapLive();
+  buildLiveMapBAFilters();
   await refreshMap();
 };  
   
