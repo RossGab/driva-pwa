@@ -26,11 +26,11 @@ h2 {
   box-shadow:0 0 4px rgba(0,0,0,.1);
   margin-bottom:12px;
   display:grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap:10px;
 }
 
-select, button {
+select, input, button {
   padding:8px;
   border-radius:6px;
   border:1px solid #ccc;
@@ -57,7 +57,7 @@ button:hover {
 
 <body>
 
-<h2>📊 Task ReportV1.0.4</h2>
+<h2>📊 Task Report V1.0.6</h2>
 
 <div class="filters">
   <select id="statusFilter">
@@ -78,11 +78,14 @@ button:hover {
     <option value="">All DMZ</option>
   </select>
 
+  <input type="date" id="dateFrom">
+  <input type="date" id="dateTo">
+
   <button onclick="generateReport()">⬇ Export XLSX</button>
 </div>
 
 <p class="note">
-  Exports all tasks from Firebase based on selected filters
+  Date range is based on <b>Created Date</b>
 </p>
 
 <script type="module">
@@ -140,6 +143,12 @@ function fillSelect(id, field) {
   });
 }
 
+/* ===== DATE HELPERS ===== */
+function toDateOnly(val) {
+  if (!val) return null;
+  return new Date(val).setHours(0,0,0,0);
+}
+
 /* ===== EXPORT ===== */
 window.generateReport = function () {
   const status = document.getElementById("statusFilter").value;
@@ -147,12 +156,22 @@ window.generateReport = function () {
   const ba = document.getElementById("baFilter").value;
   const dmz = document.getElementById("dmzFilter").value;
 
-  let rows = ALL_TASKS.filter(t =>
-    (!status || t.status === status) &&
-    (!jobType || t.JOBTYPE === jobType) &&
-    (!ba || t.BA === ba) &&
-    (!dmz || t.DMZ === dmz)
-  );
+  const from = toDateOnly(document.getElementById("dateFrom").value);
+  const to = toDateOnly(document.getElementById("dateTo").value);
+
+  let rows = ALL_TASKS.filter(t => {
+    const created = toDateOnly(t.createdAt);
+
+    if (from && (!created || created < from)) return false;
+    if (to && (!created || created > to)) return false;
+
+    return (
+      (!status || t.status === status) &&
+      (!jobType || t.JOBTYPE === jobType) &&
+      (!ba || t.BA === ba) &&
+      (!dmz || t.DMZ === dmz)
+    );
+  });
 
   if (!rows.length) {
     alert("No data found for selected filters.");
