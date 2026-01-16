@@ -248,7 +248,7 @@ button {
 
 <body>
 
-<h2>🧑‍💼 Admin Dashboard V2.3.0.8</h2>
+<h2>🧑‍💼 Admin Dashboard V2.3.0.9</h2>
 
 <!-- ===== DASHBOARD ===== -->
 <div class="dashboard">
@@ -286,14 +286,33 @@ button {
 </div>
 
 <input id="searchBox" placeholder="Search name, address, driver, remarks, etc.">
-<div id="baFilters" style="
-  display:none;
-  background:#fff;
-  padding:8px;
-  border-radius:6px;
-  margin-bottom:12px;
-  box-shadow:0 0 4px rgba(0,0,0,.1);
-">
+<!-- 🔍 SEARCH (Open & Completed only) -->
+<div id="searchWrapper" style="display:none; position:relative; margin-bottom:12px;">
+  <input
+    id="searchBox"
+    placeholder="Search name, address, driver, remarks…"
+    style="width:100%; padding:10px; padding-right:34px;
+           border-radius:6px; border:1px solid #ccc; font-size:14px;"
+  >
+  <button
+    id="clearSearchBtn"
+    onclick="clearSearch()"
+    style="
+      position:absolute;
+      right:8px;
+      top:50%;
+      transform:translateY(-50%);
+      border:none;
+      background:transparent;
+      font-size:16px;
+      cursor:pointer;
+      display:none;
+    "
+    title="Clear search"
+  >
+    ❌
+  </button>
+</div>
   <div style="font-size:13px;font-weight:bold;margin-bottom:6px;">
     Filter by BA
   </div>
