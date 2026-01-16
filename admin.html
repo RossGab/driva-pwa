@@ -248,7 +248,7 @@ button {
 
 <body>
 
-<h2>🧑‍💼 Admin Dashboard V2.3.0.5</h2>
+<h2>🧑‍💼 Admin Dashboard V2.3.0.6</h2>
 
 <!-- ===== DASHBOARD ===== -->
 <div class="dashboard">
@@ -818,15 +818,21 @@ window.toggleLiveMap = async function () {
   mapContainer.style.display = MAP_VISIBLE ? "block" : "none";
   taskList.style.display = MAP_VISIBLE ? "none" : "block";
 
+  // ✅ HIDE SEARCH BAR IN LIVE MAP
+  searchBox.style.display = MAP_VISIBLE ? "none" : "block";
+
+  // Optional: also hide BA filters on map
+  baFilters.style.display = MAP_VISIBLE ? "none" : "block";
+
   if (!MAP_VISIBLE) return;
 
   initMap();
   setTimeout(() => map.invalidateSize(), 200);
 
   await buildTaskStatsLive();
-  await buildDriverBAMapLive(); // ✅ STEP 1 ADDITION
+  await buildDriverBAMapLive();
   await refreshMap();
-};
+};  
   
 window.showDriverOpenTasks = function (driverId) {
   FILTER_DRIVER = driverId;
