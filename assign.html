@@ -64,7 +64,7 @@ button {
 
 <body>
 
-<h2>➕ Assign Task V2.0.5</h2>
+<h2>➕ Assign Task V2.0.6</h2>
 
 <button onclick="location.href='admin.html'"
   style="
@@ -280,6 +280,42 @@ window.uploadCSV = async function () {
     uploadBtn.innerText = "Upload CSV";
   }
 };
+
+document.getElementById("taskForm").addEventListener("submit", async e => {
+  e.preventDefault();
+
+  const payload = {
+    JOBTYPE: JOBTYPE.value,
+    BA: BA.value,
+    DMZ: DMZ.value,
+    MRU: MRU.value,
+    SEQUENCE: SEQUENCE.value,
+    METERNUMBER: METERNUMBER.value,
+    ACCOUNTNUMBER: ACCOUNTNUMBER.value,
+    CUSTOMERNAME: CUSTOMERNAME.value,
+    ADDRESS: ADDRESS.value,
+    ZIPCODE: ZIPCODE.value,
+    LATITUDE: LATITUDE.value,
+    LONGITUDE: LONGITUDE.value,
+
+    driverId: AGENTID.value || "",
+    AGENTID: AGENTID.value || "",
+    AGENTNAME: AGENTNAME.value || "",
+
+    status: "PENDING",
+
+    // ✅ STEP 1 — CREATION DATE
+    createdAt: new Date().toISOString()
+  };
+
+  const taskId = `TASK_${Date.now()}`;
+
+  await update(ref(db, `tasks/${taskId}`), payload);
+
+  alert("✅ Task created");
+  location.href = "admin.html";
+});
+  
 </script>
 </body>
 </html>
