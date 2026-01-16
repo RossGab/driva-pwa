@@ -248,7 +248,7 @@ button {
 
 <body>
 
-<h2>🧑‍💼 Admin Dashboard V2.2.10</h2>
+<h2>🧑‍💼 Admin Dashboard V2.3.0.11</h2>
 
 <!-- ===== DASHBOARD ===== -->
 <div class="dashboard">
@@ -274,8 +274,8 @@ button {
   <button class="openBtn" onclick="showAllOpenTasks()">📂 Open</button>
   <button class="doneBtn" onclick="showCompletedTasks()">✅ Completed</button>
   <button class="assign" onclick="location.href='add-driver.html'">👤 Add Driver</button>
-  <button class="refresh" onclick="refreshDashboard()">🔄</button>
   <button class="assign" onclick="openReport()">📊 Report</button>
+  <button class="refresh" onclick="hardRefresh()">🔄</button>
 </div>
 
 <div id="loadingScreen">
@@ -284,16 +284,36 @@ button {
     <div class="loader-text">Loading dashboard…</div>
   </div>
 </div>
-
-<input id="searchBox" placeholder="Search name, address, driver, remarks, etc.">
-<div id="baFilters" style="
-  display:none;
-  background:#fff;
-  padding:8px;
-  border-radius:6px;
-  margin-bottom:12px;
-  box-shadow:0 0 4px rgba(0,0,0,.1);
-">
+  
+<!-- 🔍 SEARCH (Open & Completed only) -->
+<div id="searchWrapper" style="display:none; position:relative; margin-bottom:12px;">
+  <input
+    id="searchBox"
+    placeholder="Search name, address, driver, remarks…"
+    style="width:100%; padding:10px; padding-right:34px;
+           border-radius:6px; border:1px solid #ccc; font-size:14px;"
+  >
+  <button
+    id="clearSearchBtn"
+    onclick="clearSearch()"
+    style="
+      position:absolute;
+      right:8px;
+      top:50%;
+      transform:translateY(-50%);
+      border:none;
+      background:transparent;
+      font-size:16px;
+      cursor:pointer;
+      display:none;
+    "
+    title="Clear search"
+  >
+    ❌
+  </button>
+</div>
+  <div id="baFilters" style="display:none; background:#fff; padding:8px;
+     border-radius:6px; margin-bottom:12px; box-shadow:0 0 4px rgba(0,0,0,.1);">
   <div style="font-size:13px;font-weight:bold;margin-bottom:6px;">
     Filter by BA
   </div>
@@ -306,6 +326,19 @@ button {
 <!-- ===== LIVE MAP ===== -->
 <div id="mapContainer" style="display:none;">
   <div style="display:flex; gap:10px;">
+
+    <div id="mapBAFilter" style="
+      background:#fff;
+      padding:8px;
+      border-radius:6px;
+      margin-bottom:8px;
+      box-shadow:0 0 4px rgba(0,0,0,.1);
+    ">
+      <b style="font-size:13px;">Filter Drivers by BA</b>
+      <div id="mapBACheckboxes"
+           style="display:flex;flex-wrap:wrap;gap:10px;margin-top:6px;">
+      </div>
+    </div>
 
     <!-- 🗺 MAP (BLUE AREA) -->
     <div id="map" style="flex:3; height:420px; border-radius:10px;"></div>
@@ -337,6 +370,8 @@ import {
 } from
   "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
+const TASK_CACHE_KEY = "ADMIN_TASK_CACHE_V1";
+
 /* ===== FIREBASE ===== */
 const firebaseConfig = {
   apiKey: "AIzaSyDFW61pnwLvh6HGKWt10zLYNr860fI8vkg",
@@ -354,6 +389,55 @@ function showLoader(text = "Loading…") {
   setLoaderText(text);
   el.classList.remove("hide");
   el.style.display = "flex";
+}
+
+function buildLiveMapBAFilters() {
+  const box = document.getElementById("mapBACheckboxes");
+  box.innerHTML = "";
+
+  const allBAs = new Set();
+
+  Object.values(DRIVER_BA_MAP).forEach(baList => {
+    baList.forEach(ba => allBAs.add(ba));
+  });
+
+  [...allBAs].sort().forEach(ba => {
+    const label = document.createElement("label");
+    label.style.cssText =
+      "font-size:12px;display:flex;align-items:center;gap:4px;";
+
+    label.innerHTML = `
+      <input type="checkbox" value="${ba}">
+      <span>${ba}</span>
+    `;
+
+    const input = label.querySelector("input");
+    input.checked = FILTER_BA.has(ba);
+
+    input.onchange = () => {
+      if (input.checked) FILTER_BA.add(ba);
+      else FILTER_BA.delete(ba);
+
+      refreshMap();        // 🔥 refresh markers
+    };
+
+    box.appendChild(label);
+  });
+}
+
+function driverMatchesBA(driverId) {
+  // No BA filter → show all drivers
+  if (!FILTER_BA.size) return true;
+
+  const baSet = DRIVER_BA_MAP[driverId];
+  if (!baSet) return false;
+
+  // Match if ANY BA overlaps
+  for (const ba of baSet) {
+    if (FILTER_BA.has(ba)) return true;
+  }
+
+  return false;
 }
 
 function hideLoader() {
@@ -374,6 +458,29 @@ function withTimeout(promise, ms = 8000) {
   ]);
 }
 
+window.openReport = function () {
+  window.location.href = "report.html";
+};
+
+function getCachedTasks() {
+  try {
+    const raw = localStorage.getItem(TASK_CACHE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function setCachedTasks(tasks) {
+  try {
+    localStorage.setItem(TASK_CACHE_KEY, JSON.stringify(tasks));
+  } catch {}
+}
+
+function clearTaskCache() {
+  localStorage.removeItem(TASK_CACHE_KEY);
+}
+
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 
@@ -384,11 +491,21 @@ let SEARCH_TERM = "";
 let MAP_VISIBLE = false;
 let TASK_STATS = {};
 let FILTER_DRIVER = null;
+let DRIVER_BA_MAP = {};
+const searchWrapper = document.getElementById("searchWrapper");
+const baFilters = document.getElementById("baFilters");
+const searchBox = document.getElementById("searchBox");
 
 /* ===== SEARCH ===== */
 searchBox.addEventListener("input", e => {
   SEARCH_TERM = e.target.value.toLowerCase();
-  if (CURRENT_STATUS) loadTasks(CURRENT_STATUS);
+
+  const clearBtn = document.getElementById("clearSearchBtn");
+  clearBtn.style.display = SEARCH_TERM ? "block" : "none";
+
+  if (CURRENT_STATUS) {
+    loadTasks(CURRENT_STATUS);
+  }
 });
 
 function buildBAFilters(tasks) {
@@ -434,6 +551,7 @@ function buildBAFilters(tasks) {
       else FILTER_BA.delete(ba);
 
       loadTasks(CURRENT_STATUS);
+      if (MAP_VISIBLE) refreshMap();   // 🔥 IMPORTANT
     };
 
     box.appendChild(label);
@@ -457,7 +575,19 @@ async function loadDrivers() {
 }
 
 
+window.onerror = (msg, src, line) => {
+  alert(`JS Error:\n${msg}\nLine: ${line}`);
+};
+window.clearSearch = function () {
+  SEARCH_TERM = "";
+  searchBox.value = "";
+  document.getElementById("clearSearchBtn").style.display = "none";
 
+  if (CURRENT_STATUS) {
+    loadTasks(CURRENT_STATUS);
+  }
+};
+  
 /* ===== DASHBOARD ===== */
 window.refreshDashboard = async function () {
   const snap = await withTimeout(get(ref(db,"tasks")), 60000);
@@ -566,7 +696,10 @@ function renderTaskDetails(t) {
 }
   
 window.showCompletedTasks = function () {
-  // 🔥 EXIT MAP MODE COMPLETELY
+  // ✅ STEP 4
+  searchWrapper.style.display = "block";
+  baFilters.style.display = "block";
+
   MAP_VISIBLE = false;
   FILTER_DRIVER = null;
 
@@ -576,56 +709,122 @@ window.showCompletedTasks = function () {
   loadTasks("COMPLETED");
 };
 
+window.showAllOpenTasks = function () {
+  // ✅ STEP 4
+  searchWrapper.style.display = "block";
+  baFilters.style.display = "block";
+
+  FILTER_DRIVER = null;
+  MAP_VISIBLE = false;
+
+  mapContainer.style.display = "none";
+  taskList.style.display = "block";
+
+  loadTasks("PENDING");
+};
+  
+window.hardRefresh = async function () {
+  clearTaskCache();
+  showLoader("Refreshing data…");
+
+  try {
+    await refreshDashboard();
+    await loadTasks(CURRENT_STATUS || "PENDING");
+  } finally {
+    hideLoader();
+  }
+};
+
 window.loadTasks = async function (status) {
   CURRENT_STATUS = status;
   taskList.innerHTML = "Loading...";
 
-  // ✅ SERVER-SIDE FILTER (FAST)
-  const q = query(
-    ref(db, "tasks"),
-    orderByChild("status"),
-    equalTo(status)
-  );
+  let allTasks = getCachedTasks();
 
-  let snap;
-  try {
-    snap = await withTimeout(get(q), 60000);
-  } catch (e) {
-    taskList.innerHTML = "⚠️ Failed to load tasks (offline or slow network)";
-    hideLoader();
+  // 🔁 FETCH ONLY IF NO CACHE
+  if (!allTasks) {
+    try {
+      const snap = await withTimeout(get(ref(db, "tasks")), 60000);
+      const raw = snap.val() || {};
+      allTasks = Object.keys(raw).map(k => ({ _key: k, ...raw[k] }));
+      setCachedTasks(allTasks);
+    } catch (e) {
+      taskList.innerHTML = "⚠️ Failed to load tasks";
+      return;
+    }
+  }
+
+  // ✅ FILTER LOCALLY (FAST)
+  let tasks = allTasks.filter(t => t.status === status);
+
+  window.ALL_TASKS = tasks;
+
+  // Driver filter
+  if (FILTER_DRIVER) {
+    tasks = tasks.filter(t => t.driverId === FILTER_DRIVER);
+  }
+
+  // Search filter
+  if (SEARCH_TERM) {
+    const term = SEARCH_TERM.toLowerCase();
+    tasks = tasks.filter(t =>
+      JSON.stringify(t).toLowerCase().includes(term)
+    );
+  }
+
+  // BA filters
+  buildBAFilters(allTasks);
+  if (FILTER_BA.size) {
+    tasks = tasks.filter(t => FILTER_BA.has(t.BA));
+  }
+
+  // 🔽 render (your existing logic untouched)
+  taskList.innerHTML = "";
+  if (!tasks.length) {
+    taskList.innerHTML = "No tasks found";
     return;
   }
-    
-  const raw = snap.val() || {};
 
-  let tasks = Object.keys(raw).map(k => ({
-    _key: k,
-    ...raw[k]
-  }));
+  tasks.forEach(t => {
+    const sla = getSLA(t);
 
-window.ALL_TASKS = tasks;
+    const div = document.createElement("div");
+    div.className = `task ${status === "COMPLETED" ? "completed" : "pending"}`;
 
-// 1️⃣ Driver filter
-if (FILTER_DRIVER) {
-  tasks = tasks.filter(t => t.driverId === FILTER_DRIVER);
-}
+    div.innerHTML = `
+      <div class="task-header">
+        <b>${t.CUSTOMERNAME || ""}</b>
+        <div class="small">${t.ADDRESS || ""}</div>
+        <div class="small">Driver: ${t.driverId || "—"}</div>
+        ${sla ? `<div class="small ${sla.cls}">⏱ ${sla.text}</div>` : ""}
+      </div>
 
-// 2️⃣ Search filter
-if (SEARCH_TERM) {
-  const term = SEARCH_TERM.toLowerCase();
-  tasks = tasks.filter(t =>
-    JSON.stringify(t).toLowerCase().includes(term)
-  );
-}
+      <div class="task-details" data-task-id="${t._key}" style="display:none">
+        ${renderTaskDetails(t)}
 
-// 3️⃣ Build BA filters (from ALL_TASKS only)
-buildBAFilters(window.ALL_TASKS);
+        ${t.status === "COMPLETED" && t.imageUrl ? `
+          <button class="toggleBtn"
+            onclick="this.nextElementSibling.style.display =
+            this.nextElementSibling.style.display === 'none' ? 'block' : 'none'">
+            👁 Show Photo
+          </button>
+          <img src="${t.imageUrl}" style="display:none;width:100%">
+        ` : ""}
 
-// 4️⃣ Apply BA filter (display only)
-if (FILTER_BA.size) {
-  tasks = tasks.filter(t => FILTER_BA.has(t.BA));
-}
+        <div class="form-actions">
+          <button class="toggleBtn" onclick="enableEdit(this)">✏ Modify Task</button>
+        </div>
+      </div>
+    `;
 
+    const header = div.querySelector(".task-header");
+    const details = div.querySelector(".task-details");
+    header.onclick = () =>
+      details.style.display = details.style.display === "none" ? "block" : "none";
+
+    taskList.appendChild(div);
+  });
+};
 
 
 window.enableEdit = function (btn) {
@@ -690,85 +889,27 @@ window.saveEdit = async function (btn) {
   alert(JSON.stringify(payload, null, 2));
   await update(ref(db, `tasks/${taskId}`), payload);
 
+  /* 🔥 ADD THIS BLOCK — UPDATE LOCAL CACHE */
+  const cached = getCachedTasks() || [];
+  const idx = cached.findIndex(t => t._key === taskId);
+  
+  if (idx !== -1) {
+    cached[idx] = { ...cached[idx], ...payload };
+    setCachedTasks(cached);
+  }
+  /* 🔥 END CACHE UPDATE */
+  
   alert("✅ Task updated");
-
+  
   details.querySelector(".form-actions").innerHTML = `
     <button class="toggleBtn" onclick="enableEdit(this)">
       ✏ Modify Task
     </button>
   `;
-
+  
   refreshDashboard();
   loadTasks(CURRENT_STATUS);
-};
- 
-
-  if (!tasks.length) {
-  taskList.innerHTML = "No tasks found";
-  hideLoader();
-  return;
-}
   
-  taskList.innerHTML = "";
-
-  tasks.forEach(t => {
-    if (t.status === "COMPLETED") {
-      console.log("ADMIN COMPLETED TASK:", t);
-    }
-    const sla = getSLA(t);
-
-    const div = document.createElement("div");
-    div.className = `task ${status === "COMPLETED" ? "completed" : "pending"}`;
-
-
-div.innerHTML = `
-  <div style="cursor:pointer" class="task-header">
-    <b>${t.CUSTOMERNAME || ""}</b>
-    <div class="small">${t.ADDRESS || ""}</div>
-    <div class="small">Driver: ${t.driverId || "—"}</div>
-    ${sla ? `<div class="small ${sla.cls}">⏱ ${sla.text}</div>` : ""}
-  </div>
-
-  <!-- 🔽 EVERYTHING BELOW FOLDS -->
-  <div class="task-details" 
-     data-task-id="${t._key}" 
-     style="display:none;margin-top:8px;">
-
-  ${renderTaskDetails(t)}
-
-  <!-- PHOTO -->
-  ${t.status === "COMPLETED" && t.imageUrl ? `
-    <div style="margin-top:8px">
-      <button class="toggleBtn"
-        onclick="this.nextElementSibling.style.display =
-        this.nextElementSibling.style.display === 'none' ? 'block' : 'none'">
-        👁 Show Photo
-      </button>
-      <img src="${t.imageUrl}"
-           style="display:none;width:100%;margin-top:8px;border-radius:6px;">
-    </div>
-  ` : ""}
-
-  <div class="form-actions">
-    <button class="toggleBtn" onclick="enableEdit(this)">
-      ✏ Modify Task
-    </button>
-  </div>
-
-</div>
-`;
-    
-
-const header = div.querySelector(".task-header");
-const details = div.querySelector(".task-details");
-
-header.onclick = () => {
-  details.style.display =
-    details.style.display === "none" ? "block" : "none";
-};
-
-    taskList.appendChild(div);
-  });
 };
 /* ===== LIVE MAP ===== */
 let map, markers={};
@@ -779,13 +920,23 @@ window.toggleLiveMap = async function () {
   mapContainer.style.display = MAP_VISIBLE ? "block" : "none";
   taskList.style.display = MAP_VISIBLE ? "none" : "block";
 
-  if (MAP_VISIBLE) {
-    await buildTaskStats();   // ⭐ ADD THIS
-    initMap();
-    setTimeout(() => map.invalidateSize(), 200);
-  }
-};
+  // ✅ HIDE SEARCH BAR IN LIVE MAP
+  searchWrapper.style.display = MAP_VISIBLE ? "none" : "block";
 
+  // Optional: also hide BA filters on map
+  baFilters.style.display = MAP_VISIBLE ? "none" : "block";
+
+  if (!MAP_VISIBLE) return;
+
+  initMap();
+  setTimeout(() => map.invalidateSize(), 200);
+
+  await buildTaskStatsLive();
+  await buildDriverBAMapLive();
+  buildLiveMapBAFilters();
+  await refreshMap();
+};  
+  
 window.showDriverOpenTasks = function (driverId) {
   FILTER_DRIVER = driverId;
 
@@ -796,16 +947,6 @@ window.showDriverOpenTasks = function (driverId) {
 
   // Load open tasks for this driver
   loadTasks("PENDING");
-};
-
-window.showAllOpenTasks = function () {
-  FILTER_DRIVER = null; // 🔥 CLEAR DRIVER FILTER
-  MAP_VISIBLE = false;
-
-  mapContainer.style.display = "none";
-  taskList.style.display = "block";
-
-  loadTasks("PENDING"); // ALL OPEN TASKS
 };
   
 function initMap(){
@@ -840,10 +981,20 @@ function renderDriverList(drivers) {
   list.innerHTML = "";
 
   Object.entries(drivers).forEach(([id, d]) => {
+
+    // 🔥 BA FILTER (LIVE MAP)
+    if (!driverMatchesBA(id)) return;
+
+    // 🔥 Must have location to show on map
     if (!d.latitude || !d.longitude) return;
 
     const status = getDriverStatus(d.lastSeen);
     const stats = TASK_STATS[id] || { open: 0, completed: 0 };
+
+    // 👤 Driver info from driver cache
+    const driverInfo = DRIVER_CACHE[id] || {};
+    const driverName = driverInfo.name || "Unknown Driver";
+    const driverContact = driverInfo.contact || "—";
 
     const row = document.createElement("div");
     row.style.cssText = `
@@ -852,36 +1003,49 @@ function renderDriverList(drivers) {
       padding:8px 0;
       border-bottom:1px solid #eee;
       cursor:pointer;
+      align-items:flex-start;
     `;
 
     row.innerHTML = `
+      <!-- STATUS DOT -->
       <div style="
         width:10px;
         height:10px;
         margin-top:4px;
         border-radius:50%;
         background:${status.color};
+        flex-shrink:0;
       "></div>
 
+      <!-- DRIVER INFO -->
       <div style="flex:1">
-        <div style="font-size:13px;font-weight:bold;">${id}</div>
-        <div style="font-size:11px;color:#666;">
-          ${status.label}
+        <div style="font-size:13px;font-weight:bold;">
+          ${driverName}
         </div>
-        <div style="font-size:11px;color:#444;margin-top:2px;">
+
+        <div style="font-size:12px;color:#444;">
+          📞 ${driverContact}
+        </div>
+
+        <div style="font-size:11px;color:#666;margin-top:2px;">
+          ${id} · ${status.label}
+        </div>
+
+        <div style="font-size:11px;color:#444;margin-top:4px;">
           <span
             style="color:orange;cursor:pointer;font-weight:bold"
-            onclick="showDriverOpenTasks('${id}')">
+            onclick="event.stopPropagation(); showDriverOpenTasks('${id}')">
             🟠 Open: ${stats.open}
           </span>
-           |
-           <span style="color:green">
+          |
+          <span style="color:green">
             ✅ Done: ${stats.completed}
-           </span>
+          </span>
         </div>
       </div>
     `;
 
+    // 🗺 Click row → focus map
     row.onclick = () => {
       map.setView([d.latitude, d.longitude], 15);
       markers[id]?.openPopup();
@@ -890,12 +1054,15 @@ function renderDriverList(drivers) {
     list.appendChild(row);
   });
 
+  // 💤 Empty state
   if (!list.children.length) {
-    list.innerHTML =
-      "<div style='font-size:12px;color:#888'>No active drivers</div>";
+    list.innerHTML = `
+      <div style="font-size:12px;color:#888;padding:6px 0;">
+        No active drivers
+      </div>
+    `;
   }
-}
-  
+}  
 async function buildTaskStats() {
   const snap = await withTimeout(get(ref(db, "tasks")), 8000);
   const tasks = snap.val() || {};
@@ -919,6 +1086,50 @@ async function buildTaskStats() {
   TASK_STATS = stats;
 }
 
+async function buildTaskStatsLive() {
+  const snap = await withTimeout(get(ref(db, "tasks")), 8000);
+  const tasks = snap.val() || {};
+
+  const stats = {};
+
+  Object.values(tasks).forEach(t => {
+    if (!t.driverId) return;
+
+    if (!stats[t.driverId]) {
+      stats[t.driverId] = { open: 0, completed: 0 };
+    }
+
+    if (t.status === "COMPLETED") {
+      stats[t.driverId].completed++;
+    } else {
+      stats[t.driverId].open++;
+    }
+  });
+
+  TASK_STATS = stats;
+}
+
+async function buildDriverBAMapLive() {
+  const snap = await withTimeout(get(ref(db, "tasks")), 8000);
+  const tasks = snap.val() || {};
+
+  const map = {};
+
+  Object.values(tasks).forEach(t => {
+    if (!t.driverId || !t.BA) return;
+
+    if (!map[t.driverId]) {
+      map[t.driverId] = [];
+    }
+
+    if (!map[t.driverId].includes(t.BA)) {
+      map[t.driverId].push(t.BA);
+    }
+  });
+
+  DRIVER_BA_MAP = map;
+}
+  
 async function refreshMap() {
   const snap = await withTimeout(get(ref(db, "driverStatus")), 8000);
   const data = snap.val() || {};
@@ -926,6 +1137,15 @@ async function refreshMap() {
   renderDriverList(data);
 
   Object.entries(data).forEach(([id, d]) => {
+
+  // 🔥 BA FILTER
+  if (!driverMatchesBA(id)) {
+    if (markers[id]) {
+      map.removeLayer(markers[id]);
+      delete markers[id];
+    }
+    return;
+  }
     if (!d.latitude || !d.longitude) return;
 
     const pos = [d.latitude, d.longitude];
@@ -986,7 +1206,6 @@ window.scrollToTop = function () {
 };
 
 /* INIT */
-let INITIAL_LOAD_DONE = false;
 function setLoaderText(txt) {
   const el = document.querySelector(".loader-text");
   if (el) el.textContent = txt;
