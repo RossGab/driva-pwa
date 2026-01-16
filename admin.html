@@ -248,7 +248,7 @@ button {
 
 <body>
 
-<h2>🧑‍💼 Admin Dashboard V2.3.0.2</h2>
+<h2>🧑‍💼 Admin Dashboard V2.3.0.3</h2>
 
 <!-- ===== DASHBOARD ===== -->
 <div class="dashboard">
@@ -803,14 +803,15 @@ window.toggleLiveMap = async function () {
 
   if (!MAP_VISIBLE) return;
 
-  // 1️⃣ Always show map immediately
+  // Show map instantly
   initMap();
   setTimeout(() => map.invalidateSize(), 200);
 
-  // 2️⃣ Fetch LIVE data in background (non-blocking)
-  buildTaskStatsLive();   // no await
-  refreshMap();           // no await
+  // Load LIVE data
+  await buildTaskStatsLive();
+  await refreshMap();
 };
+  
 window.showDriverOpenTasks = function (driverId) {
   FILTER_DRIVER = driverId;
 
@@ -922,6 +923,29 @@ function renderDriverList(drivers) {
 }
   
 async function buildTaskStats() {
+  const snap = await withTimeout(get(ref(db, "tasks")), 8000);
+  const tasks = snap.val() || {};
+
+  const stats = {};
+
+  Object.values(tasks).forEach(t => {
+    if (!t.driverId) return;
+
+    if (!stats[t.driverId]) {
+      stats[t.driverId] = { open: 0, completed: 0 };
+    }
+
+    if (t.status === "COMPLETED") {
+      stats[t.driverId].completed++;
+    } else {
+      stats[t.driverId].open++;
+    }
+  });
+
+  TASK_STATS = stats;
+}
+
+async function buildTaskStatsLive() {
   const snap = await withTimeout(get(ref(db, "tasks")), 8000);
   const tasks = snap.val() || {};
 
