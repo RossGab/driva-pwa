@@ -248,7 +248,7 @@ button {
 
 <body>
 
-<h2>🧑‍💼 Admin Dashboard V2.3.0.4</h2>
+<h2>🧑‍💼 Admin Dashboard V2.3.0.5</h2>
 
 <!-- ===== DASHBOARD ===== -->
 <div class="dashboard">
@@ -358,6 +358,21 @@ function showLoader(text = "Loading…") {
   el.style.display = "flex";
 }
 
+function driverMatchesBA(driverId) {
+  // No BA filter → show all drivers
+  if (!FILTER_BA.size) return true;
+
+  const baSet = DRIVER_BA_MAP[driverId];
+  if (!baSet) return false;
+
+  // Match if ANY BA overlaps
+  for (const ba of baSet) {
+    if (FILTER_BA.has(ba)) return true;
+  }
+
+  return false;
+}
+
 function hideLoader() {
   const el = document.getElementById("loadingScreen");
   if (!el || el.classList.contains("hide")) return;
@@ -460,6 +475,7 @@ function buildBAFilters(tasks) {
       else FILTER_BA.delete(ba);
 
       loadTasks(CURRENT_STATUS);
+      if (MAP_VISIBLE) refreshMap();   // 🔥 IMPORTANT
     };
 
     box.appendChild(label);
@@ -866,6 +882,9 @@ function renderDriverList(drivers) {
   list.innerHTML = "";
 
   Object.entries(drivers).forEach(([id, d]) => {
+
+  // 🔥 BA FILTER
+    if (!driverMatchesBA(id)) return;
     if (!d.latitude || !d.longitude) return;
 
     const status = getDriverStatus(d.lastSeen);
@@ -978,14 +997,16 @@ async function buildDriverBAMapLive() {
     if (!t.driverId || !t.BA) return;
 
     if (!map[t.driverId]) {
-      map[t.driverId] = new Set();
+      map[t.driverId] = [];
     }
 
-    map[t.driverId].add(t.BA);
+    if (!map[t.driverId].includes(t.BA)) {
+      map[t.driverId].push(t.BA);
+    }
   });
 
   DRIVER_BA_MAP = map;
-}  
+}
   
 async function refreshMap() {
   const snap = await withTimeout(get(ref(db, "driverStatus")), 8000);
@@ -994,6 +1015,15 @@ async function refreshMap() {
   renderDriverList(data);
 
   Object.entries(data).forEach(([id, d]) => {
+
+  // 🔥 BA FILTER
+  if (!driverMatchesBA(id)) {
+    if (markers[id]) {
+      map.removeLayer(markers[id]);
+      delete markers[id];
+    }
+    return;
+  }
     if (!d.latitude || !d.longitude) return;
 
     const pos = [d.latitude, d.longitude];
