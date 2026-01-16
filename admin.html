@@ -248,7 +248,7 @@ button {
 
 <body>
 
-<h2>🧑‍💼 Admin Dashboard V2.3.0.10</h2>
+<h2>🧑‍💼 Admin Dashboard V2.3.0.11</h2>
 
 <!-- ===== DASHBOARD ===== -->
 <div class="dashboard">
@@ -284,8 +284,7 @@ button {
     <div class="loader-text">Loading dashboard…</div>
   </div>
 </div>
-
-<input id="searchBox" placeholder="Search name, address, driver, remarks, etc.">
+  
 <!-- 🔍 SEARCH (Open & Completed only) -->
 <div id="searchWrapper" style="display:none; position:relative; margin-bottom:12px;">
   <input
@@ -313,6 +312,8 @@ button {
     ❌
   </button>
 </div>
+  <div id="baFilters" style="display:none; background:#fff; padding:8px;
+     border-radius:6px; margin-bottom:12px; box-shadow:0 0 4px rgba(0,0,0,.1);">
   <div style="font-size:13px;font-weight:bold;margin-bottom:6px;">
     Filter by BA
   </div>
@@ -491,6 +492,9 @@ let MAP_VISIBLE = false;
 let TASK_STATS = {};
 let FILTER_DRIVER = null;
 let DRIVER_BA_MAP = {};
+const searchWrapper = document.getElementById("searchWrapper");
+const baFilters = document.getElementById("baFilters");
+const searchBox = document.getElementById("searchBox");
 
 /* ===== SEARCH ===== */
 searchBox.addEventListener("input", e => {
@@ -692,7 +696,10 @@ function renderTaskDetails(t) {
 }
   
 window.showCompletedTasks = function () {
-  // 🔥 EXIT MAP MODE COMPLETELY
+  // ✅ STEP 4
+  searchWrapper.style.display = "block";
+  baFilters.style.display = "block";
+
   MAP_VISIBLE = false;
   FILTER_DRIVER = null;
 
@@ -702,6 +709,20 @@ window.showCompletedTasks = function () {
   loadTasks("COMPLETED");
 };
 
+window.showAllOpenTasks = function () {
+  // ✅ STEP 4
+  searchWrapper.style.display = "block";
+  baFilters.style.display = "block";
+
+  FILTER_DRIVER = null;
+  MAP_VISIBLE = false;
+
+  mapContainer.style.display = "none";
+  taskList.style.display = "block";
+
+  loadTasks("PENDING");
+};
+  
 window.hardRefresh = async function () {
   clearTaskCache();
   showLoader("Refreshing data…");
@@ -900,7 +921,7 @@ window.toggleLiveMap = async function () {
   taskList.style.display = MAP_VISIBLE ? "none" : "block";
 
   // ✅ HIDE SEARCH BAR IN LIVE MAP
-  searchBox.style.display = MAP_VISIBLE ? "none" : "block";
+  searchWrapper.style.display = MAP_VISIBLE ? "none" : "block";
 
   // Optional: also hide BA filters on map
   baFilters.style.display = MAP_VISIBLE ? "none" : "block";
@@ -926,16 +947,6 @@ window.showDriverOpenTasks = function (driverId) {
 
   // Load open tasks for this driver
   loadTasks("PENDING");
-};
-
-window.showAllOpenTasks = function () {
-  FILTER_DRIVER = null; // 🔥 CLEAR DRIVER FILTER
-  MAP_VISIBLE = false;
-
-  mapContainer.style.display = "none";
-  taskList.style.display = "block";
-
-  loadTasks("PENDING"); // ALL OPEN TASKS
 };
   
 function initMap(){
@@ -1195,7 +1206,6 @@ window.scrollToTop = function () {
 };
 
 /* INIT */
-let INITIAL_LOAD_DONE = false;
 function setLoaderText(txt) {
   const el = document.querySelector(".loader-text");
   if (el) el.textContent = txt;
