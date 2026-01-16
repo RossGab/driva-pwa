@@ -248,7 +248,7 @@ button {
 
 <body>
 
-<h2>🧑‍💼 Admin Dashboard V2.3.0.9</h2>
+<h2>🧑‍💼 Admin Dashboard V2.3.0.10</h2>
 
 <!-- ===== DASHBOARD ===== -->
 <div class="dashboard">
@@ -495,7 +495,13 @@ let DRIVER_BA_MAP = {};
 /* ===== SEARCH ===== */
 searchBox.addEventListener("input", e => {
   SEARCH_TERM = e.target.value.toLowerCase();
-  if (CURRENT_STATUS) loadTasks(CURRENT_STATUS);
+
+  const clearBtn = document.getElementById("clearSearchBtn");
+  clearBtn.style.display = SEARCH_TERM ? "block" : "none";
+
+  if (CURRENT_STATUS) {
+    loadTasks(CURRENT_STATUS);
+  }
 });
 
 function buildBAFilters(tasks) {
@@ -568,7 +574,16 @@ async function loadDrivers() {
 window.onerror = (msg, src, line) => {
   alert(`JS Error:\n${msg}\nLine: ${line}`);
 };
+window.clearSearch = function () {
+  SEARCH_TERM = "";
+  searchBox.value = "";
+  document.getElementById("clearSearchBtn").style.display = "none";
 
+  if (CURRENT_STATUS) {
+    loadTasks(CURRENT_STATUS);
+  }
+};
+  
 /* ===== DASHBOARD ===== */
 window.refreshDashboard = async function () {
   const snap = await withTimeout(get(ref(db,"tasks")), 60000);
