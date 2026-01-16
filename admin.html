@@ -248,7 +248,7 @@ button {
 
 <body>
 
-<h2>🧑‍💼 Admin Dashboard V2.3.0.3</h2>
+<h2>🧑‍💼 Admin Dashboard V2.3.0.4</h2>
 
 <!-- ===== DASHBOARD ===== -->
 <div class="dashboard">
@@ -409,6 +409,7 @@ let SEARCH_TERM = "";
 let MAP_VISIBLE = false;
 let TASK_STATS = {};
 let FILTER_DRIVER = null;
+let DRIVER_BA_MAP = {};
 
 /* ===== SEARCH ===== */
 searchBox.addEventListener("input", e => {
@@ -803,12 +804,11 @@ window.toggleLiveMap = async function () {
 
   if (!MAP_VISIBLE) return;
 
-  // Show map instantly
   initMap();
   setTimeout(() => map.invalidateSize(), 200);
 
-  // Load LIVE data
   await buildTaskStatsLive();
+  await buildDriverBAMapLive(); // ✅ STEP 1 ADDITION
   await refreshMap();
 };
   
@@ -968,6 +968,25 @@ async function buildTaskStatsLive() {
   TASK_STATS = stats;
 }
 
+async function buildDriverBAMapLive() {
+  const snap = await withTimeout(get(ref(db, "tasks")), 8000);
+  const tasks = snap.val() || {};
+
+  const map = {};
+
+  Object.values(tasks).forEach(t => {
+    if (!t.driverId || !t.BA) return;
+
+    if (!map[t.driverId]) {
+      map[t.driverId] = new Set();
+    }
+
+    map[t.driverId].add(t.BA);
+  });
+
+  DRIVER_BA_MAP = map;
+}  
+  
 async function refreshMap() {
   const snap = await withTimeout(get(ref(db, "driverStatus")), 8000);
   const data = snap.val() || {};
