@@ -150,36 +150,61 @@ tabUpdate.onclick = async () => {
 
 /* ===== ADD DELIVERY METHOD ===== */
 window.addDeliveryMethod = function () {
-  const job = jobTypeInput.value.trim();
+  const jobType = jobTypeInput.value.trim();
   const method = deliveryMethodInput.value.trim();
-  if (!job || !method) return alert("Required");
 
-  STATE.jobType = job;
-  STATE.methods[method] ??= {
-    remarks: {
-      label:"Other Remarks",
-      type:"textarea",
-      required:false
-    }
-  };
+  if (!jobType || !method) {
+    alert("Job Type and Delivery Method required");
+    return;
+  }
 
-  deliveryMethodInput.value="";
+  STATE.jobType = jobType;
+
+  if (!STATE.methods[method]) {
+    STATE.methods[method] = {};
+
+    // default Other Remarks
+    STATE.methods[method].remarks = {
+      label: "Other Remarks",
+      type: "textarea",
+      required: false
+    };
+  }
+
+  deliveryMethodInput.value = "";
   renderMethods();
 };
 
 /* ===== ADD FIELD ===== */
-function addField(method, box) {
-  const key = box.querySelector(".field-key").value.trim();
-  const label = box.querySelector(".field-label").value.trim();
-  const type = box.querySelector(".field-type").value;
-  const required = box.querySelector(".field-required").checked;
+function addField(method, container) {
+  const label = container.querySelector(".field-label").value.trim();
+  const type = container.querySelector(".field-type").value;
+  const required = container.querySelector(".field-required").checked;
 
-  if (!key || !label) return alert("Key & Label required");
+  if (!label) {
+    alert("Please enter a description label");
+    return;
+  }
 
-  STATE.methods[method][key] = { label, type, required };
+  const key = makeKey(label);
+
+  if (STATE.methods[method][key]) {
+    alert("Field already exists");
+    return;
+  }
+
+  STATE.methods[method][key] = {
+    label,
+    type,
+    required
+  };
+
+  container.querySelector(".field-label").value = "";
+  container.querySelector(".field-required").checked = false;
+
   renderMethods();
 }
-
+  
 /* ===== RENDER ===== */
 function renderMethods() {
   methodsContainer.innerHTML="";
@@ -188,8 +213,7 @@ function renderMethods() {
     div.className="method-box";
     div.innerHTML=`
       <b>${method}</b>
-
-      <input class="field-key" placeholder="Field key (e.g. receivedBy)">
+      
       <input class="field-label" placeholder="Label (e.g. Received by)">
       <select class="field-type">
         <option value="text">Text</option>
@@ -199,7 +223,13 @@ function renderMethods() {
       <button class="secondary add">➕ Add Description</button>
 
       ${Object.entries(fields).map(([k,f])=>`
-        <div class="field-row">${k} → ${f.label}</div>
+        <div class="field-list">
+          ${Object.values(fields).map(f => `
+            <div class="field-row">
+              ${f.label} — ${f.type} ${f.required ? "(required)" : ""}
+            </div>
+          `).join("")}
+        </div>
       `).join("")}
     `;
     div.querySelector(".add").onclick=()=>addField(method,div);
@@ -209,13 +239,22 @@ function renderMethods() {
 
 /* ===== SAVE ===== */
 window.saveConfig = async function () {
-  if (!STATE.jobType) return alert("No job type");
-  await set(
+  if (!STATE.jobType || !Object.keys(STATE.methods).length) {
+    alert("Nothing to save");
+    return;
+  }
+
+  await update(
     ref(db, `config/driverUI/jobTypes/${STATE.jobType}`),
-    { deliveryMethods: STATE.methods }
+    {
+      deliveryMethods: STATE.methods,
+      updatedAt: new Date().toISOString()
+    }
   );
-  alert("✅ Saved");
+
+  alert("✅ Configuration saved successfully");
 };
+  
 
 /* ===== LOAD EXISTING ===== */
 async function loadJobTypes() {
@@ -239,6 +278,18 @@ function resetState(){
   STATE.jobType="";
   STATE.methods={};
   methodsContainer.innerHTML="";
+}
+
+function makeKey(label) {
+  return label
+    .toLowerCase()
+    .replace(/[^a-z0-9 ]/g, "")     // remove symbols
+    .trim()
+    .split(" ")
+    .map((w, i) =>
+      i === 0 ? w : w.charAt(0).toUpperCase() + w.slice(1)
+    )
+    .join("");
 }
 </script>
 
