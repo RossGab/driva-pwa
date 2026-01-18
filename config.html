@@ -113,7 +113,7 @@ button {
 
 <body>
 
-<h2>⚙ Driver UI Configuration V1.0.13</h2>
+<h2>⚙ Driver UI Configuration V1.0.14</h2>
 
 <div class="tabs">
   <button id="tabAdd" class="active">➕ Add Job Type</button>
@@ -125,9 +125,6 @@ button {
   <input id="jobTypeInput" placeholder="e.g. TEST_BILLING">
 
   <div class="card">
-  <h3>Delivery Methods</h3>
-    <div id="methodsContainer"></div>
-  </div>
   <label>Delivery Method</label>
   <input id="deliveryMethodInput" placeholder="e.g. D1-Received">
 
@@ -183,18 +180,18 @@ tabAdd.onclick = () => {
 
 tabUpdate.onclick = async () => {
   MODE = "UPDATE";
-  resetState();
 
-  jobTypeInput.disabled = true;   // 🔒 lock
-  deliveryMethodInput.value = ""; 
+  jobTypeInput.disabled = true;
+  deliveryMethodInput.value = "";
+
   tabUpdate.classList.add("active");
   tabAdd.classList.remove("active");
+
   addSection.style.display = "none";
   updateSection.style.display = "block";
 
-  await loadJobTypes();
+  await loadJobTypes(); // loads RTP + existing methods
 };
-
 
 
 
