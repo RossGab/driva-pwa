@@ -41,7 +41,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebas
 import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.4.18-DYNAMIC";
+const VERSION = "Driver v3.4.19-DYNAMIC";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 
@@ -241,8 +241,21 @@ async function render(tasks) {
     }
 
     if (status === "COMPLETED") {
-      html += `<button class="toggle" onclick="this.nextElementSibling.style.display='block'">Show Photo</button><img src="${t.imageUrl}" style="display:none">`;
-    }
+        html += `
+          <button class="toggle"
+            onclick="
+              const img = this.parentElement.querySelector('img');
+              if (!img) return;
+              img.style.display = img.style.display === 'none'
+                ? 'block'
+                : 'none';
+            ">
+            👁 Show / Hide Photo
+          </button>
+      
+          <img src="${t.imageUrl}" style="display:none">
+        `;
+      }
 
     div.innerHTML = html;
     taskList.appendChild(div);
