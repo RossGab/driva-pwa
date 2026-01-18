@@ -41,7 +41,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebas
 import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.4.19-DYNAMIC";
+const VERSION = "Driver v3.4.20-DYNAMIC";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 
@@ -124,34 +124,61 @@ cameraInput.onchange = async e => {
 
   const takenAt = new Date().toISOString();
   const blob = await compressImage(e.target.files[0]);
+
   const cached = JSON.parse(localStorage.getItem(TASK_CACHE_KEY) || "[]");
   const task = cached.find(t => t._key === CURRENT_TASK);
-  const fname = `${task._key}_${takenAt.replace(/[:.]/g,"-")}_${DRIVER_ID}.jpg`;
 
+  const filename =
+    `${task._key}_${takenAt.replace(/[:.]/g, "-")}_${DRIVER_ID}.jpg`;
+
+  // ===== OFFLINE =====
   if (!navigator.onLine) {
-    getQueue().push({
+    const q = getQueue();
+    q.push({
       taskKey: CURRENT_TASK,
       image: await toBase64(blob),
       takenAt,
-      deliveryData: BILLING_CACHE[CURRENT_TASK] || {},
-      filename: fname
+      filename,
+      deliveryData: BILLING_CACHE[CURRENT_TASK] || {}
     });
-    setQueue(getQueue());
+    setQueue(q);
+
     delete processingMap[CURRENT_TASK];
+    CURRENT_TASK = null;
     loadTasks();
     return;
   }
 
+  // ===== ONLINE =====
   uploadingMap[CURRENT_TASK] = true;
   delete processingMap[CURRENT_TASK];
   loadTasks();
 
-  await uploadNow(CURRENT_TASK, blob, takenAt, fname);
+  try {
+    await uploadNow(
+      CURRENT_TASK,
+      blob,
+      takenAt,
+      filename,
+      BILLING_CACHE[CURRENT_TASK] || {}
+    );
+  } catch (err) {
+    alert("Upload failed. Please retry.");
+    console.error(err);
+  }
+
   delete uploadingMap[CURRENT_TASK];
+  CURRENT_TASK = null;
   loadTasks();
 };
 
-async function uploadNow(taskKey, blob, takenAt, filename) {
+function resolveStatus(task) {
+  if (processingMap[task._key]) return "PROCESSING";
+  if (uploadingMap[task._key]) return "UPLOADING";
+  return task.status || "PENDING";
+}
+
+async function uploadNow(taskKey, blob, takenAt, filename, deliveryData = {}) {
   const imgRef = sRef(storage, `tasks/${taskKey}/${filename}`);
   await uploadBytes(imgRef, blob);
   const url = await getDownloadURL(imgRef);
@@ -161,24 +188,37 @@ async function uploadNow(taskKey, blob, takenAt, filename) {
     imageUrl: url,
     takenAt,
     uploadedAt: new Date().toISOString(),
-    deliveryData: BILLING_CACHE[taskKey] || {}
+    deliveryData
   });
 }
 
 /* ===== OFFLINE RETRY ===== */
 setInterval(async () => {
   if (!navigator.onLine) return;
+
   const q = getQueue();
   if (!q.length) return;
 
   for (const i of q) {
-    const blob = await (await fetch(i.image)).blob();
-    await uploadNow(i.taskKey, blob, i.takenAt, i.filename);
+    try {
+      const blob = await (await fetch(i.image)).blob();
+
+      await uploadNow(
+        i.taskKey,
+        blob,
+        i.takenAt,
+        i.filename,
+        i.deliveryData || {}
+      );
+    } catch (err) {
+      console.error("Offline retry failed:", err);
+      return; // stop and retry later
+    }
   }
+
   setQueue([]);
   loadTasks();
 }, 5000);
-
 /* ===== LOAD TASKS ===== */
 async function loadTasks() {
   let tasks = JSON.parse(localStorage.getItem(TASK_CACHE_KEY) || "[]");
@@ -194,74 +234,71 @@ async function loadTasks() {
 /* ===== RENDER ===== */
 async function render(tasks) {
   taskList.innerHTML = "";
+
   for (const t of tasks) {
-    const status = t.status || "PENDING";
+    const status = resolveStatus(t);
+
     const div = document.createElement("div");
-    div.className = `task ${status==="COMPLETED"?"completed":""}`;
+    div.className = `task ${status === "COMPLETED" ? "completed" : ""}`;
 
     let html = `
-  <b>${t.CUSTOMERNAME || "—"}</b>
+      <b>${t.CUSTOMERNAME || "—"}</b>
 
-  <div class="small">
-    📍 ${t.ADDRESS || "—"}
-  </div>
+      <div class="small">📍 ${t.ADDRESS || "—"}</div>
 
-  <div class="small">
-    <b>Account #:</b> ${t.ACCOUNTNUMBER || "—"}
-  </div>
+      <div class="small"><b>Account #:</b> ${t.ACCOUNTNUMBER || "—"}</div>
+      <div class="small"><b>MRU:</b> ${t.MRU || "—"}</div>
+      <div class="small"><b>Meter #:</b> ${t.METERNUMBER || "—"}</div>
+      <div class="small"><b>DMZ:</b> ${t.DMZ || "—"}</div>
+      <div class="small"><b>Sequence:</b> ${t.SEQUENCE || "—"}</div>
+      <div class="small"><b>Job Type:</b> ${t.JOBTYPE || "—"}</div>
+      <div class="small"><b>Status:</b> ${status}</div>
+    `;
 
-  <div class="small">
-    <b>MRU:</b> ${t.MRU || "—"}
-  </div>
-
-  <div class="small">
-    <b>Meter #:</b> ${t.METERNUMBER || "—"}
-  </div>
-
-  <div class="small">
-    <b>DMZ:</b> ${t.DMZ || "—"}
-  </div>
-
-  <div class="small">
-    <b>Sequence:</b> ${t.SEQUENCE || "—"}
-  </div>
-
-  <div class="small">
-    <b>Job Type:</b> ${t.JOBTYPE || "—"}
-  </div>
-
-  <div class="small">
-    <b>Status:</b> ${status}
-  </div>
-`;
-
+    /* ===== PENDING ===== */
     if (status === "PENDING") {
       html += await renderDynamicDelivery(t);
-      html += `<button class="capture" onclick="CURRENT_TASK='${t._key}';cameraInput.click()">📸 Take Picture</button>`;
+      html += `
+        <button class="capture"
+          onclick="CURRENT_TASK='${t._key}';cameraInput.click()">
+          📸 Take Picture
+        </button>
+      `;
     }
 
+    /* ===== PROCESSING ===== */
+    if (status === "PROCESSING") {
+      html += `<div class="uploading">🛠 Processing image…</div>`;
+    }
+
+    /* ===== UPLOADING ===== */
+    if (status === "UPLOADING") {
+      html += `<div class="uploading">⏳ Uploading photo…</div>`;
+    }
+
+    /* ===== COMPLETED ===== */
     if (status === "COMPLETED") {
-        html += `
-          <button class="toggle"
-            onclick="
-              const img = this.parentElement.querySelector('img');
-              if (!img) return;
-              img.style.display = img.style.display === 'none'
-                ? 'block'
-                : 'none';
-            ">
-            👁 Show / Hide Photo
-          </button>
-      
-          <img src="${t.imageUrl}" style="display:none">
-        `;
-      }
+      html += `
+        <button class="toggle"
+          onclick="
+            const img = this.parentElement.querySelector('img');
+            if (!img) return;
+            img.style.display = img.style.display === 'none'
+              ? 'block'
+              : 'none';
+          ">
+          👁 Show / Hide Photo
+        </button>
+
+        <img src="${t.imageUrl}" style="display:none">
+      `;
+    }
 
     div.innerHTML = html;
     taskList.appendChild(div);
   }
 }
-
+  
 async function renderDynamicDelivery(t) {
   const methods = await loadDriverUI(t.JOBTYPE);
   if (!methods || !Object.keys(methods).length) return "";
