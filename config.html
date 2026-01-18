@@ -1,124 +1,41 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Driver UI Configuration</title>
-
+<title>Driver Form Configuration</title>
 <style>
-body {
-  font-family: Arial, sans-serif;
-  background:#f3f3f3;
-  padding:12px;
-}
-
-h2 { text-align:center; }
-
-.card {
-  background:#fff;
-  padding:16px;
-  border-radius:10px;
-  box-shadow:0 0 4px rgba(0,0,0,.1);
-  margin-bottom:12px;
-}
-
-.section-title {
-  font-size:14px;
-  font-weight:bold;
-  margin-bottom:8px;
-  border-bottom:1px solid #eee;
-  padding-bottom:4px;
-}
-
-label {
-  display:flex;
-  align-items:center;
-  gap:8px;
-  margin-top:10px;
-  font-size:14px;
-}
-
-input[type="text"], select {
-  width:100%;
-  padding:8px;
-  border-radius:6px;
-  border:1px solid #ccc;
-}
-
-button {
-  width:100%;
-  padding:12px;
-  border:none;
-  border-radius:6px;
-  background:#007bff;
-  color:#fff;
-  font-size:15px;
-  cursor:pointer;
-  margin-top:8px;
-}
-
-button.secondary {
-  background:#444;
-}
-
-button.warning {
-  background:#27ae60;
-}
+body { font-family:Arial; background:#f3f3f3; padding:12px; }
+.card { background:#fff; padding:12px; border-radius:8px; margin-bottom:12px; }
+label { font-weight:bold; margin-top:6px; display:block; }
+input, select, textarea { width:100%; padding:6px; margin-top:4px; }
+button { padding:10px; width:100%; margin-top:8px; }
+.field { border:1px solid #ddd; padding:8px; margin-top:8px; }
 </style>
 </head>
 
 <body>
 
-<h2>⚙ Driver UI Templates V1.0.1</h2>
+<h2>⚙ Driver Form Templates</h2>
 
-<button class="secondary" onclick="location.href='admin.html'">
-⬅ Back to Admin
-</button>
+<button onclick="location.href='admin.html'">⬅ Back</button>
 
 <div class="card">
-  <div class="section-title">Template Selection</div>
-
-  <select id="templateSelect"></select>
-
-  <button onclick="createTemplate()">➕ Create New Template</button>
-  <button class="warning" onclick="setActiveTemplate()">⭐ Set as Active</button>
+  <label>Job Type</label>
+  <input id="jobType" placeholder="e.g. TEST_BILLING">
 </div>
 
 <div class="card">
-  <div class="section-title">Feature Toggles</div>
-
-  <label>
-    <input type="checkbox" id="enableDeliveryOptions">
-    Enable Delivery Options
-  </label>
-
-  <label>
-    <input type="checkbox" id="showGateColor">
-    Show Gate / Mailbox Color
-  </label>
-
-  <label>
-    <input type="checkbox" id="requireReceivedBy">
-    Require "Received By"
-  </label>
+  <h3>Fields</h3>
+  <div id="fields"></div>
+  <button onclick="addField()">➕ Add Field</button>
 </div>
 
-<div class="card">
-  <div class="section-title">Text Labels</div>
-
-  <label>Remarks Label</label>
-  <input id="labelRemarks">
-
-  <label>Received By Label</label>
-  <input id="labelReceivedBy">
-</div>
-
-<button onclick="saveTemplate()">💾 Save / Update Template</button>
+<button onclick="saveTemplate()">💾 Save Template</button>
 
 <script type="module">
 import { initializeApp } from
   "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import { getDatabase, ref, get, update } from
+import { getDatabase, ref, update } from
   "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
 const app = initializeApp({
@@ -127,104 +44,68 @@ const app = initializeApp({
 });
 const db = getDatabase(app);
 
-const BASE_REF = ref(db, "config/driverUI");
-let CURRENT_TEMPLATE = null;
-let ALL_TEMPLATES = {};
+const fieldsDiv = document.getElementById("fields");
 
-async function loadTemplates() {
-  const snap = await get(BASE_REF);
-  const cfg = snap.val() || {};
+function addField() {
+  const div = document.createElement("div");
+  div.className = "field";
+  div.innerHTML = `
+    <label>Field Key</label>
+    <input class="key" placeholder="deliveryMethod">
 
-  ALL_TEMPLATES = cfg.templates || {};
-  CURRENT_TEMPLATE = cfg.activeTemplate || Object.keys(ALL_TEMPLATES)[0];
+    <label>Label</label>
+    <input class="label">
 
-  const sel = templateSelect;
-  sel.innerHTML = "";
+    <label>Type</label>
+    <select class="type">
+      <option value="radio">Radio</option>
+      <option value="text">Text</option>
+      <option value="textarea">Textarea</option>
+    </select>
 
-  Object.entries(ALL_TEMPLATES).forEach(([key, t]) => {
-    const opt = document.createElement("option");
-    opt.value = key;
-    opt.textContent = t.name || key;
-    if (key === CURRENT_TEMPLATE) opt.selected = true;
-    sel.appendChild(opt);
+    <label>
+      <input type="checkbox" class="required"> Required
+    </label>
+
+    <label>Options (comma separated for radio)</label>
+    <input class="options" placeholder="D1,D2,D3">
+
+  `;
+  fieldsDiv.appendChild(div);
+}
+
+window.saveTemplate = async function () {
+  const jobType = document.getElementById("jobType").value.trim();
+  if (!jobType) return alert("Job type required");
+
+  const fields = {};
+  document.querySelectorAll(".field").forEach(f => {
+    const key = f.querySelector(".key").value.trim();
+    if (!key) return;
+
+    fields[key] = {
+      type: f.querySelector(".type").value,
+      label: f.querySelector(".label").value,
+      required: f.querySelector(".required").checked
+    };
+
+    const opts = f.querySelector(".options").value;
+    if (opts && fields[key].type === "radio") {
+      fields[key].options = opts.split(",").map(v => ({
+        value: v.trim(),
+        label: v.trim()
+      }));
+    }
   });
 
-  loadTemplate(CURRENT_TEMPLATE);
-}
+  await update(ref(db, `config/driverUI/jobTypeTemplates/${jobType}`), {
+    name: jobType,
+    fields
+  });
 
-function loadTemplate(key) {
-  const t = ALL_TEMPLATES[key];
-  if (!t) return;
-
-  enableDeliveryOptions.checked = !!t.toggles?.enableDeliveryOptions;
-  showGateColor.checked = !!t.toggles?.showGateColor;
-  requireReceivedBy.checked = !!t.toggles?.requireReceivedBy;
-
-  labelRemarks.value = t.labels?.remarks || "";
-  labelReceivedBy.value = t.labels?.receivedBy || "";
-}
-
-templateSelect.onchange = e => {
-  CURRENT_TEMPLATE = e.target.value;
-  loadTemplate(CURRENT_TEMPLATE);
-};
-
-window.createTemplate = function () {
-  const name = prompt("Template name");
-  if (!name) return;
-
-  const key = name.toLowerCase().replace(/[^a-z0-9]/g, "_");
-
-  ALL_TEMPLATES[key] = {
-    name,
-    toggles: {},
-    labels: {},
-    meta: {}
-  };
-
-  CURRENT_TEMPLATE = key;
-  saveAll();
-};
-
-window.saveTemplate = function () {
-  ALL_TEMPLATES[CURRENT_TEMPLATE] = {
-    name: ALL_TEMPLATES[CURRENT_TEMPLATE]?.name || CURRENT_TEMPLATE,
-    toggles: {
-      enableDeliveryOptions: enableDeliveryOptions.checked,
-      showGateColor: showGateColor.checked,
-      requireReceivedBy: requireReceivedBy.checked
-    },
-    labels: {
-      remarks: labelRemarks.value,
-      receivedBy: labelReceivedBy.value
-    },
-    meta: {
-      updatedAt: new Date().toISOString(),
-      updatedBy: "admin"
-    }
-  };
-
-  saveAll();
   alert("✅ Template saved");
 };
-
-window.setActiveTemplate = async function () {
-  await update(BASE_REF, {
-    activeTemplate: CURRENT_TEMPLATE
-  });
-  alert("⭐ Active template updated");
-};
-
-async function saveAll() {
-  await update(BASE_REF, {
-    templates: ALL_TEMPLATES
-  });
-  await loadTemplates();
-}
-
-loadTemplates();
 </script>
 
 </body>
 </html>
-``
