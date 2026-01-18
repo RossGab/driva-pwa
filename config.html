@@ -47,6 +47,7 @@ h2 { text-align:center; }
   font-weight: bold;
 }
 
+
 .required-row input {
   margin: 0;
 }
@@ -104,7 +105,7 @@ button {
 
 <body>
 
-<h2>⚙ Driver UI Configuration V1.0.7</h2>
+<h2>⚙ Driver UI Configuration V1.0.8</h2>
 
 <div class="tabs">
   <button id="tabAdd" class="active">➕ Add Job Type</button>
@@ -282,12 +283,12 @@ function renderMethods() {
         <option value="textarea" ${f.type==="textarea"?"selected":""}>Textarea</option>
       </select>
 
-      <label>
+      <div class="required-row">
         <input type="checkbox"
           ${f.required ? "checked" : ""}
           onchange="updateFieldRequired('${method}','${key}',this.checked)">
-        Required
-      </label>
+        <span>Required</span>
+      </div>
 
       <button class="danger" onclick="removeField('${method}','${key}')">❌</button>
     </div>
