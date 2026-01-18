@@ -32,15 +32,7 @@ img { width:100%;margin-top:8px;border-radius:6px; }
 
 <div id="appVersion"></div>
 <div id="offlineBanner">⚠ Offline — photos will upload automatically</div>
-<div id="debugBar" style="
-  background:#000;
-  color:#0f0;
-  padding:6px;
-  font-size:12px;
-  margin-bottom:8px;
-">
-  DEBUG: idle
-</div>
+
 <input id="searchBox" placeholder="Search tasks">
 <div id="taskList">Loading tasks…</div>
 <input type="file" id="cameraInput" accept="image/*" capture="environment" hidden>
@@ -50,7 +42,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebas
 import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.4.26-DYNAMIC";
+const VERSION = "Driver v3.4.27-DYNAMIC";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 
@@ -125,15 +117,9 @@ const toBase64 = b => new Promise(r => {
 /* ===== CAMERA ===== */
 window.CURRENT_TASK = null;
 cameraInput.onchange = async e => {
-  if (!e.target.files[0] || !CURRENT_TASK) {
-    debug("No file or no CURRENT_TASK");
-    return;
-  }
-
-  debug("File selected");
+  if (!e.target.files[0] || !CURRENT_TASK) return;
 
   if (!validateDynamic(CURRENT_TASK)) {
-    debug("validateDynamic FAILED");
     CURRENT_TASK = null;
     return;
   }
@@ -142,38 +128,22 @@ cameraInput.onchange = async e => {
   const task = cached.find(t => t._key === CURRENT_TASK);
 
   if (!task) {
-    debug("Task not found in cache");
     alert("Task missing. Reload.");
     CURRENT_TASK = null;
     return;
   }
 
-  debug("Task OK");
-
   processingMap[CURRENT_TASK] = true;
   loadTasks();
 
   const takenAt = new Date().toISOString();
-  debug("Compressing image");
-
-  let blob;
-  try {
-    blob = await compressImage(e.target.files[0]);
-  } catch {
-    debug("compressImage FAILED");
-    alert("Image processing failed");
-    delete processingMap[CURRENT_TASK];
-    return;
-  }
-
-  debug("Image compressed");
+  const blob = await compressImage(e.target.files[0]);
 
   const filename =
     `${task._key}_${takenAt.replace(/[:.]/g, "-")}_${DRIVER_ID}.jpg`;
 
+  /* ===== OFFLINE ===== */
   if (!navigator.onLine) {
-    debug("OFFLINE: queued");
-
     const q = getQueue();
     q.push({
       taskKey: CURRENT_TASK,
@@ -190,14 +160,12 @@ cameraInput.onchange = async e => {
     return;
   }
 
-  debug("ONLINE: uploading");
-
+  /* ===== ONLINE ===== */
   uploadingMap[CURRENT_TASK] = true;
   delete processingMap[CURRENT_TASK];
   loadTasks();
 
   try {
-    debug("Calling uploadNow");
     await uploadNow(
       task._key,
       blob,
@@ -205,10 +173,8 @@ cameraInput.onchange = async e => {
       filename,
       BILLING_CACHE[task._key] || {}
     );
-    debug("uploadNow SUCCESS");
-  } catch (err) {
-    debug("uploadNow FAILED");
-    alert("Upload failed");
+  } catch {
+    alert("Upload failed. Please retry.");
   }
 
   delete uploadingMap[CURRENT_TASK];
@@ -223,15 +189,10 @@ function resolveStatus(task) {
 }
 
 async function uploadNow(taskKey, blob, takenAt, filename, deliveryData = {}) {
-  debug("Uploading to Storage");
-
   const imgRef = sRef(storage, `tasks/${taskKey}/${filename}`);
   await uploadBytes(imgRef, blob);
 
-  debug("Storage upload OK");
-
   const url = await getDownloadURL(imgRef);
-  debug("Got download URL");
 
   await update(ref(db, `tasks/${taskKey}`), {
     status: "COMPLETED",
@@ -240,9 +201,8 @@ async function uploadNow(taskKey, blob, takenAt, filename, deliveryData = {}) {
     uploadedAt: new Date().toISOString(),
     deliveryData
   });
-
-  debug("Database update OK");
 }
+  
 /* ===== OFFLINE RETRY ===== */
 setInterval(async () => {
   if (!navigator.onLine) return;
@@ -396,10 +356,6 @@ loadTasks();
 </script>
 
 <script>
-function debug(msg) {
-  const el = document.getElementById("debugBar");
-  if (el) el.innerText = "DEBUG: " + msg;
-}
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("./sw.js");
 }
