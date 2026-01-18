@@ -42,7 +42,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebas
 import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.4.29-DYNAMIC";
+const VERSION = "Driver v3.4.30-DYNAMIC";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 
@@ -76,6 +76,22 @@ async function loadDriverUI(jobType) {
   const snap = await get(ref(db, `config/driverUI/jobTypes/${jobType}/deliveryMethods`));
   DRIVER_UI_CACHE[jobType] = snap.val() || {};
   return DRIVER_UI_CACHE[jobType];
+}
+
+function syncDynamicFields(taskKey) {
+  const box = document.getElementById(`dyn_${taskKey}`);
+  if (!box) return;
+
+  if (!BILLING_CACHE[taskKey]) BILLING_CACHE[taskKey] = {};
+
+  const inputs = box.querySelectorAll("input, textarea");
+
+  inputs.forEach(el => {
+    const fieldKey = el.getAttribute("data-key");
+    if (!fieldKey) return;
+
+    BILLING_CACHE[taskKey][fieldKey] = el.value.trim();
+  });
 }
 
 /* ===== NETWORK ===== */
@@ -360,14 +376,13 @@ async function renderDynamicDelivery(t) {
 window.showDynamicFields = async function(taskKey, jobType, method) {
   if (!BILLING_CACHE[taskKey]) BILLING_CACHE[taskKey] = {};
 
-  // store selected method
   BILLING_CACHE[taskKey].deliveryType = method;
 
   const cfg = await loadDriverUI(jobType);
   const fields = cfg?.[method];
   const box = document.getElementById(`dyn_${taskKey}`);
 
-  if (!fields) {
+  if (!fields || !box) {
     box.innerHTML = "";
     return;
   }
@@ -378,32 +393,34 @@ window.showDynamicFields = async function(taskKey, jobType, method) {
     if (field.type === "textarea") {
       html += `
         <textarea
-          placeholder="${field.label}${field.required ? " *" : ""}"
-          oninput="BILLING_CACHE['${taskKey}']['${fieldKey}']=this.value">
+          data-key="${fieldKey}"
+          placeholder="${field.label}${field.required ? " *" : ""}">
         </textarea>
       `;
     } else {
       html += `
         <input
-          placeholder="${field.label}${field.required ? " *" : ""}"
-          oninput="BILLING_CACHE['${taskKey}']['${fieldKey}']=this.value">
+          data-key="${fieldKey}"
+          placeholder="${field.label}${field.required ? " *" : ""}">
       `;
     }
   });
 
   box.innerHTML = html;
 };
-
+  
 function validateDynamic(taskKey) {
+  // 🔒 FORCE DOM → CACHE SYNC FIRST
+  syncDynamicFields(taskKey);
+
   const data = BILLING_CACHE[taskKey];
   if (!data?.deliveryType) {
     alert("Please select delivery method");
     return false;
   }
 
-  const task = JSON.parse(localStorage.getItem("cachedTasks") || "[]")
-    .find(t => t._key === taskKey);
-
+  const cachedTasks = JSON.parse(localStorage.getItem("cachedTasks") || "[]");
+  const task = cachedTasks.find(t => t._key === taskKey);
   if (!task) return false;
 
   const cfg = DRIVER_UI_CACHE[task.JOBTYPE];
@@ -420,6 +437,7 @@ function validateDynamic(taskKey) {
 
   return true;
 }
+  
 loadTasks();
 </script>
 
