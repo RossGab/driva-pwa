@@ -248,7 +248,7 @@ button {
 
 <body>
 
-<h2>🧑‍💼 Admin Dashboard V2.4.0.3</h2>
+<h2>🧑‍💼 Admin Dashboard V2.4.0.4</h2>
 
 <!-- ===== DASHBOARD ===== -->
 <div class="dashboard">
@@ -843,7 +843,6 @@ window.loadTasks = async function (status) {
           </button>
           <img src="${t.imageUrl}" style="display:none;width:100%">
         ` : ""}
-        ${t.status === "COMPLETED" ? renderDynamicCompletedFields(t) : ""}
 
         <div class="form-actions">
           <button class="toggleBtn" onclick="enableEdit(this)">✏ Modify Task</button>
