@@ -113,7 +113,7 @@ button {
 
 <body>
 
-<h2>⚙ Driver UI Configuration V1.0.17</h2>
+<h2>⚙ Driver UI Configuration V1.0.18</h2>
 
 <div class="tabs">
   <button id="tabAdd" class="active">➕ Add Job Type</button>
@@ -260,13 +260,16 @@ window.addDeliveryMethodFromUpdate = function () {
     return;
   }
 
-  STATE.methods[method] = {
+  STATE.methods = {
+  ...STATE.methods,
+  [method]: {
     remarks: {
       label: "Other Remarks",
       type: "textarea",
       required: false
     }
-  };
+  }
+};
 
   updateDeliveryMethodInput.value = "";
   renderMethods();
@@ -489,13 +492,17 @@ async function loadJobTypes() {
   if (keys.length) {
     jobTypeSelect.value = keys[0];
     STATE.jobType = keys[0];
-    STATE.methods = data[keys[0]]?.deliveryMethods || {};
+    STATE.methods = structuredClone(
+  data[keys[0]]?.deliveryMethods || {}
+);
     renderMethods();
   }
 
   jobTypeSelect.onchange = () => {
     STATE.jobType = jobTypeSelect.value;
-    STATE.methods = data[STATE.jobType]?.deliveryMethods || {};
+    STATE.methods = structuredClone(
+  data[STATE.jobType]?.deliveryMethods || {}
+);
     renderMethods();
   };
 }
