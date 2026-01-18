@@ -113,7 +113,7 @@ button {
 
 <body>
 
-<h2>⚙ Driver UI Configuration V1.0.11</h2>
+<h2>⚙ Driver UI Configuration V1.0.12</h2>
 
 <div class="tabs">
   <button id="tabAdd" class="active">➕ Add Job Type</button>
@@ -133,11 +133,15 @@ button {
 <div class="card" id="updateSection" style="display:none">
   <label>Select Job Type</label>
   <select id="jobTypeSelect"></select>
-</div>
 
-<div class="card">
-  <h3>Delivery Methods</h3>
-  <div id="methodsContainer"></div>
+  <hr style="margin:12px 0">
+
+  <label>New Delivery Method</label>
+  <input id="updateDeliveryMethodInput" placeholder="e.g. D7-Neighbor">
+
+  <button class="secondary" onclick="addDeliveryMethodFromUpdate()">
+    ➕ Add Delivery Method
+  </button>
 </div>
 
 <div class="card">
@@ -190,32 +194,33 @@ tabUpdate.onclick = async () => {
 
 
 /* ===== ADD DELIVERY METHOD ===== */
-window.addDeliveryMethod = function () {
-  const jobType =
-    MODE === "ADD"
-      ? jobTypeInput.value.trim()
-      : STATE.jobType;
-
-  const method = deliveryMethodInput.value.trim();
-
-  if (!jobType || !method) {
-    alert("Job Type and Delivery Method required");
+window.addDeliveryMethodFromUpdate = function () {
+  if (!STATE.jobType) {
+    alert("Please select a Job Type first");
     return;
   }
 
-  STATE.jobType = jobType;
+  const method = updateDeliveryMethodInput.value.trim();
 
-  if (!STATE.methods[method]) {
-    STATE.methods[method] = {
-      remarks: {
-        label: "Other Remarks",
-        type: "textarea",
-        required: false
-      }
-    };
+  if (!method) {
+    alert("Delivery Method is required");
+    return;
   }
 
-  deliveryMethodInput.value = "";
+  if (STATE.methods[method]) {
+    alert("Delivery Method already exists");
+    return;
+  }
+
+  STATE.methods[method] = {
+    remarks: {
+      label: "Other Remarks",
+      type: "textarea",
+      required: false
+    }
+  };
+
+  updateDeliveryMethodInput.value = "";
   renderMethods();
 };
   
