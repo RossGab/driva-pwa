@@ -148,7 +148,7 @@ import {
   getStorage, ref as sRef, uploadBytes, getDownloadURL
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.4.16";
+const VERSION = "Driver v3.4.17";
   // 🔒 Billing data cache (per task)
 const BILLING_CACHE = {};
 
@@ -358,7 +358,7 @@ camera.addEventListener("change", async e => {
   
   const safe = v => String(v || "").toLowerCase().replace(/[^a-z0-9]/g, "_");
   const filename =
-    `${safe(task?.name)}_${safe(task?.address)}_${coords?.latitude || "0"}_${coords?.longitude || "0"}_${takenAt.replace(/[:.]/g, "-")}_${DRIVER_ID}.jpg`;
+    `${safe(task?.CUSTOMERNAME)}_${safe(task?.ADDRESS)}_${coords?.latitude || "0"}_${coords?.longitude || "0"}_${takenAt.replace(/[:.]/g, "-")}_${DRIVER_ID}.jpg`;
   
   let blob;
   try {
