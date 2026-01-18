@@ -69,7 +69,7 @@ button {
 
 <body>
 
-<h2>⚙ Driver UI ConfigurationV1.0.0</h2>
+<h2>⚙ Driver UI ConfigurationV1.0.2</h2>
 
 <div class="card">
   <label>Job Type</label>
@@ -150,20 +150,19 @@ window.addDeliveryMethod = function () {
 };
 
 /* ===== ADD FIELD ===== */
-function addField(method) {
-  const label = document.getElementById(`label_${method}`).value.trim();
-  const type = document.getElementById(`type_${method}`).value;
-  const required = document.getElementById(`req_${method}`).checked;
+function addField(method, container) {
+  console.log("addField fired for", method); // 👈 DEBUG PROOF
+
+  const label = container.querySelector(".field-label").value.trim();
+  const type = container.querySelector(".field-type").value;
+  const required = container.querySelector(".field-required").checked;
 
   if (!label) {
-    alert("Label required");
+    alert("Please enter a description label");
     return;
   }
 
-  const key = label.toLowerCase().replace(/[^a-z0-9]/g, "_");
-
-  STATE.methods[method].unshift({
-    key,
+  STATE.methods[method].push({
     label,
     type,
     required
@@ -171,7 +170,7 @@ function addField(method) {
 
   renderMethods();
 }
-
+  
 /* ===== RENDER ===== */
 function renderMethods() {
   const box = document.getElementById("methodsContainer");
@@ -185,22 +184,22 @@ function renderMethods() {
       <b>${method}</b>
 
       <label>Add Description / Field</label>
-      <input id="label_${method}" placeholder="e.g. Received by">
+      <input class="field-label" placeholder="e.g. Received by">
 
-      <select id="type_${method}">
+      <select class="field-type">
         <option value="text">Text</option>
         <option value="textarea">Textarea</option>
       </select>
 
       <label>
-        <input type="checkbox" id="req_${method}"> Required
+        <input type="checkbox" class="field-required"> Required
       </label>
 
-      <button class="secondary" onclick="addField('${method}')">
+      <button class="secondary add-desc-btn">
         ➕ Add Description
       </button>
 
-      <div>
+      <div class="field-list">
         ${fields.map(f => `
           <div class="field-row">
             ${f.label} — ${f.type} ${f.required ? "(required)" : ""}
@@ -209,10 +208,16 @@ function renderMethods() {
       </div>
     `;
 
+    // ✅ ATTACH EVENT LISTENER HERE
+    div.querySelector(".add-desc-btn").addEventListener("click", () => {
+      addField(method, div);
+    });
+
     box.appendChild(div);
   });
 }
-/* ===== SAVE ===== */
+
+  /* ===== SAVE ===== */
 window.saveConfig = async function () {
   if (!STATE.jobType || !Object.keys(STATE.methods).length) {
     alert("Nothing to save");
