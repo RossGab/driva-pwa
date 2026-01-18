@@ -35,6 +35,22 @@ h2 { text-align:center; }
   color:#fff;
 }
 
+.required-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.required-row span {
+  font-size: 13px;
+  font-weight: bold;
+}
+
+.required-row input {
+  margin: 0;
+}
+
 .card {
   background:#fff;
   padding:14px;
@@ -88,7 +104,7 @@ button {
 
 <body>
 
-<h2>⚙ Driver UI Configuration V1.0.6</h2>
+<h2>⚙ Driver UI Configuration V1.0.7</h2>
 
 <div class="tabs">
   <button id="tabAdd" class="active">➕ Add Job Type</button>
@@ -245,7 +261,10 @@ function renderMethods() {
       </select>
 
       <label>
-        <input type="checkbox" class="field-required"> Required
+        <div class="required-row">
+          <input type="checkbox" class="field-required">
+          <span>Required</span>
+        </div>
       </label>
 
       <button class="secondary add">➕ Add Description</button>
