@@ -248,7 +248,7 @@ button {
 
 <body>
 
-<h2>🧑‍💼 Admin Dashboard V2.4.0.1</h2>
+<h2>🧑‍💼 Admin Dashboard V2.4.0.2</h2>
 
 <!-- ===== DASHBOARD ===== -->
 <div class="dashboard">
@@ -638,7 +638,9 @@ function renderDynamicCompletedFields(t) {
   if (!t.deliveryType || !t.JOBTYPE) return "";
 
   const cfg =
-    window.DRIVER_UI_CONFIG?.[t.JOBTYPE]?.[t.deliveryType];
+    window.DRIVER_UI_CONFIG?.[t.JOBTYPE]
+      ?.deliveryMethods
+      ?.[t.deliveryType];
 
   if (!cfg) return "";
 
