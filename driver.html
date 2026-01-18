@@ -42,7 +42,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebas
 import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.4.36-DYNAMIC";
+const VERSION = "Driver v3.4.37-DYNAMIC";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 
@@ -433,6 +433,7 @@ window.showDynamicFields = async function (taskKey, jobType, method) {
       html += `
         <label>${field.label}${requiredMark}</label>
         <textarea
+          data-key="${fieldKey}"
           oninput="BILLING_CACHE['${taskKey}']['${fieldKey}'] = this.value"
         ></textarea>
       `;
@@ -441,6 +442,7 @@ window.showDynamicFields = async function (taskKey, jobType, method) {
         <label>${field.label}${requiredMark}</label>
         <input
           type="text"
+          data-key="${fieldKey}"
           oninput="BILLING_CACHE['${taskKey}']['${fieldKey}'] = this.value"
         >
       `;
@@ -475,6 +477,9 @@ function getCurrentLocation() {
 }
   
 function validateDynamic(taskKey) {
+  // 🔥 FORCE SYNC FROM DOM → CACHE
+  syncDynamicFields(taskKey);
+
   const data = BILLING_CACHE[taskKey];
   if (!data?.deliveryType) {
     alert("Select delivery method");
@@ -483,22 +488,21 @@ function validateDynamic(taskKey) {
 
   const task = JSON.parse(localStorage.getItem("cachedTasks") || "[]")
     .find(t => t._key === taskKey);
+
   if (!task) return false;
 
   const cfg = DRIVER_UI_CACHE[task.JOBTYPE]?.[data.deliveryType];
   if (!cfg) return true;
 
-  for (const field of Object.values(cfg)) {
-    const labelKey = field.label;
-    if (field.required && !data[labelKey]) {
-      alert(`${labelKey} is required`);
+  for (const [fieldKey, field] of Object.entries(cfg)) {
+    if (field.required && !data[fieldKey]) {
+      alert(`${field.label} is required`);
       return false;
     }
   }
 
   return true;
 }
-
   
 loadTasks();
 </script>
