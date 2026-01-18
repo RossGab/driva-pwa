@@ -248,7 +248,7 @@ button {
 
 <body>
 
-<h2>🧑‍💼 Admin Dashboard V2.4.0.4</h2>
+<h2>🧑‍💼 Admin Dashboard V2.4.0.5</h2>
 
 <!-- ===== DASHBOARD ===== -->
 <div class="dashboard">
@@ -659,8 +659,8 @@ function renderDynamicCompletedFields(t) {
       `;
     } else {
       html += `
-        <label>${field.label}</label>
-        <input value="${value}" disabled>
+        <label class="full">${field.label}</label>
+        <input class="full" value="${value}" disabled>
       `;
     }
   }
