@@ -69,7 +69,7 @@ button {
 
 <body>
 
-<h2>⚙ Driver UI Configuration</h2>
+<h2>⚙ Driver UI ConfigurationV1.0.0</h2>
 
 <div class="card">
   <label>Job Type</label>
@@ -196,7 +196,7 @@ function renderMethods() {
         <input type="checkbox" id="req_${method}"> Required
       </label>
 
-      <button class="secondary" onclick="(${addField})('${method}')">
+      <button class="secondary" onclick="addField('${method}')">
         ➕ Add Description
       </button>
 
@@ -212,7 +212,6 @@ function renderMethods() {
     box.appendChild(div);
   });
 }
-
 /* ===== SAVE ===== */
 window.saveConfig = async function () {
   if (!STATE.jobType || !Object.keys(STATE.methods).length) {
