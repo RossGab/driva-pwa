@@ -3,95 +3,28 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
 <title>Driver Tasks</title>
 
 <link rel="manifest" href="./manifest.json">
 <meta name="theme-color" content="#222222">
 
 <style>
-body {
-  font-family: Arial, sans-serif;
-  background: #f4f4f4;
-  padding: 10px;
-}
-
-#appVersion {
-  background: #222;
-  color: #fff;
-  padding: 8px;
-  text-align: center;
-  margin-bottom: 6px;
-}
-
-#offlineBanner {
-  background: #c0392b;
-  color: #fff;
-  padding: 6px;
-  text-align: center;
-  margin-bottom: 10px;
-  display: none;
-}
-
-#searchBox {
-  width: 100%;
-  padding: 10px;
-  margin-bottom: 10px;
-  border-radius: 6px;
-  border: 1px solid #ccc;
-}
-
-.task {
-  background: #fff;
-  padding: 12px;
-  margin-bottom: 10px;
-  border-radius: 8px;
-  border-left: 5px solid orange;
-}
-
-.task.completed { border-left-color: green; }
-
-.small {
-  font-size: 13px;
-  color: #555;
-  margin-top: 4px;
-}
-
-.radio-group {
-  margin-top: 6px;
-  font-size: 14px;
-}
-
-.radio-group label {
-  display: block;
-  margin-top: 4px;
-}
-
-textarea, input {
-  width: 100%;
-  margin-top: 6px;
-  padding: 6px;
-  font-size: 14px;
-}
-
-.offline-indicator { color: #c0392b; font-weight: bold; }
-.uploading { color: #f39c12; font-weight: bold; }
-
-button {
-  width: 100%;
-  padding: 10px;
-  margin-top: 6px;
-  border-radius: 6px;
-  border: none;
-}
-
-.capture { background: #007bff; color: #fff; }
-.toggle { background: #0069d9; color: #fff; }
-
-img {
-  width: 100%;
-  margin-top: 8px;
-  border-radius: 6px;
-}
+body { font-family: Arial, sans-serif; background:#f4f4f4; padding:10px; }
+#appVersion { background:#222;color:#fff;padding:8px;text-align:center;margin-bottom:6px; }
+#offlineBanner { background:#c0392b;color:#fff;padding:6px;text-align:center;margin-bottom:10px;display:none; }
+#searchBox { width:100%;padding:10px;margin-bottom:10px;border-radius:6px;border:1px solid #ccc;font-size:14px; }
+.task { background:#fff;padding:12px;margin-bottom:10px;border-radius:8px;border-left:5px solid orange; }
+.task.completed { border-left-color:green; }
+.small { font-size:13px;color:#555;margin-top:4px; }
+.radio-group label { display:block;margin-top:4px; }
+textarea { width:100%;min-height:60px;margin-top:6px;padding:6px;font-size:14px; }
+.offline-indicator { font-weight:bold;color:#c0392b;margin-top:6px; }
+.uploading { font-weight:bold;color:#f39c12;margin-top:6px; }
+button { width:100%;padding:10px;margin-top:6px;border-radius:6px;border:none;font-size:14px; }
+.capture { background:#007bff;color:#fff; }
+.toggle { background:#0069d9;color:#fff; }
+img { width:100%;margin-top:8px;border-radius:6px; }
 </style>
 </head>
 
@@ -99,23 +32,22 @@ img {
 
 <div id="appVersion"></div>
 <div id="offlineBanner">⚠ Offline — photos will upload automatically</div>
-
 <input id="searchBox" placeholder="Search tasks">
-<div id="taskList">Loading tasks...</div>
+<div id="taskList">Loading tasks…</div>
 <input type="file" id="cameraInput" accept="image/*" capture="environment" hidden>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import { getDatabase, ref, get, update, query, orderByChild, equalTo } 
-  from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
-import { getStorage, ref as sRef, uploadBytes, getDownloadURL }
-  from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
+import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-/* ================= CONFIG ================= */
+const VERSION = "Driver v3.4.17-DYNAMIC";
+const BILLING_CACHE = {};
+const DRIVER_UI_CACHE = {};
+
 const firebaseConfig = {
   apiKey: "AIzaSyDFW61pnwLvh6HGKWt10zLYNr860fI8vkg",
   databaseURL: "https://driva-pwa-default-rtdb.firebaseio.com",
-  projectId: "driva-pwa",
   storageBucket: "driva-pwa.firebasestorage.app"
 };
 
@@ -123,32 +55,25 @@ const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 const storage = getStorage(app);
 
-/* ================= GLOBAL ================= */
-const VERSION = "Driver v3.5.0.2";
 const QUEUE_KEY = "offlineQueue";
 const TASK_CACHE_KEY = "cachedTasks";
-const BILLING_CACHE = {};
-let DRIVER_UI_CONFIG = {};
+const processingMap = {};
+const uploadingMap = {};
 let SEARCH_TERM = "";
 
-const PRIORITY = { PENDING:1, PROCESSING:1.5, UPLOADING:2, SAVED:2, COMPLETED:3 };
-const processingMap = {}, uploadingMap = {};
-
-/* ================= DRIVER ================= */
 let DRIVER_ID = localStorage.getItem("driverId");
 while (!DRIVER_ID) DRIVER_ID = prompt("Enter Driver ID");
 localStorage.setItem("driverId", DRIVER_ID);
+appVersion.innerText = `Driver: ${DRIVER_ID} | ${VERSION}`;
 
-document.getElementById("appVersion").innerText =
-  `Driver: ${DRIVER_ID} | ${VERSION}`;
-
-/* ================= LOAD DRIVER UI CONFIG ================= */
-async function loadDriverUIConfig() {
-  const snap = await get(ref(db, "config/driverUI/jobTypes"));
-  DRIVER_UI_CONFIG = snap.val() || {};
+async function loadDriverUI(jobType) {
+  if (DRIVER_UI_CACHE[jobType]) return DRIVER_UI_CACHE[jobType];
+  const snap = await get(ref(db, `config/driverUI/jobTypes/${jobType}/deliveryMethods`));
+  DRIVER_UI_CACHE[jobType] = snap.val() || {};
+  return DRIVER_UI_CACHE[jobType];
 }
 
-/* ================= NETWORK ================= */
+/* ===== NETWORK ===== */
 function updateNetwork() {
   offlineBanner.style.display = navigator.onLine ? "none" : "block";
 }
@@ -156,32 +81,41 @@ window.addEventListener("online", updateNetwork);
 window.addEventListener("offline", updateNetwork);
 updateNetwork();
 
-/* ================= SEARCH ================= */
-searchBox.addEventListener("input", e => {
-  SEARCH_TERM = e.target.value.toLowerCase();
-  loadTasks();
+/* ===== QUEUE ===== */
+const getQueue = () => JSON.parse(localStorage.getItem(QUEUE_KEY) || "[]");
+const setQueue = q => localStorage.setItem(QUEUE_KEY, JSON.stringify(q));
+
+/* ===== IMAGE ===== */
+function compressImage(file) {
+  return new Promise(resolve => {
+    const img = new Image();
+    const r = new FileReader();
+    r.onload = e => img.src = e.target.result;
+    img.onload = () => {
+      const c = document.createElement("canvas");
+      let w = img.width, h = img.height;
+      if (w > 1280) { h *= 1280 / w; w = 1280; }
+      c.width = w; c.height = h;
+      c.getContext("2d").drawImage(img, 0, 0, w, h);
+      c.toBlob(b => resolve(b), "image/jpeg", 0.65);
+    };
+    r.readAsDataURL(file);
+  });
+}
+
+const toBase64 = b => new Promise(r => {
+  const f = new FileReader();
+  f.onloadend = () => r(f.result);
+  f.readAsDataURL(b);
 });
 
-/* ================= CAMERA ================= */
+/* ===== CAMERA ===== */
 let CURRENT_TASK = null;
-const camera = document.getElementById("cameraInput");
-
-window.takePicture = key => {
-  CURRENT_TASK = key;
-  if (isBillingJob(key) && !validateBilling(key)) return;
-  camera.value = "";
-  camera.click();
-};
-
-camera.addEventListener("change", async e => {
+cameraInput.onchange = async e => {
   if (!e.target.files[0] || !CURRENT_TASK) return;
 
-  const selected = document.querySelector(
-    `input[name="delivery_${CURRENT_TASK}"]:checked`
-  );
-
-  if (!selected) {
-    alert("Please select delivery method");
+  if (!validateDynamic(CURRENT_TASK)) {
+    CURRENT_TASK = null;
     return;
   }
 
@@ -189,194 +123,145 @@ camera.addEventListener("change", async e => {
   loadTasks();
 
   const takenAt = new Date().toISOString();
-  const coords = await getLocation();
+  const blob = await compressImage(e.target.files[0]);
   const cached = JSON.parse(localStorage.getItem(TASK_CACHE_KEY) || "[]");
   const task = cached.find(t => t._key === CURRENT_TASK);
-
-  const safe = v => String(v||"").toLowerCase().replace(/[^a-z0-9]/g,"_");
-  const filename = `${safe(task.CUSTOMERNAME)}_${takenAt.replace(/[:.]/g,"-")}_${DRIVER_ID}.jpg`;
-
-  const blob = await compressImage(e.target.files[0]);
-  delete processingMap[CURRENT_TASK];
+  const fname = `${task._key}_${takenAt.replace(/[:.]/g,"-")}_${DRIVER_ID}.jpg`;
 
   if (!navigator.onLine) {
-    queueOffline(CURRENT_TASK, blob, takenAt, coords, filename);
+    getQueue().push({
+      taskKey: CURRENT_TASK,
+      image: await toBase64(blob),
+      takenAt,
+      deliveryData: BILLING_CACHE[CURRENT_TASK] || {},
+      filename: fname
+    });
+    setQueue(getQueue());
+    delete processingMap[CURRENT_TASK];
     loadTasks();
     return;
   }
 
   uploadingMap[CURRENT_TASK] = true;
-  await uploadNow(CURRENT_TASK, blob, takenAt, coords, filename);
+  delete processingMap[CURRENT_TASK];
+  loadTasks();
+
+  await uploadNow(CURRENT_TASK, blob, takenAt, fname);
   delete uploadingMap[CURRENT_TASK];
   loadTasks();
-});
-
-/* ================= BILLING (DYNAMIC) ================= */
-function renderBillingDelivery(t) {
-  const jobType = (t.JOBTYPE || "").toUpperCase();
-  const methods = DRIVER_UI_CONFIG[jobType]?.deliveryMethods;
-  if (!methods) return "";
-
-  return `
-    <div class="radio-group">
-      <b>Delivery Method</b>
-      ${Object.keys(methods).map(m => `
-        <label>
-          <input type="radio" name="delivery_${t._key}" value="${m}"
-            onchange="showBillingFields('${t._key}','${m}')">
-          ${m}
-        </label>`).join("")}
-    </div>
-    <div id="billing_extra_${t._key}"></div>
-  `;
-}
-
-window.showBillingFields = function(taskKey, method) {
-  if (!BILLING_CACHE[taskKey]) BILLING_CACHE[taskKey] = {};
-  BILLING_CACHE[taskKey].deliveryType = method;
-
-  const cached = JSON.parse(localStorage.getItem(TASK_CACHE_KEY) || "[]");
-  const task = cached.find(t => t._key === taskKey);
-  const jobType = (task.JOBTYPE || "").toUpperCase();
-  const fields = DRIVER_UI_CONFIG[jobType].deliveryMethods[method];
-
-  const box = document.getElementById(`billing_extra_${taskKey}`);
-  box.innerHTML = Object.entries(fields).map(([k,f]) =>
-    f.type === "textarea"
-      ? `<textarea placeholder="${f.label}${f.required?" *":""}"
-          oninput="BILLING_CACHE['${taskKey}']['${k}']=this.value"></textarea>`
-      : `<input placeholder="${f.label}${f.required?" *":""}"
-          oninput="BILLING_CACHE['${taskKey}']['${k}']=this.value">`
-  ).join("");
 };
 
-function validateBilling(taskKey) {
-  const cache = BILLING_CACHE[taskKey];
-  if (!cache?.deliveryType) return alert("Select delivery method"), false;
-
-  const cached = JSON.parse(localStorage.getItem(TASK_CACHE_KEY)||"[]");
-  const task = cached.find(t=>t._key===taskKey);
-  const fields = DRIVER_UI_CONFIG[(task.JOBTYPE||"").toUpperCase()]
-    .deliveryMethods[cache.deliveryType];
-
-  for (const [k,f] of Object.entries(fields)) {
-    if (f.required && !cache[k]) {
-      alert(`${f.label} is required`);
-      return false;
-    }
-  }
-  return true;
-}
-
-/* ================= LOAD TASKS ================= */
-async function loadTasks() {
-  let tasks = JSON.parse(localStorage.getItem(TASK_CACHE_KEY)||"[]");
-
-  if (navigator.onLine) {
-    const snap = await get(
-      query(ref(db,"tasks"),orderByChild("driverId"),equalTo(DRIVER_ID))
-    );
-    tasks = Object.entries(snap.val()||{})
-      .map(([k,v])=>({_key:k,...v}));
-    localStorage.setItem(TASK_CACHE_KEY,JSON.stringify(tasks));
-  }
-
-  if (SEARCH_TERM)
-    tasks = tasks.filter(t=>JSON.stringify(t).toLowerCase().includes(SEARCH_TERM));
-
-  render(tasks);
-}
-
-/* ================= RENDER ================= */
-function render(tasks) {
-  taskList.innerHTML = "";
-  tasks.forEach(t=>{
-    const div=document.createElement("div");
-    div.className="task";
-    div.innerHTML=`
-      <b>${t.CUSTOMERNAME||"—"}</b>
-      <div class="small">${t.ADDRESS||""}</div>
-      ${renderBillingDelivery(t)}
-      <button class="capture" onclick="takePicture('${t._key}')">📸 Take Picture</button>
-    `;
-    taskList.appendChild(div);
-  });
-}
-
-/* ================= HELPERS ================= */
-function isBillingJob(taskKey) {
-  const t = JSON.parse(localStorage.getItem(TASK_CACHE_KEY)||"[]")
-    .find(x=>x._key===taskKey);
-  return (t?.JOBTYPE||"").toUpperCase().includes("BILLING");
-}
-
-function getLocation() {
-  return new Promise(r =>
-    navigator.geolocation.getCurrentPosition(
-      p=>r(p.coords),()=>r(null),{enableHighAccuracy:true})
-  );
-}
-
-function compressImage(file) {
-  return new Promise(r=>{
-    const img=new Image(), fr=new FileReader();
-    fr.onload=e=>img.src=e.target.result;
-    img.onload=()=>{
-      const c=document.createElement("canvas");
-      c.width=img.width; c.height=img.height;
-      c.getContext("2d").drawImage(img,0,0);
-      c.toBlob(b=>r(b),"image/jpeg",0.65);
-    };
-    fr.readAsDataURL(file);
-  });
-}
-
-function queueOffline(taskKey, blob, takenAt, coords, filename) {
-  const q = JSON.parse(localStorage.getItem(QUEUE_KEY) || "[]");
-
-  q.push({
-    taskKey,
-    image: URL.createObjectURL(blob),
-    takenAt,
-    latitude: coords?.latitude,
-    longitude: coords?.longitude,
-    filename,
-    ...BILLING_CACHE[taskKey]
-  });
-
-  localStorage.setItem(QUEUE_KEY, JSON.stringify(q));
-}
-  
-async function uploadNow(
-  taskKey,
-  blob,
-  takenAt,
-  coords,
-  filename
-) {
-  const uploadedAt = new Date().toISOString();
+async function uploadNow(taskKey, blob, takenAt, filename) {
   const imgRef = sRef(storage, `tasks/${taskKey}/${filename}`);
-
   await uploadBytes(imgRef, blob);
   const url = await getDownloadURL(imgRef);
-
-  const billing = BILLING_CACHE[taskKey] || {};
 
   await update(ref(db, `tasks/${taskKey}`), {
     status: "COMPLETED",
     imageUrl: url,
     takenAt,
-    uploadedAt,
-    latitude: coords?.latitude,
-    longitude: coords?.longitude,
-    filename,
-
-    deliveryType: billing.deliveryType || "",
-    ...billing
+    uploadedAt: new Date().toISOString(),
+    deliveryData: BILLING_CACHE[taskKey] || {}
   });
 }
 
-await loadDriverUIConfig();
+/* ===== OFFLINE RETRY ===== */
+setInterval(async () => {
+  if (!navigator.onLine) return;
+  const q = getQueue();
+  if (!q.length) return;
+
+  for (const i of q) {
+    const blob = await (await fetch(i.image)).blob();
+    await uploadNow(i.taskKey, blob, i.takenAt, i.filename);
+  }
+  setQueue([]);
+  loadTasks();
+}, 5000);
+
+/* ===== LOAD TASKS ===== */
+async function loadTasks() {
+  let tasks = JSON.parse(localStorage.getItem(TASK_CACHE_KEY) || "[]");
+  if (navigator.onLine) {
+    const snap = await get(query(ref(db,"tasks"),orderByChild("driverId"),equalTo(DRIVER_ID)));
+    const raw = snap.val() || {};
+    tasks = Object.keys(raw).map(k => ({ _key:k, ...raw[k] }));
+    localStorage.setItem(TASK_CACHE_KEY, JSON.stringify(tasks));
+  }
+  render(tasks);
+}
+
+/* ===== RENDER ===== */
+async function render(tasks) {
+  taskList.innerHTML = "";
+  for (const t of tasks) {
+    const status = t.status || "PENDING";
+    const div = document.createElement("div");
+    div.className = `task ${status==="COMPLETED"?"completed":""}`;
+
+    let html = `
+      <b>${t.CUSTOMERNAME||"—"}</b>
+      <div class="small">📍 ${t.ADDRESS||"—"}</div>
+      <div class="small"><b>Job Type:</b> ${t.JOBTYPE||"—"}</div>
+      <div class="small"><b>Status:</b> ${status}</div>
+    `;
+
+    if (status === "PENDING") {
+      html += await renderDynamicDelivery(t);
+      html += `<button class="capture" onclick="CURRENT_TASK='${t._key}';cameraInput.click()">📸 Take Picture</button>`;
+    }
+
+    if (status === "COMPLETED") {
+      html += `<button class="toggle" onclick="this.nextElementSibling.style.display='block'">Show Photo</button><img src="${t.imageUrl}" style="display:none">`;
+    }
+
+    div.innerHTML = html;
+    taskList.appendChild(div);
+  }
+}
+
+async function renderDynamicDelivery(t) {
+  const methods = await loadDriverUI(t.JOBTYPE);
+  if (!methods || !Object.keys(methods).length) return "";
+
+  let html = `<div class="radio-group"><b>Delivery Method</b>`;
+  for (const m of Object.keys(methods)) {
+    html += `
+      <label>
+        <input type="radio" name="delivery_${t._key}" value="${m}"
+          onchange="showDynamicFields('${t._key}','${t.JOBTYPE}','${m}')">
+        ${m}
+      </label>`;
+  }
+  html += `</div><div id="dyn_${t._key}"></div>`;
+  return html;
+}
+
+window.showDynamicFields = async function(taskKey, jobType, method) {
+  if (!BILLING_CACHE[taskKey]) BILLING_CACHE[taskKey] = {};
+  BILLING_CACHE[taskKey].deliveryType = method;
+
+  const cfg = await loadDriverUI(jobType);
+  const box = document.getElementById(`dyn_${taskKey}`);
+  let html = "";
+
+  for (const f of Object.values(cfg[method])) {
+    html += f.type === "textarea"
+      ? `<textarea placeholder="${f.label}" oninput="BILLING_CACHE['${taskKey}']['${f.label}']=this.value"></textarea>`
+      : `<input placeholder="${f.label}" oninput="BILLING_CACHE['${taskKey}']['${f.label}']=this.value">`;
+  }
+  box.innerHTML = html;
+};
+
+function validateDynamic(taskKey) {
+  const data = BILLING_CACHE[taskKey];
+  if (!data?.deliveryType) {
+    alert("Select delivery method");
+    return false;
+  }
+  return true;
+}
+
 loadTasks();
 </script>
 
