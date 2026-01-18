@@ -1,15 +1,57 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <title>Driver Form Configuration</title>
+
 <style>
-body { font-family:Arial; background:#f3f3f3; padding:12px; }
-.card { background:#fff; padding:12px; border-radius:8px; margin-bottom:12px; }
-label { font-weight:bold; margin-top:6px; display:block; }
-input, select, textarea { width:100%; padding:6px; margin-top:4px; }
-button { padding:10px; width:100%; margin-top:8px; }
-.field { border:1px solid #ddd; padding:8px; margin-top:8px; }
+body {
+  font-family: Arial, sans-serif;
+  background:#f3f3f3;
+  padding:12px;
+}
+
+.card {
+  background:#fff;
+  padding:12px;
+  border-radius:8px;
+  margin-bottom:12px;
+  box-shadow:0 0 4px rgba(0,0,0,.1);
+}
+
+label {
+  font-weight:bold;
+  display:block;
+  margin-top:6px;
+}
+
+input, select, textarea {
+  width:100%;
+  padding:6px;
+  margin-top:4px;
+}
+
+button {
+  width:100%;
+  padding:10px;
+  margin-top:8px;
+  border:none;
+  border-radius:6px;
+  background:#007bff;
+  color:#fff;
+  cursor:pointer;
+}
+
+.secondary {
+  background:#444;
+}
+
+.field {
+  border:1px solid #ddd;
+  padding:10px;
+  margin-top:10px;
+  border-radius:6px;
+}
 </style>
 </head>
 
@@ -17,11 +59,15 @@ button { padding:10px; width:100%; margin-top:8px; }
 
 <h2>⚙ Driver Form Templates</h2>
 
-<button onclick="location.href='admin.html'">⬅ Back</button>
+<button class="secondary" onclick="location.href='admin.html'">
+⬅ Back to Admin
+</button>
 
 <div class="card">
   <label>Job Type</label>
   <input id="jobType" placeholder="e.g. TEST_BILLING">
+
+  <button onclick="loadTemplate()">📂 Load Template</button>
 </div>
 
 <div class="card">
@@ -30,14 +76,15 @@ button { padding:10px; width:100%; margin-top:8px; }
   <button onclick="addField()">➕ Add Field</button>
 </div>
 
-<button onclick="saveTemplate()">💾 Save Template</button>
+<button onclick="saveTemplate()">💾 Create / Update Template</button>
 
 <script type="module">
 import { initializeApp } from
   "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import { getDatabase, ref, update } from
+import { getDatabase, ref, get, set } from
   "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
+/* ===== FIREBASE ===== */
 const app = initializeApp({
   apiKey: "AIzaSyDFW61pnwLvh6HGKWt10zLYNr860fI8vkg",
   databaseURL: "https://driva-pwa-default-rtdb.firebaseio.com"
@@ -46,15 +93,17 @@ const db = getDatabase(app);
 
 const fieldsDiv = document.getElementById("fields");
 
-function addField() {
+/* ===== ADD FIELD ===== */
+window.addField = function (field = {}) {
   const div = document.createElement("div");
   div.className = "field";
+
   div.innerHTML = `
     <label>Field Key</label>
-    <input class="key" placeholder="deliveryMethod">
+    <input class="key" value="${field.key || ""}" placeholder="deliveryMethod">
 
     <label>Label</label>
-    <input class="label">
+    <input class="label" value="${field.label || ""}">
 
     <label>Type</label>
     <select class="type">
@@ -64,46 +113,84 @@ function addField() {
     </select>
 
     <label>
-      <input type="checkbox" class="required"> Required
+      <input type="checkbox" class="required">
+      Required
     </label>
 
     <label>Options (comma separated for radio)</label>
-    <input class="options" placeholder="D1,D2,D3">
-
+    <input class="options" value="${field.options || ""}">
   `;
-  fieldsDiv.appendChild(div);
-}
 
+  div.querySelector(".type").value = field.type || "text";
+  div.querySelector(".required").checked = field.required || false;
+
+  fieldsDiv.appendChild(div);
+};
+
+/* ===== SAVE ===== */
 window.saveTemplate = async function () {
   const jobType = document.getElementById("jobType").value.trim();
-  if (!jobType) return alert("Job type required");
+  if (!jobType) return alert("Job type is required");
 
   const fields = {};
+
   document.querySelectorAll(".field").forEach(f => {
     const key = f.querySelector(".key").value.trim();
     if (!key) return;
 
-    fields[key] = {
-      type: f.querySelector(".type").value,
-      label: f.querySelector(".label").value,
-      required: f.querySelector(".required").checked
-    };
+    const type = f.querySelector(".type").value;
+    const label = f.querySelector(".label").value;
+    const required = f.querySelector(".required").checked;
+    const optionsRaw = f.querySelector(".options").value;
 
-    const opts = f.querySelector(".options").value;
-    if (opts && fields[key].type === "radio") {
-      fields[key].options = opts.split(",").map(v => ({
+    const field = { type, label, required };
+
+    if (type === "radio" && optionsRaw) {
+      field.options = optionsRaw.split(",").map(v => ({
         value: v.trim(),
         label: v.trim()
       }));
     }
+
+    fields[key] = field;
   });
 
-  await update(ref(db, `config/driverUI/jobTypeTemplates/${jobType}`), {
+  await set(ref(db, `config/driverUI/jobTypeTemplates/${jobType}`), {
     name: jobType,
     fields
   });
 
-  alert("✅ Template saved");
+  alert("✅ Template saved / updated");
+};
+
+/* ===== LOAD ===== */
+window.loadTemplate = async function () {
+  const jobType = document.getElementById("jobType").value.trim();
+  if (!jobType) return alert("Enter job type");
+
+  const snap = await get(
+    ref(db, `config/driverUI/jobTypeTemplates/${jobType}`)
+  );
+
+  if (!snap.exists()) {
+    alert("No template found");
+    return;
+  }
+
+  fieldsDiv.innerHTML = "";
+  const tpl = snap.val();
+
+  Object.entries(tpl.fields || {}).forEach(([key, f]) => {
+    addField({
+      key,
+      label: f.label,
+      type: f.type,
+      required: f.required,
+      options: (f.options || []).map(o => o.value).join(",")
+    });
+  });
+
+  alert("📂 Template loaded");
 };
 </script>
 
