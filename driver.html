@@ -42,7 +42,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebas
 import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.4.30-DYNAMIC";
+const VERSION = "Driver v3.4.31-DYNAMIC";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 
@@ -222,65 +222,104 @@ function resolveStatus(task) {
   return task.status || "PENDING";
 }
 
-async function uploadNow(taskKey, blob, takenAt, filename, deliveryData = {}) {
+async function uploadNow(taskKey, blob, takenAt, _unusedFilename, deliveryData = {}) {
+  // ===== GET TASK DATA =====
+  const cached = JSON.parse(localStorage.getItem("cachedTasks") || "[]");
+  const task = cached.find(t => t._key === taskKey) || {};
+
+  // ===== GET GPS =====
+  let latitude = "NA";
+  let longitude = "NA";
+
+  try {
+    const pos = await new Promise((resolve, reject) =>
+      navigator.geolocation.getCurrentPosition(resolve, reject, {
+        enableHighAccuracy: true,
+        timeout: 15000,
+        maximumAge: 0
+      })
+    );
+
+    latitude = pos.coords.latitude.toFixed(6);
+    longitude = pos.coords.longitude.toFixed(6);
+  } catch {
+    // GPS failure allowed
+  }
+
+  // ===== DATE & TIME (UPLOAD TIME) =====
+  const now = new Date();
+  const pad = n => String(n).padStart(2, "0");
+
+  const dateTime =
+    `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_` +
+    `${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+
+  // ===== SAFE STRING =====
+  const safe = v =>
+    String(v || "")
+      .toUpperCase()
+      .replace(/[^A-Z0-9]/g, "_")
+      .replace(/_+/g, "_")
+      .replace(/^_|_$/g, "");
+
+  const customer = safe(task.CUSTOMERNAME);
+  const address  = safe(task.ADDRESS);
+  const driver   = safe(DRIVER_ID);
+
+  // ===== FINAL FILENAME =====
+  const filename =
+    `${customer}_${address}_${longitude}_${latitude}_${driver}_${dateTime}.jpg`;
+
+  // ===== UPLOAD IMAGE =====
   const imgRef = sRef(storage, `tasks/${taskKey}/${filename}`);
   await uploadBytes(imgRef, blob);
   const url = await getDownloadURL(imgRef);
 
-  // 🔑 build payload dynamically
-  const payload = {
+  // ===== UPDATE DATABASE =====
+  await update(ref(db, `tasks/${taskKey}`), {
     status: "COMPLETED",
     imageUrl: url,
+    filename,
+    latitude: latitude !== "NA" ? Number(latitude) : null,
+    longitude: longitude !== "NA" ? Number(longitude) : null,
     takenAt,
-    uploadedAt: new Date().toISOString(),
-    deliveryType: deliveryData.deliveryType || ""
-  };
-
-  // 🔑 copy all dynamic fields using fieldKey
-  Object.entries(deliveryData).forEach(([key, value]) => {
-    if (key !== "deliveryType") {
-      payload[key] = value;
-    }
+    uploadedAt: now.toISOString(),
+    deliveryData
   });
-
-  await update(ref(db, `tasks/${taskKey}`), payload);
-}  
-/* ===== OFFLINE RETRY ===== */
-setInterval(async () => {
-  if (!navigator.onLine) return;
-
-  const q = getQueue();
-  if (!q.length) return;
-
-  for (const i of q) {
-    try {
-      const blob = await (await fetch(i.image)).blob();
-
-      await uploadNow(
-        i.taskKey,
-        blob,
-        i.takenAt,
-        i.filename,
-        i.deliveryData || {}
-      );
-    } catch (err) {
-      console.error("Offline retry failed:", err);
-      return; // stop and retry later
-    }
-  }
-
-  setQueue([]);
-  loadTasks();
-}, 5000);
-/* ===== LOAD TASKS ===== */
-async function loadTasks() {
+}
+  
+/* ===== LOAD TASKS ===== */async function loadTasks() {
   let tasks = JSON.parse(localStorage.getItem(TASK_CACHE_KEY) || "[]");
+
   if (navigator.onLine) {
-    const snap = await get(query(ref(db,"tasks"),orderByChild("driverId"),equalTo(DRIVER_ID)));
+    const snap = await get(
+      query(
+        ref(db, "tasks"),
+        orderByChild("driverId"),
+        equalTo(DRIVER_ID)
+      )
+    );
+
     const raw = snap.val() || {};
-    tasks = Object.keys(raw).map(k => ({ _key:k, ...raw[k] }));
+    tasks = Object.keys(raw).map(k => ({ _key: k, ...raw[k] }));
     localStorage.setItem(TASK_CACHE_KEY, JSON.stringify(tasks));
   }
+
+  // ✅ SORT HERE (VERY IMPORTANT)
+  tasks.sort((a, b) => {
+    const pa = resolveStatus(a);
+    const pb = resolveStatus(b);
+
+    const priority = {
+      "PENDING": 1,
+      "PROCESSING": 2,
+      "UPLOADING": 3,
+      "COMPLETED": 4
+    };
+
+    return (priority[pa] || 99) - (priority[pb] || 99);
+  });
+
   render(tasks);
 }
 
@@ -408,6 +447,30 @@ window.showDynamicFields = async function(taskKey, jobType, method) {
 
   box.innerHTML = html;
 };
+
+function getCurrentLocation() {
+  return new Promise((resolve, reject) => {
+    if (!navigator.geolocation) {
+      reject("Geolocation not supported");
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      pos => {
+        resolve({
+          latitude: pos.coords.latitude,
+          longitude: pos.coords.longitude
+        });
+      },
+      err => reject(err.message),
+      {
+        enableHighAccuracy: true,
+        timeout: 15000,
+        maximumAge: 0
+      }
+    );
+  });
+}
   
 function validateDynamic(taskKey) {
   // 🔒 FORCE DOM → CACHE SYNC FIRST
