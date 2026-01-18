@@ -248,7 +248,7 @@ button {
 
 <body>
 
-<h2>🧑‍💼 Admin Dashboard V2.4.0.0</h2>
+<h2>🧑‍💼 Admin Dashboard V2.4.0.1</h2>
 
 <!-- ===== DASHBOARD ===== -->
 <div class="dashboard">
@@ -383,6 +383,13 @@ const firebaseConfig = {
   messagingSenderId: "299138219722",
   appId: "1:299138219722:web:623ff6b0a067ea822dfe33"
 };
+
+window.DRIVER_UI_CONFIG = {};
+
+async function loadDriverUIConfig() {
+  const snap = await get(ref(db, "config/driverUI/jobTypes"));
+  window.DRIVER_UI_CONFIG = snap.val() || {};
+}
 
 function showLoader(text = "Loading…") {
   const el = document.getElementById("loadingScreen");
@@ -1238,6 +1245,9 @@ function setLoaderText(txt) {
   showLoader("Loading drivers…");
   try {
     await loadDrivers();
+
+    showLoader("Loading driver config…");
+    await loadDriverUIConfig(); // 🔥 REQUIRED
 
     showLoader("Loading dashboard…");
     await refreshDashboard();
