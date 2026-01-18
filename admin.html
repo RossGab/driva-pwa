@@ -248,7 +248,7 @@ button {
 
 <body>
 
-<h2>🧑‍💼 Admin Dashboard V2.3.1.0</h2>
+<h2>🧑‍💼 Admin Dashboard V2.4.0.0</h2>
 
 <!-- ===== DASHBOARD ===== -->
 <div class="dashboard">
@@ -627,6 +627,39 @@ import {
   equalTo
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
+function renderDynamicCompletedFields(t) {
+  if (!t.deliveryType || !t.JOBTYPE) return "";
+
+  const cfg =
+    window.DRIVER_UI_CONFIG?.[t.JOBTYPE]?.[t.deliveryType];
+
+  if (!cfg) return "";
+
+  let html = `
+    <div class="task-form full" style="margin-top:12px">
+      <b>DELIVERY DETAILS</b>
+  `;
+
+  for (const [key, field] of Object.entries(cfg)) {
+    const value = t[key] || "";
+
+    if (field.type === "textarea") {
+      html += `
+        <label class="full">${field.label}</label>
+        <textarea class="full" disabled>${value}</textarea>
+      `;
+    } else {
+      html += `
+        <label>${field.label}</label>
+        <input value="${value}" disabled>
+      `;
+    }
+  }
+
+  html += `</div>`;
+  return html;
+}  
+  
 function renderTaskDetails(t) {
   return `
     <div class="task-form">
@@ -673,18 +706,6 @@ function renderTaskDetails(t) {
 
       <label>DELIVERY TYPE</label>
       <input data-field="deliveryType" value="${t.deliveryType || ""}" disabled>
-
-      <label>RECEIVED BY</label>
-      <input data-field="receivedBy" value="${t.receivedBy || ""}" disabled>
-
-      <label>RELATIONSHIP</label>
-      <input data-field="relationship" value="${t.relationship || ""}" disabled>
-
-      <label>GATE / MAILBOX COLOR</label>
-      <input data-field="gateColor" value="${t.gateColor || ""}" disabled>
-
-      <label class="full">REMARKS</label>
-      <textarea class="full" data-field="remarks" disabled>${t.remarks || ""}</textarea>
 
       <label>LATITUDE</label>
       <input data-field="latitude" value="${t.latitude || ""}" disabled>
@@ -811,6 +832,7 @@ window.loadTasks = async function (status) {
           </button>
           <img src="${t.imageUrl}" style="display:none;width:100%">
         ` : ""}
+        ${t.status === "COMPLETED" ? renderDynamicCompletedFields(t) : ""}
 
         <div class="form-actions">
           <button class="toggleBtn" onclick="enableEdit(this)">✏ Modify Task</button>
