@@ -57,7 +57,7 @@ button:hover {
 
 <body>
 
-<h2>📊 Task Report V1.1.0</h2>
+<h2>📊 Task Report V1.1.1</h2>
 
 <div class="filters">
   <select id="statusFilter">
@@ -207,7 +207,7 @@ window.generateReport = function () {
     LONGITUDE: t.longitude || "",
 
     CREATED_AT: t.createdAt || "",
-    COMPLETED_AT: t.completedAt || "",
+    COMPLETED_AT: t.uploadedAt || "",
 
     IMAGE_URL: t.imageUrl
       ? {
