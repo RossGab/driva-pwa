@@ -30,6 +30,11 @@ h2 { text-align:center; }
   color:#fff;
 }
 
+.danger {
+  background:#c0392b;
+  color:#fff;
+}
+
 .card {
   background:#fff;
   padding:14px;
@@ -83,7 +88,7 @@ button {
 
 <body>
 
-<h2>⚙ Driver UI Configuration V1.0.5</h2>
+<h2>⚙ Driver UI Configuration V1.0.6</h2>
 
 <div class="tabs">
   <button id="tabAdd" class="active">➕ Add Job Type</button>
@@ -130,8 +135,12 @@ const db = getDatabase(app);
 
 const STATE = { jobType:"", methods:{} };
 
+let MODE = "ADD"; // or "UPDATE"
+
 /* ===== TABS ===== */
 tabAdd.onclick = () => {
+  MODE = "ADD";
+  jobTypeInput.disabled = false;
   tabAdd.classList.add("active");
   tabUpdate.classList.remove("active");
   addSection.style.display = "block";
@@ -140,18 +149,28 @@ tabAdd.onclick = () => {
 };
 
 tabUpdate.onclick = async () => {
-  resetState(); // 🔥 ADD THIS
+  MODE = "UPDATE";
+  resetState();
 
+  jobTypeInput.disabled = true;   // 🔒 lock
+  deliveryMethodInput.value = ""; 
   tabUpdate.classList.add("active");
   tabAdd.classList.remove("active");
   addSection.style.display = "none";
   updateSection.style.display = "block";
+
   await loadJobTypes();
 };
 
+
+
 /* ===== ADD DELIVERY METHOD ===== */
 window.addDeliveryMethod = function () {
-  const jobType = jobTypeInput.value.trim();
+  const jobType =
+    MODE === "ADD"
+      ? jobTypeInput.value.trim()
+      : STATE.jobType;
+
   const method = deliveryMethodInput.value.trim();
 
   if (!jobType || !method) {
@@ -162,20 +181,19 @@ window.addDeliveryMethod = function () {
   STATE.jobType = jobType;
 
   if (!STATE.methods[method]) {
-    STATE.methods[method] = {};
-
-    // default Other Remarks
-    STATE.methods[method].remarks = {
-      label: "Other Remarks",
-      type: "textarea",
-      required: false
+    STATE.methods[method] = {
+      remarks: {
+        label: "Other Remarks",
+        type: "textarea",
+        required: false
+      }
     };
   }
 
   deliveryMethodInput.value = "";
   renderMethods();
 };
-
+  
 /* ===== ADD FIELD ===== */
 function addField(method, container) {
   const label = container.querySelector(".field-label").value.trim();
@@ -215,7 +233,10 @@ function renderMethods() {
     div.className = "method-box";
 
     div.innerHTML = `
-      <b>${method}</b>
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <b>${method}</b>
+        <button class="danger" onclick="removeMethod('${method}')">❌</button>
+      </div>
 
       <input class="field-label" placeholder="Label (e.g. Received by)">
       <select class="field-type">
@@ -230,18 +251,76 @@ function renderMethods() {
       <button class="secondary add">➕ Add Description</button>
 
       <div class="field-list">
-        ${Object.values(fields).map(f => `
-          <div class="field-row">
-            ${f.label} — ${f.type} ${f.required ? "(required)" : ""}
-          </div>
-        `).join("")}
-      </div>
+  ${Object.entries(fields).map(([key, f]) => `
+    <div class="field-row">
+      <input
+        value="${f.label}"
+        onchange="updateFieldLabel('${method}','${key}',this.value)"
+      >
+
+      <select onchange="updateFieldType('${method}','${key}',this.value)">
+        <option value="text" ${f.type==="text"?"selected":""}>Text</option>
+        <option value="textarea" ${f.type==="textarea"?"selected":""}>Textarea</option>
+      </select>
+
+      <label>
+        <input type="checkbox"
+          ${f.required ? "checked" : ""}
+          onchange="updateFieldRequired('${method}','${key}',this.checked)">
+        Required
+      </label>
+
+      <button class="danger" onclick="removeField('${method}','${key}')">❌</button>
+    </div>
+  `).join("")}
+</div>
     `;
 
     div.querySelector(".add").onclick = () => addField(method, div);
     methodsContainer.appendChild(div);
   });
 }
+
+  window.updateFieldLabel = (method, key, value) => {
+  const newKey = makeKey(value);
+  if (!newKey) return;
+
+  const field = STATE.methods[method][key];
+  delete STATE.methods[method][key];
+
+  STATE.methods[method][newKey] = {
+    ...field,
+    label: value
+  };
+
+  renderMethods();
+};
+
+window.updateFieldType = (method, key, value) => {
+  STATE.methods[method][key].type = value;
+};
+
+window.updateFieldRequired = (method, key, value) => {
+  STATE.methods[method][key].required = value;
+};
+
+window.removeField = (method, key) => {
+  if (key === "remarks") {
+    alert("Other Remarks cannot be removed");
+    return;
+  }
+
+  if (!confirm("Remove this field?")) return;
+
+  delete STATE.methods[method][key];
+  renderMethods();
+};
+
+window.removeMethod = (method) => {
+  if (!confirm(`Remove delivery method ${method}?`)) return;
+  delete STATE.methods[method];
+  renderMethods();
+};
   
 /* ===== SAVE ===== */
 window.saveConfig = async function () {
