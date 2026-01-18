@@ -113,7 +113,7 @@ button {
 
 <body>
 
-<h2>⚙ Driver UI Configuration V1.0.15</h2>
+<h2>⚙ Driver UI Configuration V1.0.16</h2>
 
 <div class="tabs">
   <button id="tabAdd" class="active">➕ Add Job Type</button>
@@ -290,6 +290,31 @@ function addField(method, container) {
 
   renderMethods();
 }
+
+function commitPendingField(method, container) {
+  const labelInput = container.querySelector(".field-label");
+  const typeSelect = container.querySelector(".field-type");
+  const requiredCheck = container.querySelector(".field-required");
+
+  if (!labelInput) return;
+
+  const label = labelInput.value.trim();
+  if (!label) return; // nothing to commit
+
+  const key = makeKey(label);
+
+  if (!STATE.methods[method][key]) {
+    STATE.methods[method][key] = {
+      label,
+      type: typeSelect?.value || "text",
+      required: !!requiredCheck?.checked
+    };
+  }
+
+  // clear UI
+  labelInput.value = "";
+  if (requiredCheck) requiredCheck.checked = false;
+}
   
 /* ===== RENDER ===== */
 function renderMethods() {
@@ -352,6 +377,11 @@ function renderMethods() {
     `;
 
     div.querySelector(".add").onclick = () => addField(method, div);
+
+// 🔥 AUTO-COMMIT before save
+div.addEventListener("blur", () => {
+  commitPendingField(method, div);
+}, true);
     methodsContainer.appendChild(div);
   });
 }
@@ -398,6 +428,12 @@ window.removeMethod = (method) => {
   
 /* ===== SAVE ===== */
 window.saveConfig = async function () {
+
+  document.querySelectorAll(".method-box").forEach(box => {
+  const method = box.querySelector("b")?.innerText;
+  if (method) commitPendingField(method, box);
+});
+  
   if (!STATE.jobType || !Object.keys(STATE.methods).length) {
     alert("Nothing to save");
     return;
