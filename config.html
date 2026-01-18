@@ -113,7 +113,7 @@ button {
 
 <body>
 
-<h2>⚙ Driver UI Configuration V1.0.19</h2>
+<h2>⚙ Driver UI Configuration V1.0.20</h2>
 
 <div class="tabs">
   <button id="tabAdd" class="active">➕ Add Job Type</button>
@@ -170,6 +170,7 @@ const app = initializeApp({
 const db = getDatabase(app);
 
 const STATE = { jobType:"", methods:{} };
+let IS_DIRTY = false;
 
 let MODE = "ADD"; // or "UPDATE"
 
@@ -203,9 +204,17 @@ tabUpdate.onclick = async () => {
 
 
 /* ===== ADD DELIVERY METHOD ===== */
-window.addDeliveryMethod = function () {
+window.addDeliveryMethod = async function () {
   const jobType = jobTypeInput.value.trim();
   const method = deliveryMethodInput.value.trim();
+
+  const existing = await get(
+    ref(db, `config/driverUI/jobTypes/${jobType}`)
+  );
+  if (existing.exists()) {
+    alert("Job Type already exists. Use Update instead.");
+    return;
+  }
 
   if (!jobType || !method) {
     alert("Job Type and Delivery Method required");
@@ -226,12 +235,14 @@ window.addDeliveryMethod = function () {
   }
 
   STATE.methods[method] = {
-    remarks: {
-      label: "Other Remarks",
-      type: "textarea",
-      required: false
-    }
-  };
+  remarks: {
+    label: "Other Remarks",
+    type: "textarea",
+    required: false
+  }
+};
+
+IS_DIRTY = true;
 
   deliveryMethodInput.value = "";
   renderMethods();
@@ -254,7 +265,6 @@ window.addDeliveryMethodFromUpdate = function () {
     return;
   }
 
-  // ✅ IMMUTABLE WRITE
   STATE.methods = {
     ...STATE.methods,
     [method]: {
@@ -266,10 +276,11 @@ window.addDeliveryMethodFromUpdate = function () {
     }
   };
 
+  IS_DIRTY = true;
+
   updateDeliveryMethodInput.value = "";
   renderMethods();
 };
-
   
 /* ===== ADD FIELD ===== */
 function addField(method, container) {
@@ -295,13 +306,15 @@ function addField(method, container) {
     required
   };
 
+  IS_DIRTY = true;
+
   container.querySelector(".field-label").value = "";
   container.querySelector(".field-required").checked = false;
 
   renderMethods();
 }
 
-function commitPendingField(method, container) {
+ function commitPendingField(method, container) {
   const labelInput = container.querySelector(".field-label");
   const typeSelect = container.querySelector(".field-type");
   const requiredCheck = container.querySelector(".field-required");
@@ -309,7 +322,7 @@ function commitPendingField(method, container) {
   if (!labelInput) return;
 
   const label = labelInput.value.trim();
-  if (!label) return; // nothing to commit
+  if (!label) return;
 
   const key = makeKey(label);
 
@@ -319,9 +332,9 @@ function commitPendingField(method, container) {
       type: typeSelect?.value || "text",
       required: !!requiredCheck?.checked
     };
+    IS_DIRTY = true;
   }
 
-  // clear UI
   labelInput.value = "";
   if (requiredCheck) requiredCheck.checked = false;
 }
@@ -407,15 +420,18 @@ div.addEventListener("blur", () => {
     label: value
   };
 
+  IS_DIRTY = true;
   renderMethods();
 };
 
 window.updateFieldType = (method, key, value) => {
   STATE.methods[method][key].type = value;
+  IS_DIRTY = true;
 };
 
 window.updateFieldRequired = (method, key, value) => {
   STATE.methods[method][key].required = value;
+  IS_DIRTY = true;
 };
 
 window.removeField = (method, key) => {
@@ -435,13 +451,26 @@ window.removeMethod = (method) => {
   delete STATE.methods[method];
   renderMethods();
 };
+
+
   
 /* ===== SAVE ===== */
 window.saveConfig = async function () {
+
+  if (MODE === "ADD") {
+    STATE.jobType = jobTypeInput.value.trim();
+  }
+
   if (!STATE.jobType || !Object.keys(STATE.methods).length) {
     alert("Nothing to save");
     return;
   }
+
+  // 🔥 Commit any unsubmitted label before saving
+  document.querySelectorAll(".method-box").forEach(box => {
+    const method = box.querySelector("b")?.innerText;
+    if (method) commitPendingField(method, box);
+  });
 
   const payload = structuredClone(STATE.methods);
 
@@ -453,6 +482,7 @@ window.saveConfig = async function () {
     }
   );
 
+  IS_DIRTY = false;
   alert("✅ Configuration saved successfully");
 };
   
@@ -483,6 +513,12 @@ window.saveConfig = async function () {
 
   // ✅ CHANGE JOB TYPE — CLONE AGAIN
   jobTypeSelect.onchange = () => {
+    if (IS_DIRTY && !confirm("Discard unsaved changes?")) {
+      jobTypeSelect.value = STATE.jobType;
+      return;
+    }
+  
+    IS_DIRTY = false;
     STATE.jobType = jobTypeSelect.value;
     STATE.methods = structuredClone(
       data[STATE.jobType]?.deliveryMethods || {}
