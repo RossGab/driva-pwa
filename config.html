@@ -113,7 +113,7 @@ button {
 
 <body>
 
-<h2>⚙ Driver UI Configuration V1.0.9</h2>
+<h2>⚙ Driver UI Configuration V1.0.10</h2>
 
 <div class="tabs">
   <button id="tabAdd" class="active">➕ Add Job Type</button>
@@ -372,22 +372,36 @@ window.saveConfig = async function () {
 
   alert("✅ Configuration saved successfully");
 };
+
   
 
 /* ===== LOAD EXISTING ===== */
 async function loadJobTypes() {
   const snap = await get(ref(db,"config/driverUI/jobTypes"));
-  const data = snap.val()||{};
-  jobTypeSelect.innerHTML="<option value=''>Select</option>";
-  Object.keys(data).forEach(j=>{
-    const o=document.createElement("option");
-    o.value=j; o.textContent=j;
+  const data = snap.val() || {};
+
+  jobTypeSelect.innerHTML = "<option value=''>Select Job Type</option>";
+
+  const keys = Object.keys(data);
+
+  keys.forEach(j => {
+    const o = document.createElement("option");
+    o.value = j;
+    o.textContent = j;
     jobTypeSelect.appendChild(o);
   });
 
-  jobTypeSelect.onchange=()=>{
-    STATE.jobType=jobTypeSelect.value;
-    STATE.methods=data[STATE.jobType]?.deliveryMethods||{};
+  // ✅ AUTO-SELECT FIRST JOB TYPE
+  if (keys.length) {
+    jobTypeSelect.value = keys[0];
+    STATE.jobType = keys[0];
+    STATE.methods = data[keys[0]]?.deliveryMethods || {};
+    renderMethods();
+  }
+
+  jobTypeSelect.onchange = () => {
+    STATE.jobType = jobTypeSelect.value;
+    STATE.methods = data[STATE.jobType]?.deliveryMethods || {};
     renderMethods();
   };
 }
