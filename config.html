@@ -1,9 +1,9 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>Driver UI Configuration</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
 body {
@@ -12,47 +12,57 @@ body {
   padding:12px;
 }
 
-h2 {
-  text-align:center;
-}
+h2 { text-align:center; }
 
 .card {
   background:#fff;
-  padding:12px;
-  border-radius:8px;
+  padding:14px;
+  border-radius:10px;
   box-shadow:0 0 4px rgba(0,0,0,.1);
   margin-bottom:12px;
 }
 
-input, select, button {
+label {
+  font-weight:bold;
+  font-size:13px;
+  display:block;
+  margin-top:10px;
+}
+
+input, select, textarea {
   width:100%;
   padding:8px;
-  margin-top:6px;
+  margin-top:4px;
   border-radius:6px;
   border:1px solid #ccc;
 }
 
 button {
-  background:#007bff;
-  color:#fff;
+  margin-top:10px;
+  padding:10px;
   border:none;
+  border-radius:6px;
   cursor:pointer;
+  font-size:14px;
 }
 
-button.secondary {
-  background:#555;
+.primary { background:#007bff; color:#fff; }
+.secondary { background:#555; color:#fff; }
+.danger { background:#c0392b; color:#fff; }
+
+.method-box {
+  border:1px solid #ddd;
+  border-radius:8px;
+  padding:10px;
+  margin-top:10px;
 }
 
-.field-item {
-  background:#f9f9f9;
+.field-row {
+  background:#f7f7f7;
   padding:8px;
   border-radius:6px;
   margin-top:6px;
   font-size:13px;
-}
-
-.field-item span {
-  display:block;
 }
 </style>
 </head>
@@ -62,37 +72,25 @@ button.secondary {
 <h2>⚙ Driver UI Configuration</h2>
 
 <div class="card">
-  <b>Job Type</b>
+  <label>Job Type</label>
   <input id="jobTypeInput" placeholder="e.g. RTP">
 
-  <b>Delivery Method</b>
+  <label>Delivery Method</label>
   <input id="deliveryMethodInput" placeholder="e.g. N1-Received">
+
+  <button class="secondary" onclick="addDeliveryMethod()">
+    ➕ Add Delivery Method
+  </button>
 </div>
 
 <div class="card">
-  <b>Add Description / Field</b>
-
-  <input id="fieldLabel" placeholder="Label (e.g. Received by)">
-  
-  <select id="fieldType">
-    <option value="text">Text</option>
-    <option value="textarea">Textarea</option>
-  </select>
-
-  <label style="font-size:13px;">
-    <input type="checkbox" id="fieldRequired"> Required
-  </label>
-
-  <button onclick="addField()">➕ Add Description</button>
+  <h3>Delivery Methods</h3>
+  <div id="methodsContainer"></div>
 </div>
 
 <div class="card">
-  <b>Current Descriptions</b>
-  <div id="fieldList">No fields added</div>
-</div>
-
-<div class="card">
-  <button onclick="saveConfig()">💾 Save / Update Delivery Method</button>
+  <button class="primary" onclick="saveConfig()">💾 Save / Update Template</button>
+  <button class="secondary" onclick="location.href='admin.html'">⬅ Back</button>
 </div>
 
 <script type="module">
@@ -117,86 +115,130 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 
-/* ===== LOCAL STATE ===== */
-let FIELDS = {};
+/* ===== STATE ===== */
+const STATE = {
+  jobType: "",
+  methods: {}
+};
 
-/* ===== HELPERS ===== */
-function slugify(str) {
-  return str.toLowerCase().replace(/[^a-z0-9]/g, "_");
-}
+/* ===== ADD DELIVERY METHOD ===== */
+window.addDeliveryMethod = function () {
+  const jobType = jobTypeInput.value.trim();
+  const method = deliveryMethodInput.value.trim();
 
-function renderFields() {
-  const box = document.getElementById("fieldList");
-  box.innerHTML = "";
-
-  if (!Object.keys(FIELDS).length) {
-    box.innerHTML = "No fields added";
+  if (!jobType || !method) {
+    alert("Job Type and Delivery Method required");
     return;
   }
 
-  Object.entries(FIELDS).forEach(([key, f]) => {
+  STATE.jobType = jobType;
+
+  if (!STATE.methods[method]) {
+    STATE.methods[method] = [];
+
+    // default Other Remarks
+    STATE.methods[method].push({
+      key: "remarks",
+      label: "Other Remarks",
+      type: "textarea",
+      required: false
+    });
+  }
+
+  deliveryMethodInput.value = "";
+  renderMethods();
+};
+
+/* ===== ADD FIELD ===== */
+function addField(method) {
+  const label = document.getElementById(`label_${method}`).value.trim();
+  const type = document.getElementById(`type_${method}`).value;
+  const required = document.getElementById(`req_${method}`).checked;
+
+  if (!label) {
+    alert("Label required");
+    return;
+  }
+
+  const key = label.toLowerCase().replace(/[^a-z0-9]/g, "_");
+
+  STATE.methods[method].unshift({
+    key,
+    label,
+    type,
+    required
+  });
+
+  renderMethods();
+}
+
+/* ===== RENDER ===== */
+function renderMethods() {
+  const box = document.getElementById("methodsContainer");
+  box.innerHTML = "";
+
+  Object.entries(STATE.methods).forEach(([method, fields]) => {
     const div = document.createElement("div");
-    div.className = "field-item";
+    div.className = "method-box";
+
     div.innerHTML = `
-      <span><b>${f.label}</b></span>
-      <span>Key: ${key}</span>
-      <span>Type: ${f.type}</span>
-      <span>Required: ${f.required ? "Yes" : "No"}</span>
+      <b>${method}</b>
+
+      <label>Add Description / Field</label>
+      <input id="label_${method}" placeholder="e.g. Received by">
+
+      <select id="type_${method}">
+        <option value="text">Text</option>
+        <option value="textarea">Textarea</option>
+      </select>
+
+      <label>
+        <input type="checkbox" id="req_${method}"> Required
+      </label>
+
+      <button class="secondary" onclick="(${addField})('${method}')">
+        ➕ Add Description
+      </button>
+
+      <div>
+        ${fields.map(f => `
+          <div class="field-row">
+            ${f.label} — ${f.type} ${f.required ? "(required)" : ""}
+          </div>
+        `).join("")}
+      </div>
     `;
+
     box.appendChild(div);
   });
 }
 
-/* ===== ADD FIELD ===== */
-window.addField = function () {
-  const label = document.getElementById("fieldLabel").value.trim();
-  const type = document.getElementById("fieldType").value;
-  const required = document.getElementById("fieldRequired").checked;
-
-  if (!label) {
-    alert("Label is required");
-    return;
-  }
-
-  const key = slugify(label);
-
-  FIELDS[key] = { label, type, required };
-
-  document.getElementById("fieldLabel").value = "";
-  document.getElementById("fieldRequired").checked = false;
-
-  renderFields();
-};
-
-/* ===== SAVE CONFIG ===== */
+/* ===== SAVE ===== */
 window.saveConfig = async function () {
-  const jobType = document.getElementById("jobTypeInput").value.trim();
-  const deliveryMethod = document.getElementById("deliveryMethodInput").value.trim();
-
-  if (!jobType || !deliveryMethod) {
-    alert("Job Type and Delivery Method are required");
+  if (!STATE.jobType || !Object.keys(STATE.methods).length) {
+    alert("Nothing to save");
     return;
   }
 
-  if (!Object.keys(FIELDS).length) {
-    alert("Add at least one description");
-    return;
-  }
+  const payload = {};
 
-  const path =
-    `config/driverUI/jobTypes/${jobType}/deliveryMethods/${deliveryMethod}`;
-
-  await update(ref(db, path), {
-    fields: FIELDS,
-    updatedAt: new Date().toISOString()
+  Object.entries(STATE.methods).forEach(([method, fields]) => {
+    payload[method] = { fields:{} };
+    fields.forEach(f => {
+      payload[method].fields[f.key] = {
+        label: f.label,
+        type: f.type,
+        required: f.required
+      };
+    });
   });
 
-  alert("✅ Configuration saved");
+  await update(
+    ref(db, `config/driverUI/jobTypes/${STATE.jobType}`),
+    { deliveryMethods: payload }
+  );
 
-  // Reset for next delivery method
-  FIELDS = {};
-  renderFields();
-  document.getElementById("deliveryMethodInput").value = "";
+  alert("✅ Configuration saved");
 };
 </script>
 
