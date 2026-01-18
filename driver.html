@@ -42,7 +42,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebas
 import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.4.35-DYNAMIC";
+const VERSION = "Driver v3.4.36-DYNAMIC";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 
@@ -416,7 +416,7 @@ async function renderDynamicDelivery(t) {
   return html;
 }
 
-window.showDynamicFields = async function(taskKey, jobType, method) {
+window.showDynamicFields = async function (taskKey, jobType, method) {
   if (!BILLING_CACHE[taskKey]) BILLING_CACHE[taskKey] = {};
   BILLING_CACHE[taskKey].deliveryType = method;
 
@@ -426,32 +426,29 @@ window.showDynamicFields = async function(taskKey, jobType, method) {
 
   const fields = cfg?.[method] || {};
 
-  for (const field of Object.values(fields)) {
-    const labelKey = field.label; // 🔥 LABEL IS THE KEY
+  for (const [fieldKey, field] of Object.entries(fields)) {
     const requiredMark = field.required ? " *" : "";
 
     if (field.type === "textarea") {
       html += `
+        <label>${field.label}${requiredMark}</label>
         <textarea
-          data-key="${labelKey}"
-          placeholder="${labelKey}${requiredMark}"
-          oninput="BILLING_CACHE['${taskKey}']['${labelKey}'] = this.value"
+          oninput="BILLING_CACHE['${taskKey}']['${fieldKey}'] = this.value"
         ></textarea>
       `;
     } else {
       html += `
+        <label>${field.label}${requiredMark}</label>
         <input
-          data-key="${labelKey}"
-          placeholder="${labelKey}${requiredMark}"
-          oninput="BILLING_CACHE['${taskKey}']['${labelKey}'] = this.value"
+          type="text"
+          oninput="BILLING_CACHE['${taskKey}']['${fieldKey}'] = this.value"
         >
       `;
     }
   }
 
   box.innerHTML = html;
-};
-  
+};  
   
 function getCurrentLocation() {
   return new Promise((resolve, reject) => {
