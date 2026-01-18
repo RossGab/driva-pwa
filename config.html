@@ -113,7 +113,7 @@ button {
 
 <body>
 
-<h2>⚙ Driver UI Configuration V1.0.18</h2>
+<h2>⚙ Driver UI Configuration V1.0.19</h2>
 
 <div class="tabs">
   <button id="tabAdd" class="active">➕ Add Job Type</button>
@@ -243,12 +243,6 @@ window.addDeliveryMethodFromUpdate = function () {
     return;
   }
 
-  // 🔥 COMMIT EXISTING METHODS FIRST
-  document.querySelectorAll(".method-box").forEach(box => {
-    const m = box.querySelector("b")?.innerText;
-    if (m) commitPendingField(m, box);
-  });
-
   const method = updateDeliveryMethodInput.value.trim();
   if (!method) {
     alert("Delivery Method is required");
@@ -260,16 +254,17 @@ window.addDeliveryMethodFromUpdate = function () {
     return;
   }
 
+  // ✅ IMMUTABLE WRITE
   STATE.methods = {
-  ...STATE.methods,
-  [method]: {
-    remarks: {
-      label: "Other Remarks",
-      type: "textarea",
-      required: false
+    ...STATE.methods,
+    [method]: {
+      remarks: {
+        label: "Other Remarks",
+        type: "textarea",
+        required: false
+      }
     }
-  }
-};
+  };
 
   updateDeliveryMethodInput.value = "";
   renderMethods();
@@ -443,38 +438,26 @@ window.removeMethod = (method) => {
   
 /* ===== SAVE ===== */
 window.saveConfig = async function () {
-  if (!STATE.jobType) {
-    alert("Job Type is required");
-    return;
-  }
-
-  // 🔥 COMMIT ALL PENDING INPUTS BEFORE SAVE
-  document.querySelectorAll(".method-box").forEach(box => {
-    const method = box.querySelector("b")?.innerText;
-    if (method) {
-      commitPendingField(method, box);
-    }
-  });
-
-  if (!Object.keys(STATE.methods).length) {
+  if (!STATE.jobType || !Object.keys(STATE.methods).length) {
     alert("Nothing to save");
     return;
   }
 
+  const payload = structuredClone(STATE.methods);
+
   await update(
     ref(db, `config/driverUI/jobTypes/${STATE.jobType}`),
     {
-      deliveryMethods: STATE.methods,
+      deliveryMethods: payload,
       updatedAt: new Date().toISOString()
     }
   );
 
   alert("✅ Configuration saved successfully");
-};  
-
-/* ===== LOAD EXISTING ===== */
-async function loadJobTypes() {
-  const snap = await get(ref(db,"config/driverUI/jobTypes"));
+};
+  
+/* ===== LOAD EXISTING ===== */async function loadJobTypes() {
+  const snap = await get(ref(db, "config/driverUI/jobTypes"));
   const data = snap.val() || {};
 
   jobTypeSelect.innerHTML = "<option value=''>Select Job Type</option>";
@@ -488,21 +471,22 @@ async function loadJobTypes() {
     jobTypeSelect.appendChild(o);
   });
 
-  // ✅ AUTO-SELECT FIRST JOB TYPE
-  if (keys.length) {
-    jobTypeSelect.value = keys[0];
-    STATE.jobType = keys[0];
-    STATE.methods = structuredClone(
-  data[keys[0]]?.deliveryMethods || {}
-);
-    renderMethods();
-  }
+  if (!keys.length) return;
 
+  // ✅ INITIAL LOAD (CLONE ONCE)
+  jobTypeSelect.value = keys[0];
+  STATE.jobType = keys[0];
+  STATE.methods = structuredClone(
+    data[keys[0]]?.deliveryMethods || {}
+  );
+  renderMethods();
+
+  // ✅ CHANGE JOB TYPE — CLONE AGAIN
   jobTypeSelect.onchange = () => {
     STATE.jobType = jobTypeSelect.value;
     STATE.methods = structuredClone(
-  data[STATE.jobType]?.deliveryMethods || {}
-);
+      data[STATE.jobType]?.deliveryMethods || {}
+    );
     renderMethods();
   };
 }
