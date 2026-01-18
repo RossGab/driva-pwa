@@ -113,7 +113,7 @@ button {
 
 <body>
 
-<h2>⚙ Driver UI Configuration V1.0.10</h2>
+<h2>⚙ Driver UI Configuration V1.0.11</h2>
 
 <div class="tabs">
   <button id="tabAdd" class="active">➕ Add Job Type</button>
@@ -269,51 +269,50 @@ function renderMethods() {
         <option value="textarea">Textarea</option>
       </select>
 
-      <label>
-        <div class="required-row">
-          <input type="checkbox" class="field-required">
-          <span>Required</span>
-        </div>
+      <label class="required-row">
+        <input type="checkbox" class="field-required">
+        <span>Required</span>
       </label>
 
       <button class="secondary add">➕ Add Description</button>
 
       <div class="field-list">
-  ${Object.entries(fields).map(([key, f]) => `
-    <div class="field-row">
-      <div class="field-main">
-        <input
-          value="${f.label}"
-          onchange="updateFieldLabel('${method}','${key}',this.value)"
-        >
-    
-        <select onchange="updateFieldType('${method}','${key}',this.value)">
-          <option value="text" ${f.type==="text"?"selected":""}>Text</option>
-          <option value="textarea" ${f.type==="textarea"?"selected":""}>Textarea</option>
-        </select>
+        ${Object.entries(fields).map(([key, f]) => `
+          <div class="field-row">
+            <div class="field-main">
+              <input
+                value="${f.label}"
+                onchange="updateFieldLabel('${method}','${key}',this.value)"
+              >
+
+              <select onchange="updateFieldType('${method}','${key}',this.value)">
+                <option value="text" ${f.type==="text"?"selected":""}>Text</option>
+                <option value="textarea" ${f.type==="textarea"?"selected":""}>Textarea</option>
+              </select>
+            </div>
+
+            <div class="field-actions">
+              <label class="required-row">
+                <input type="checkbox"
+                  ${f.required ? "checked" : ""}
+                  onchange="updateFieldRequired('${method}','${key}',this.checked)">
+                <span>Required</span>
+              </label>
+
+              <button class="danger"
+                onclick="removeField('${method}','${key}')">
+                ❌
+              </button>
+            </div>
+          </div>
+        `).join("")}
       </div>
-    
-      <div class="field-actions">
-        <label class="required-row">
-          <input type="checkbox"
-            ${f.required ? "checked" : ""}
-            onchange="updateFieldRequired('${method}','${key}',this.checked)">
-          <span>Required</span>
-        </label>
-    
-        <button class="danger"
-          onclick="removeField('${method}','${key}')">
-          ❌
-        </button>
-      </div>
-    </div>
     `;
 
     div.querySelector(".add").onclick = () => addField(method, div);
     methodsContainer.appendChild(div);
   });
 }
-
   window.updateFieldLabel = (method, key, value) => {
   const newKey = makeKey(value);
   if (!newKey) return;
