@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Driver UI Config</title>
+<title>Driver UI Configuration</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
@@ -23,34 +23,40 @@ h2 { text-align:center; }
 }
 
 label {
-  font-weight:bold;
   font-size:13px;
+  font-weight:bold;
   display:block;
   margin-top:8px;
 }
 
-input, select, textarea, button {
+input, select, button {
   width:100%;
   padding:8px;
   margin-top:4px;
+  border-radius:6px;
+  border:1px solid #ccc;
 }
 
 button {
   background:#007bff;
   color:#fff;
   border:none;
-  border-radius:6px;
   cursor:pointer;
 }
 
 button.secondary {
-  background:#555;
+  background:#444;
 }
 
-.field, .option, .subfield {
-  border:1px dashed #ccc;
+.method {
+  border:1px solid #ddd;
   padding:8px;
+  border-radius:6px;
   margin-top:8px;
+}
+
+.fields label {
+  font-weight:normal;
 }
 </style>
 </head>
@@ -59,28 +65,47 @@ button.secondary {
 
 <h2>⚙ Driver UI Configuration</h2>
 
+<button class="secondary" onclick="location.href='admin.html'">
+⬅ Back to Admin
+</button>
+
 <div class="box">
   <label>Job Type</label>
-  <input id="jobType" placeholder="e.g. RTP">
-  <button onclick="loadConfig()">Load / Create Template</button>
+  <input id="jobType" placeholder="e.g. RTP, AD, NOD">
+
+  <label>Delivery Method Name</label>
+  <input id="methodName" placeholder="e.g. N1-Received">
+
+  <div class="fields">
+    <label>
+      <input type="checkbox" id="receivedBy"> Received By (required)
+    </label>
+    <label>
+      <input type="checkbox" id="relationship"> Relationship to Owner (required)
+    </label>
+    <label>
+      <input type="checkbox" id="gateColor"> Gate / Mailbox Color (required)
+    </label>
+    <label>
+      <input type="checkbox" id="amountPaid"> Amount Paid (required)
+    </label>
+    <label>
+      <input type="checkbox" id="remarks"> Other Remarks (required)
+    </label>
+  </div>
+
+  <button onclick="addDeliveryMethod()">➕ Add / Update Delivery Method</button>
 </div>
 
 <div class="box">
-  <h3>Fields</h3>
-  <div id="fields"></div>
-  <button onclick="addField()">➕ Add Field</button>
-</div>
-
-<div class="box">
-  <button onclick="saveConfig()">💾 Save / Update Template</button>
+  <h3>Saved Configuration</h3>
+  <pre id="output">Loading…</pre>
 </div>
 
 <script type="module">
 import { initializeApp } from
   "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import {
-  getDatabase, ref, get, set
-} from
+import { getDatabase, ref, get, update } from
   "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
 const firebaseConfig = {
@@ -96,151 +121,56 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 
-let CONFIG = { fields:{} };
+const FIELD_MAP = {
+  receivedBy: "Received by",
+  relationship: "Relationship to owner",
+  gateColor: "Gate / Mailbox Color",
+  amountPaid: "Amount Paid",
+  remarks: "Other remarks"
+};
 
-/* ===== LOAD ===== */
-window.loadConfig = async function () {
+window.addDeliveryMethod = async function () {
   const jobType = jobTypeInput();
-  const snap = await get(ref(db, `config/driverUI/jobTypes/${jobType}`));
-  CONFIG = snap.val() || { fields:{} };
-  renderFields();
-};
+  const method = document.getElementById("methodName").value.trim();
 
-/* ===== ADD FIELD ===== */
-window.addField = function () {
-  const key = prompt("Field key (e.g. deliveryType)");
-  if (!key) return;
+  if (!jobType || !method) {
+    alert("Job Type and Delivery Method are required");
+    return;
+  }
 
-  CONFIG.fields[key] = {
-    label: "",
-    type: "text",
-    options: {}
-  };
+  const fields = {};
 
-  renderFields();
-};
-
-/* ===== RENDER ===== */
-function renderFields() {
-  const box = document.getElementById("fields");
-  box.innerHTML = "";
-
-  Object.entries(CONFIG.fields).forEach(([key, f]) => {
-    const div = document.createElement("div");
-    div.className = "field";
-
-    div.innerHTML = `
-      <label>Field Key</label>
-      <input value="${key}" disabled>
-
-      <label>Label</label>
-      <input value="${f.label || ""}"
-        oninput="CONFIG.fields['${key}'].label=this.value">
-
-      <label>Type</label>
-      <select onchange="CONFIG.fields['${key}'].type=this.value; renderFields()">
-        <option ${f.type==="text"?"selected":""}>text</option>
-        <option ${f.type==="textarea"?"selected":""}>textarea</option>
-        <option ${f.type==="radio"?"selected":""}>radio</option>
-      </select>
-
-      ${f.type==="radio" ? `
-        <div>
-          <button class="secondary"
-            onclick="addOption('${key}')">➕ Add Option</button>
-          ${renderOptions(key)}
-        </div>
-      ` : ""}
-    `;
-
-    box.appendChild(div);
-  });
-}
-
-function renderOptions(fieldKey) {
-  const f = CONFIG.fields[fieldKey];
-  let html = "";
-
-  Object.entries(f.options || {}).forEach(([optKey, opt]) => {
-    html += `
-      <div class="option">
-        <label>Option Label</label>
-        <input value="${opt.label || ""}"
-          oninput="CONFIG.fields['${fieldKey}'].options['${optKey}'].label=this.value">
-
-        <button class="secondary"
-          onclick="addSubField('${fieldKey}','${optKey}')">
-          ➕ Required Sub-field
-        </button>
-
-        ${renderSubFields(fieldKey,optKey)}
-      </div>
-    `;
+  Object.keys(FIELD_MAP).forEach(key => {
+    const el = document.getElementById(key);
+    if (el.checked) {
+      fields[key] = {
+        label: FIELD_MAP[key],
+        type: key === "remarks" ? "textarea" : "text",
+        required: true
+      };
+    }
   });
 
-  return html;
-}
-
-/* ===== ADD OPTION ===== */
-window.addOption = function (fieldKey) {
-  const key = prompt("Option key (e.g. N1-Received)");
-  if (!key) return;
-
-  CONFIG.fields[fieldKey].options[key] = {
-    label: key,
-    requires: {}
-  };
-  renderFields();
-};
-
-/* ===== SUB FIELDS ===== */
-window.addSubField = function (fieldKey,optKey) {
-  const key = prompt("Sub-field key (e.g. receivedBy)");
-  if (!key) return;
-
-  CONFIG.fields[fieldKey].options[optKey].requires[key] = {
-    label: "",
-    type: "text",
-    required: true
-  };
-  renderFields();
-};
-
-function renderSubFields(fieldKey,optKey) {
-  const req = CONFIG.fields[fieldKey].options[optKey].requires || {};
-  let html = "";
-
-  Object.entries(req).forEach(([k,v]) => {
-    html += `
-      <div class="subfield">
-        <input value="${k}" disabled>
-        <input placeholder="Label"
-          value="${v.label || ""}"
-          oninput="CONFIG.fields['${fieldKey}']
-            .options['${optKey}']
-            .requires['${k}'].label=this.value">
-      </div>
-    `;
-  });
-
-  return html;
-}
-
-/* ===== SAVE ===== */
-window.saveConfig = async function () {
-  const jobType = jobTypeInput();
-  await set(
-    ref(db, `config/driverUI/jobTypes/${jobType}`),
-    CONFIG
+  await update(
+    ref(db, `config/driverUI/jobTypes/${jobType}/deliveryMethods/${method}`),
+    { fields }
   );
-  alert("✅ Template saved");
+
+  alert("✅ Saved");
+  loadConfig();
 };
 
 function jobTypeInput() {
-  const v = document.getElementById("jobType").value.trim();
-  if (!v) throw alert("Job Type required");
-  return v;
+  return document.getElementById("jobType").value.trim();
 }
+
+async function loadConfig() {
+  const snap = await get(ref(db, "config/driverUI"));
+  document.getElementById("output").innerText =
+    JSON.stringify(snap.val() || {}, null, 2);
+}
+
+loadConfig();
 </script>
 
 </body>
