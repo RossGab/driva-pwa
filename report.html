@@ -57,7 +57,7 @@ button:hover {
 
 <body>
 
-<h2>📊 Task Report V1.0.6</h2>
+<h2>📊 Task Report V1.1.0</h2>
 
 <div class="filters">
   <select id="statusFilter">
@@ -116,7 +116,7 @@ let ALL_TASKS = [];
 async function loadTasks() {
   const snap = await get(ref(db, "tasks"));
   const raw = snap.val() || {};
-  ALL_TASKS = Object.keys(raw).map(k => ({ _key:k, ...raw[k] }));
+  ALL_TASKS = Object.keys(raw).map(k => ({ _key: k, ...raw[k] }));
   buildFilterOptions();
 }
 
@@ -178,25 +178,49 @@ window.generateReport = function () {
     return;
   }
 
+  /* ===== FULL EXPORT DATA ===== */
   const data = rows.map(t => ({
-    TASK_ID: t._key,
+    TASK_ID: t._key || "",
     STATUS: t.status || "",
     JOB_TYPE: t.JOBTYPE || "",
     BA: t.BA || "",
     DMZ: t.DMZ || "",
-    CUSTOMER: t.CUSTOMERNAME || "",
+
+    CUSTOMER_NAME: t.CUSTOMERNAME || "",
     ADDRESS: t.ADDRESS || "",
-    DRIVER: t.AGENTNAME || "",
+    ZIPCODE: t.ZIPCODE || "",
+    MRU: t.MRU || "",
+    SEQUENCE: t.SEQUENCE || "",
+
+    ACCOUNT_NUMBER: t.ACCOUNTNUMBER || "",
+    METER_NUMBER: t.METERNUMBER || "",
+
+    DRIVER_ID: t.AGENTID || "",
+    DRIVER_NAME: t.AGENTNAME || "",
+
+    DELIVERY_TYPE: t.deliveryType || "",
     RECEIVED_BY: t.receivedBy || "",
     RELATIONSHIP: t.relationship || "",
     REMARKS: t.remarks || "",
+
+    LATITUDE: t.latitude || "",
+    LONGITUDE: t.longitude || "",
+
     CREATED_AT: t.createdAt || "",
     COMPLETED_AT: t.completedAt || "",
-    IMAGE_URL: t.imageUrl ? {
-      t: "s",
-      v: "View Image",
-      l: { Target: t.imageUrl }
-    } : ""
+
+    IMAGE_URL: t.imageUrl
+      ? {
+          t: "s",
+          v: "View Image",
+          l: { Target: t.imageUrl }
+        }
+      : "",
+
+    IMAGE_TAKEN_AT: t.takenAt || "",
+    IMAGE_UPLOADED_AT: t.uploadedAt || "",
+    IMAGE_FILENAME: t.filename || "",
+    HAS_IMAGE: t.imageUrl ? "YES" : "NO"
   }));
 
   const ws = XLSX.utils.json_to_sheet(data);
