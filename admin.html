@@ -248,7 +248,7 @@ button {
 
 <body>
 
-<h2>🧑‍💼 Admin Dashboard V2.4.0.2</h2>
+<h2>🧑‍💼 Admin Dashboard V2.4.0.3</h2>
 
 <!-- ===== DASHBOARD ===== -->
 <div class="dashboard">
@@ -832,6 +832,8 @@ window.loadTasks = async function (status) {
 
       <div class="task-details" data-task-id="${t._key}" style="display:none">
         ${renderTaskDetails(t)}
+
+        ${t.status === "COMPLETED" ? renderDynamicCompletedFields(t) : ""}
 
         ${t.status === "COMPLETED" && t.imageUrl ? `
           <button class="toggleBtn"
