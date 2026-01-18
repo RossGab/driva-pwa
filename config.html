@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Driver Configuration</title>
+
+<style>
+body {
+  font-family: Arial;
+  background:#f3f3f3;
+  padding:12px;
+}
+
+.card {
+  background:#fff;
+  padding:14px;
+  border-radius:8px;
+  box-shadow:0 0 4px rgba(0,0,0,.1);
+}
+
+label {
+  display:flex;
+  align-items:center;
+  gap:8px;
+  margin-top:10px;
+  font-size:14px;
+}
+
+button {
+  margin-top:16px;
+  padding:10px;
+  width:100%;
+  background:#007bff;
+  color:#fff;
+  border:none;
+  border-radius:6px;
+}
+</style>
+</head>
+
+<body>
+
+<h2>⚙ Driver UI Configuration V1.0.0</h2>
+
+<button onclick="location.href='admin.html'">⬅ Back</button>
+
+<div class="card">
+
+  <label>
+    <input type="checkbox" id="showGateColor">
+    Show Gate / Mailbox Color
+  </label>
+
+  <label>
+    <input type="checkbox" id="requireReceivedBy">
+    Require "Received By"
+  </label>
+
+  <label>
+    <input type="checkbox" id="enableDeliveryOptions">
+    Enable Delivery Options
+  </label>
+
+  <label>
+    Remarks Label
+    <input id="remarksLabel" placeholder="e.g. Other Notes">
+  </label>
+
+  <button onclick="saveConfig()">💾 Save Configuration</button>
+
+</div>
+
+<script type="module">
+import { initializeApp } from
+  "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import { getDatabase, ref, get, update } from
+  "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+
+const app = initializeApp({
+  apiKey: "AIzaSyDFW61pnwLvh6HGKWt10zLYNr860fI8vkg",
+  databaseURL: "https://driva-pwa-default-rtdb.firebaseio.com"
+});
+
+const db = getDatabase(app);
+const CONFIG_REF = ref(db, "config/driverUI");
+
+async function loadConfig() {
+  const snap = await get(CONFIG_REF);
+  const cfg = snap.val() || {};
+
+  showGateColor.checked = !!cfg.showGateColor;
+  requireReceivedBy.checked = !!cfg.requireReceivedBy;
+  enableDeliveryOptions.checked = !!cfg.enableDeliveryOptions;
+  remarksLabel.value = cfg.remarksLabel || "";
+}
+
+window.saveConfig = async function () {
+  await update(CONFIG_REF, {
+    showGateColor: showGateColor.checked,
+    requireReceivedBy: requireReceivedBy.checked,
+    enableDeliveryOptions: enableDeliveryOptions.checked,
+    remarksLabel: remarksLabel.value
+  });
+
+  alert("✅ Configuration saved");
+};
+
+loadConfig();
+</script>
+
+</body>
+</html>
