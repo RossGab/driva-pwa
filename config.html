@@ -113,7 +113,7 @@ button {
 
 <body>
 
-<h2>⚙ Driver UI Configuration V1.0.14</h2>
+<h2>⚙ Driver UI Configuration V1.0.15</h2>
 
 <div class="tabs">
   <button id="tabAdd" class="active">➕ Add Job Type</button>
@@ -130,6 +130,7 @@ button {
 
   <button class="secondary" onclick="addDeliveryMethod()">➕ Add Delivery Method</button>
 </div>
+</div>
 
 <div class="card" id="updateSection" style="display:none">
   <label>Select Job Type</label>
@@ -143,6 +144,11 @@ button {
   <button class="secondary" onclick="addDeliveryMethodFromUpdate()">
     ➕ Add Delivery Method
   </button>
+</div>
+
+<div class="card">
+  <h3>Delivery Methods</h3>
+  <div id="methodsContainer"></div>
 </div>
 
 <div class="card">
