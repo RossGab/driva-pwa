@@ -1,21 +1,33 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Driver Configuration</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Driver UI Configuration</title>
 
 <style>
 body {
-  font-family: Arial;
+  font-family: Arial, sans-serif;
   background:#f3f3f3;
   padding:12px;
 }
 
+h2 { text-align:center; }
+
 .card {
   background:#fff;
-  padding:14px;
-  border-radius:8px;
+  padding:16px;
+  border-radius:10px;
   box-shadow:0 0 4px rgba(0,0,0,.1);
+  margin-bottom:12px;
+}
+
+.section-title {
+  font-size:14px;
+  font-weight:bold;
+  margin-bottom:8px;
+  border-bottom:1px solid #eee;
+  padding-bottom:4px;
 }
 
 label {
@@ -26,25 +38,59 @@ label {
   font-size:14px;
 }
 
-button {
-  margin-top:16px;
-  padding:10px;
+input[type="text"], select {
   width:100%;
-  background:#007bff;
-  color:#fff;
+  padding:8px;
+  border-radius:6px;
+  border:1px solid #ccc;
+}
+
+button {
+  width:100%;
+  padding:12px;
   border:none;
   border-radius:6px;
+  background:#007bff;
+  color:#fff;
+  font-size:15px;
+  cursor:pointer;
+  margin-top:8px;
+}
+
+button.secondary {
+  background:#444;
+}
+
+button.warning {
+  background:#27ae60;
 }
 </style>
 </head>
 
 <body>
 
-<h2>⚙ Driver UI Configuration V1.0.0</h2>
+<h2>⚙ Driver UI Templates V1.0.1</h2>
 
-<button onclick="location.href='admin.html'">⬅ Back</button>
+<button class="secondary" onclick="location.href='admin.html'">
+⬅ Back to Admin
+</button>
 
 <div class="card">
+  <div class="section-title">Template Selection</div>
+
+  <select id="templateSelect"></select>
+
+  <button onclick="createTemplate()">➕ Create New Template</button>
+  <button class="warning" onclick="setActiveTemplate()">⭐ Set as Active</button>
+</div>
+
+<div class="card">
+  <div class="section-title">Feature Toggles</div>
+
+  <label>
+    <input type="checkbox" id="enableDeliveryOptions">
+    Enable Delivery Options
+  </label>
 
   <label>
     <input type="checkbox" id="showGateColor">
@@ -55,20 +101,19 @@ button {
     <input type="checkbox" id="requireReceivedBy">
     Require "Received By"
   </label>
-
-  <label>
-    <input type="checkbox" id="enableDeliveryOptions">
-    Enable Delivery Options
-  </label>
-
-  <label>
-    Remarks Label
-    <input id="remarksLabel" placeholder="e.g. Other Notes">
-  </label>
-
-  <button onclick="saveConfig()">💾 Save Configuration</button>
-
 </div>
+
+<div class="card">
+  <div class="section-title">Text Labels</div>
+
+  <label>Remarks Label</label>
+  <input id="labelRemarks">
+
+  <label>Received By Label</label>
+  <input id="labelReceivedBy">
+</div>
+
+<button onclick="saveTemplate()">💾 Save / Update Template</button>
 
 <script type="module">
 import { initializeApp } from
@@ -80,33 +125,106 @@ const app = initializeApp({
   apiKey: "AIzaSyDFW61pnwLvh6HGKWt10zLYNr860fI8vkg",
   databaseURL: "https://driva-pwa-default-rtdb.firebaseio.com"
 });
-
 const db = getDatabase(app);
-const CONFIG_REF = ref(db, "config/driverUI");
 
-async function loadConfig() {
-  const snap = await get(CONFIG_REF);
+const BASE_REF = ref(db, "config/driverUI");
+let CURRENT_TEMPLATE = null;
+let ALL_TEMPLATES = {};
+
+async function loadTemplates() {
+  const snap = await get(BASE_REF);
   const cfg = snap.val() || {};
 
-  showGateColor.checked = !!cfg.showGateColor;
-  requireReceivedBy.checked = !!cfg.requireReceivedBy;
-  enableDeliveryOptions.checked = !!cfg.enableDeliveryOptions;
-  remarksLabel.value = cfg.remarksLabel || "";
-}
+  ALL_TEMPLATES = cfg.templates || {};
+  CURRENT_TEMPLATE = cfg.activeTemplate || Object.keys(ALL_TEMPLATES)[0];
 
-window.saveConfig = async function () {
-  await update(CONFIG_REF, {
-    showGateColor: showGateColor.checked,
-    requireReceivedBy: requireReceivedBy.checked,
-    enableDeliveryOptions: enableDeliveryOptions.checked,
-    remarksLabel: remarksLabel.value
+  const sel = templateSelect;
+  sel.innerHTML = "";
+
+  Object.entries(ALL_TEMPLATES).forEach(([key, t]) => {
+    const opt = document.createElement("option");
+    opt.value = key;
+    opt.textContent = t.name || key;
+    if (key === CURRENT_TEMPLATE) opt.selected = true;
+    sel.appendChild(opt);
   });
 
-  alert("✅ Configuration saved");
+  loadTemplate(CURRENT_TEMPLATE);
+}
+
+function loadTemplate(key) {
+  const t = ALL_TEMPLATES[key];
+  if (!t) return;
+
+  enableDeliveryOptions.checked = !!t.toggles?.enableDeliveryOptions;
+  showGateColor.checked = !!t.toggles?.showGateColor;
+  requireReceivedBy.checked = !!t.toggles?.requireReceivedBy;
+
+  labelRemarks.value = t.labels?.remarks || "";
+  labelReceivedBy.value = t.labels?.receivedBy || "";
+}
+
+templateSelect.onchange = e => {
+  CURRENT_TEMPLATE = e.target.value;
+  loadTemplate(CURRENT_TEMPLATE);
 };
 
-loadConfig();
+window.createTemplate = function () {
+  const name = prompt("Template name");
+  if (!name) return;
+
+  const key = name.toLowerCase().replace(/[^a-z0-9]/g, "_");
+
+  ALL_TEMPLATES[key] = {
+    name,
+    toggles: {},
+    labels: {},
+    meta: {}
+  };
+
+  CURRENT_TEMPLATE = key;
+  saveAll();
+};
+
+window.saveTemplate = function () {
+  ALL_TEMPLATES[CURRENT_TEMPLATE] = {
+    name: ALL_TEMPLATES[CURRENT_TEMPLATE]?.name || CURRENT_TEMPLATE,
+    toggles: {
+      enableDeliveryOptions: enableDeliveryOptions.checked,
+      showGateColor: showGateColor.checked,
+      requireReceivedBy: requireReceivedBy.checked
+    },
+    labels: {
+      remarks: labelRemarks.value,
+      receivedBy: labelReceivedBy.value
+    },
+    meta: {
+      updatedAt: new Date().toISOString(),
+      updatedBy: "admin"
+    }
+  };
+
+  saveAll();
+  alert("✅ Template saved");
+};
+
+window.setActiveTemplate = async function () {
+  await update(BASE_REF, {
+    activeTemplate: CURRENT_TEMPLATE
+  });
+  alert("⭐ Active template updated");
+};
+
+async function saveAll() {
+  await update(BASE_REF, {
+    templates: ALL_TEMPLATES
+  });
+  await loadTemplates();
+}
+
+loadTemplates();
 </script>
 
 </body>
 </html>
+``
