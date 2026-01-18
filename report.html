@@ -57,7 +57,7 @@ button:hover {
 
 <body>
 
-<h2>📊 Task Report V1.1.1</h2>
+<h2>📊 Task Report V1.1.2</h2>
 
 <div class="filters">
   <select id="statusFilter">
@@ -121,6 +121,20 @@ async function loadTasks() {
 }
 
 loadTasks();
+
+/* ===== DEFAULT DATE (TODAY) ===== */
+function setDefaultDates() {
+  const today = new Date().toISOString().slice(0, 10);
+
+  const from = document.getElementById("dateFrom");
+  const to = document.getElementById("dateTo");
+
+  if (from && !from.value) from.value = today;
+  if (to && !to.value) to.value = today;
+}
+
+// ✅ run once on page load
+setDefaultDates();
 
 /* ===== BUILD FILTER OPTIONS ===== */
 function buildFilterOptions() {
