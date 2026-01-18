@@ -2,7 +2,8 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Driver Form Configuration</title>
+<title>Driver UI Config</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
 body {
@@ -11,187 +12,235 @@ body {
   padding:12px;
 }
 
-.card {
+h2 { text-align:center; }
+
+.box {
   background:#fff;
   padding:12px;
   border-radius:8px;
-  margin-bottom:12px;
   box-shadow:0 0 4px rgba(0,0,0,.1);
+  margin-bottom:12px;
 }
 
 label {
   font-weight:bold;
+  font-size:13px;
   display:block;
-  margin-top:6px;
+  margin-top:8px;
 }
 
-input, select, textarea {
+input, select, textarea, button {
   width:100%;
-  padding:6px;
+  padding:8px;
   margin-top:4px;
 }
 
 button {
-  width:100%;
-  padding:10px;
-  margin-top:8px;
-  border:none;
-  border-radius:6px;
   background:#007bff;
   color:#fff;
+  border:none;
+  border-radius:6px;
   cursor:pointer;
 }
 
-.secondary {
-  background:#444;
+button.secondary {
+  background:#555;
 }
 
-.field {
-  border:1px solid #ddd;
-  padding:10px;
-  margin-top:10px;
-  border-radius:6px;
+.field, .option, .subfield {
+  border:1px dashed #ccc;
+  padding:8px;
+  margin-top:8px;
 }
 </style>
 </head>
 
 <body>
 
-<h2>⚙ Driver Form Templates</h2>
+<h2>⚙ Driver UI Configuration</h2>
 
-<button class="secondary" onclick="location.href='admin.html'">
-⬅ Back to Admin
-</button>
-
-<div class="card">
+<div class="box">
   <label>Job Type</label>
-  <input id="jobType" placeholder="e.g. TEST_BILLING">
-
-  <button onclick="loadTemplate()">📂 Load Template</button>
+  <input id="jobType" placeholder="e.g. RTP">
+  <button onclick="loadConfig()">Load / Create Template</button>
 </div>
 
-<div class="card">
+<div class="box">
   <h3>Fields</h3>
   <div id="fields"></div>
   <button onclick="addField()">➕ Add Field</button>
 </div>
 
-<button onclick="saveTemplate()">💾 Create / Update Template</button>
+<div class="box">
+  <button onclick="saveConfig()">💾 Save / Update Template</button>
+</div>
 
 <script type="module">
 import { initializeApp } from
   "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import { getDatabase, ref, get, set } from
+import {
+  getDatabase, ref, get, set
+} from
   "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
-/* ===== FIREBASE ===== */
-const app = initializeApp({
+const firebaseConfig = {
   apiKey: "AIzaSyDFW61pnwLvh6HGKWt10zLYNr860fI8vkg",
-  databaseURL: "https://driva-pwa-default-rtdb.firebaseio.com"
-});
+  authDomain: "driva-pwa.firebaseapp.com",
+  databaseURL: "https://driva-pwa-default-rtdb.firebaseio.com",
+  projectId: "driva-pwa",
+  storageBucket: "driva-pwa.firebasestorage.app",
+  messagingSenderId: "299138219722",
+  appId: "1:299138219722:web:623ff6b0a067ea822dfe33"
+};
+
+const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 
-const fieldsDiv = document.getElementById("fields");
-
-/* ===== ADD FIELD ===== */
-window.addField = function (field = {}) {
-  const div = document.createElement("div");
-  div.className = "field";
-
-  div.innerHTML = `
-    <label>Field Key</label>
-    <input class="key" value="${field.key || ""}" placeholder="deliveryMethod">
-
-    <label>Label</label>
-    <input class="label" value="${field.label || ""}">
-
-    <label>Type</label>
-    <select class="type">
-      <option value="radio">Radio</option>
-      <option value="text">Text</option>
-      <option value="textarea">Textarea</option>
-    </select>
-
-    <label>
-      <input type="checkbox" class="required">
-      Required
-    </label>
-
-    <label>Options (comma separated for radio)</label>
-    <input class="options" value="${field.options || ""}">
-  `;
-
-  div.querySelector(".type").value = field.type || "text";
-  div.querySelector(".required").checked = field.required || false;
-
-  fieldsDiv.appendChild(div);
-};
-
-/* ===== SAVE ===== */
-window.saveTemplate = async function () {
-  const jobType = document.getElementById("jobType").value.trim();
-  if (!jobType) return alert("Job type is required");
-
-  const fields = {};
-
-  document.querySelectorAll(".field").forEach(f => {
-    const key = f.querySelector(".key").value.trim();
-    if (!key) return;
-
-    const type = f.querySelector(".type").value;
-    const label = f.querySelector(".label").value;
-    const required = f.querySelector(".required").checked;
-    const optionsRaw = f.querySelector(".options").value;
-
-    const field = { type, label, required };
-
-    if (type === "radio" && optionsRaw) {
-      field.options = optionsRaw.split(",").map(v => ({
-        value: v.trim(),
-        label: v.trim()
-      }));
-    }
-
-    fields[key] = field;
-  });
-
-  await set(ref(db, `config/driverUI/jobTypeTemplates/${jobType}`), {
-    name: jobType,
-    fields
-  });
-
-  alert("✅ Template saved / updated");
-};
+let CONFIG = { fields:{} };
 
 /* ===== LOAD ===== */
-window.loadTemplate = async function () {
-  const jobType = document.getElementById("jobType").value.trim();
-  if (!jobType) return alert("Enter job type");
+window.loadConfig = async function () {
+  const jobType = jobTypeInput();
+  const snap = await get(ref(db, `config/driverUI/jobTypes/${jobType}`));
+  CONFIG = snap.val() || { fields:{} };
+  renderFields();
+};
 
-  const snap = await get(
-    ref(db, `config/driverUI/jobTypeTemplates/${jobType}`)
-  );
+/* ===== ADD FIELD ===== */
+window.addField = function () {
+  const key = prompt("Field key (e.g. deliveryType)");
+  if (!key) return;
 
-  if (!snap.exists()) {
-    alert("No template found");
-    return;
-  }
+  CONFIG.fields[key] = {
+    label: "",
+    type: "text",
+    options: {}
+  };
 
-  fieldsDiv.innerHTML = "";
-  const tpl = snap.val();
+  renderFields();
+};
 
-  Object.entries(tpl.fields || {}).forEach(([key, f]) => {
-    addField({
-      key,
-      label: f.label,
-      type: f.type,
-      required: f.required,
-      options: (f.options || []).map(o => o.value).join(",")
-    });
+/* ===== RENDER ===== */
+function renderFields() {
+  const box = document.getElementById("fields");
+  box.innerHTML = "";
+
+  Object.entries(CONFIG.fields).forEach(([key, f]) => {
+    const div = document.createElement("div");
+    div.className = "field";
+
+    div.innerHTML = `
+      <label>Field Key</label>
+      <input value="${key}" disabled>
+
+      <label>Label</label>
+      <input value="${f.label || ""}"
+        oninput="CONFIG.fields['${key}'].label=this.value">
+
+      <label>Type</label>
+      <select onchange="CONFIG.fields['${key}'].type=this.value; renderFields()">
+        <option ${f.type==="text"?"selected":""}>text</option>
+        <option ${f.type==="textarea"?"selected":""}>textarea</option>
+        <option ${f.type==="radio"?"selected":""}>radio</option>
+      </select>
+
+      ${f.type==="radio" ? `
+        <div>
+          <button class="secondary"
+            onclick="addOption('${key}')">➕ Add Option</button>
+          ${renderOptions(key)}
+        </div>
+      ` : ""}
+    `;
+
+    box.appendChild(div);
+  });
+}
+
+function renderOptions(fieldKey) {
+  const f = CONFIG.fields[fieldKey];
+  let html = "";
+
+  Object.entries(f.options || {}).forEach(([optKey, opt]) => {
+    html += `
+      <div class="option">
+        <label>Option Label</label>
+        <input value="${opt.label || ""}"
+          oninput="CONFIG.fields['${fieldKey}'].options['${optKey}'].label=this.value">
+
+        <button class="secondary"
+          onclick="addSubField('${fieldKey}','${optKey}')">
+          ➕ Required Sub-field
+        </button>
+
+        ${renderSubFields(fieldKey,optKey)}
+      </div>
+    `;
   });
 
-  alert("📂 Template loaded");
+  return html;
+}
+
+/* ===== ADD OPTION ===== */
+window.addOption = function (fieldKey) {
+  const key = prompt("Option key (e.g. N1-Received)");
+  if (!key) return;
+
+  CONFIG.fields[fieldKey].options[key] = {
+    label: key,
+    requires: {}
+  };
+  renderFields();
 };
+
+/* ===== SUB FIELDS ===== */
+window.addSubField = function (fieldKey,optKey) {
+  const key = prompt("Sub-field key (e.g. receivedBy)");
+  if (!key) return;
+
+  CONFIG.fields[fieldKey].options[optKey].requires[key] = {
+    label: "",
+    type: "text",
+    required: true
+  };
+  renderFields();
+};
+
+function renderSubFields(fieldKey,optKey) {
+  const req = CONFIG.fields[fieldKey].options[optKey].requires || {};
+  let html = "";
+
+  Object.entries(req).forEach(([k,v]) => {
+    html += `
+      <div class="subfield">
+        <input value="${k}" disabled>
+        <input placeholder="Label"
+          value="${v.label || ""}"
+          oninput="CONFIG.fields['${fieldKey}']
+            .options['${optKey}']
+            .requires['${k}'].label=this.value">
+      </div>
+    `;
+  });
+
+  return html;
+}
+
+/* ===== SAVE ===== */
+window.saveConfig = async function () {
+  const jobType = jobTypeInput();
+  await set(
+    ref(db, `config/driverUI/jobTypes/${jobType}`),
+    CONFIG
+  );
+  alert("✅ Template saved");
+};
+
+function jobTypeInput() {
+  const v = document.getElementById("jobType").value.trim();
+  if (!v) throw alert("Job Type required");
+  return v;
+}
 </script>
 
 </body>
