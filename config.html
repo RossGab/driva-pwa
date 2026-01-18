@@ -35,22 +35,37 @@ h2 { text-align:center; }
   color:#fff;
 }
 
+.field-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.field-main {
+  flex: 1;
+}
+
+.field-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+}
+
 .required-row {
   display: flex;
   align-items: center;
   gap: 6px;
-  margin-top: 6px;
-}
-
-.required-row span {
   font-size: 13px;
   font-weight: bold;
 }
 
-
 .required-row input {
   margin: 0;
 }
+
 
 .card {
   background:#fff;
@@ -93,19 +108,12 @@ button {
   margin-top:10px;
 }
 
-.field-row {
-  background:#f7f7f7;
-  padding:6px;
-  border-radius:6px;
-  margin-top:6px;
-  font-size:13px;
-}
 </style>
 </head>
 
 <body>
 
-<h2>⚙ Driver UI Configuration V1.0.8</h2>
+<h2>⚙ Driver UI Configuration V1.0.9</h2>
 
 <div class="tabs">
   <button id="tabAdd" class="active">➕ Add Job Type</button>
@@ -273,27 +281,32 @@ function renderMethods() {
       <div class="field-list">
   ${Object.entries(fields).map(([key, f]) => `
     <div class="field-row">
-      <input
-        value="${f.label}"
-        onchange="updateFieldLabel('${method}','${key}',this.value)"
-      >
-
-      <select onchange="updateFieldType('${method}','${key}',this.value)">
-        <option value="text" ${f.type==="text"?"selected":""}>Text</option>
-        <option value="textarea" ${f.type==="textarea"?"selected":""}>Textarea</option>
-      </select>
-
-      <div class="required-row">
-        <input type="checkbox"
-          ${f.required ? "checked" : ""}
-          onchange="updateFieldRequired('${method}','${key}',this.checked)">
-        <span>Required</span>
+      <div class="field-main">
+        <input
+          value="${f.label}"
+          onchange="updateFieldLabel('${method}','${key}',this.value)"
+        >
+    
+        <select onchange="updateFieldType('${method}','${key}',this.value)">
+          <option value="text" ${f.type==="text"?"selected":""}>Text</option>
+          <option value="textarea" ${f.type==="textarea"?"selected":""}>Textarea</option>
+        </select>
       </div>
-
-      <button class="danger" onclick="removeField('${method}','${key}')">❌</button>
+    
+      <div class="field-actions">
+        <label class="required-row">
+          <input type="checkbox"
+            ${f.required ? "checked" : ""}
+            onchange="updateFieldRequired('${method}','${key}',this.checked)">
+          <span>Required</span>
+        </label>
+    
+        <button class="danger"
+          onclick="removeField('${method}','${key}')">
+          ❌
+        </button>
+      </div>
     </div>
-  `).join("")}
-</div>
     `;
 
     div.querySelector(".add").onclick = () => addField(method, div);
