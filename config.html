@@ -113,7 +113,7 @@ button {
 
 <body>
 
-<h2>⚙ Driver UI Configuration V1.0.16</h2>
+<h2>⚙ Driver UI Configuration V1.0.17</h2>
 
 <div class="tabs">
   <button id="tabAdd" class="active">➕ Add Job Type</button>
@@ -212,6 +212,12 @@ window.addDeliveryMethod = function () {
     return;
   }
 
+  // 🔥 COMMIT ALL PENDING FIELDS FIRST
+  document.querySelectorAll(".method-box").forEach(box => {
+    const m = box.querySelector("b")?.innerText;
+    if (m) commitPendingField(m, box);
+  });
+
   STATE.jobType = jobType;
 
   if (STATE.methods[method]) {
@@ -236,6 +242,12 @@ window.addDeliveryMethodFromUpdate = function () {
     alert("Please select a Job Type first");
     return;
   }
+
+  // 🔥 COMMIT EXISTING METHODS FIRST
+  document.querySelectorAll(".method-box").forEach(box => {
+    const m = box.querySelector("b")?.innerText;
+    if (m) commitPendingField(m, box);
+  });
 
   const method = updateDeliveryMethodInput.value.trim();
   if (!method) {
@@ -428,19 +440,26 @@ window.removeMethod = (method) => {
   
 /* ===== SAVE ===== */
 window.saveConfig = async function () {
+  if (!STATE.jobType) {
+    alert("Job Type is required");
+    return;
+  }
 
+  // 🔥 COMMIT ALL PENDING INPUTS BEFORE SAVE
   document.querySelectorAll(".method-box").forEach(box => {
-  const method = box.querySelector("b")?.innerText;
-  if (method) commitPendingField(method, box);
-});
-  
-  if (!STATE.jobType || !Object.keys(STATE.methods).length) {
+    const method = box.querySelector("b")?.innerText;
+    if (method) {
+      commitPendingField(method, box);
+    }
+  });
+
+  if (!Object.keys(STATE.methods).length) {
     alert("Nothing to save");
     return;
   }
 
   await update(
-  ref(db, `config/driverUI/jobTypes/${STATE.jobType}`),
+    ref(db, `config/driverUI/jobTypes/${STATE.jobType}`),
     {
       deliveryMethods: STATE.methods,
       updatedAt: new Date().toISOString()
@@ -448,9 +467,7 @@ window.saveConfig = async function () {
   );
 
   alert("✅ Configuration saved successfully");
-};
-
-  
+};  
 
 /* ===== LOAD EXISTING ===== */
 async function loadJobTypes() {
