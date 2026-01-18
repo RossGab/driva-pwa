@@ -42,7 +42,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebas
 import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.4.31-DYNAMIC";
+const VERSION = "Driver v3.4.33-DYNAMIC";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 
@@ -147,34 +147,83 @@ function saveToGallery(blob, filename) {
   URL.revokeObjectURL(url);
 }
 
+window.CURRENT_TASK = null;
+
 cameraInput.onchange = async e => {
   if (!e.target.files[0] || !CURRENT_TASK) return;
 
+  // ✅ Validate dynamic delivery fields
   if (!validateDynamic(CURRENT_TASK)) {
     CURRENT_TASK = null;
     return;
   }
 
-  const cached = JSON.parse(localStorage.getItem(TASK_CACHE_KEY) || "[]");
+  // ✅ Get task from cache
+  const cached = JSON.parse(localStorage.getItem("cachedTasks") || "[]");
   const task = cached.find(t => t._key === CURRENT_TASK);
 
   if (!task) {
-    alert("Task missing. Reload.");
+    alert("Task data not found. Please refresh.");
     CURRENT_TASK = null;
     return;
   }
 
+  // ===== START PROCESSING =====
   processingMap[CURRENT_TASK] = true;
   loadTasks();
 
   const takenAt = new Date().toISOString();
-  const filename =
-    `${task._key}_${takenAt.replace(/[:.]/g, "-")}_${DRIVER_ID}.jpg`;
 
-  const blob = await compressImage(e.target.files[0]);
+  let blob;
+  try {
+    blob = await compressImage(e.target.files[0]);
+  } catch {
+    alert("Image processing failed");
+    delete processingMap[CURRENT_TASK];
+    CURRENT_TASK = null;
+    loadTasks();
+    return;
+  }
 
-  saveToGallery(blob, filename)
+  /* ================= OFFLINE ================= */
+  if (!navigator.onLine) {
+    const q = getQueue();
+    q.push({
+      taskKey: CURRENT_TASK,
+      image: await toBase64(blob),
+      takenAt,
+      deliveryData: BILLING_CACHE[CURRENT_TASK] || {}
+    });
+    setQueue(q);
 
+    delete processingMap[CURRENT_TASK];
+    CURRENT_TASK = null;
+    loadTasks();
+    return;
+  }
+
+  /* ================= ONLINE ================= */
+  uploadingMap[CURRENT_TASK] = true;
+  delete processingMap[CURRENT_TASK];
+  loadTasks();
+
+  try {
+    // 🔥 DO NOT PASS FILENAME ANYMORE
+    await uploadNow(
+      CURRENT_TASK,
+      blob,
+      takenAt,
+      null, // filename intentionally ignored
+      BILLING_CACHE[CURRENT_TASK] || {}
+    );
+  } catch {
+    alert("Upload failed. Please retry.");
+  }
+
+  delete uploadingMap[CURRENT_TASK];
+  CURRENT_TASK = null;
+  loadTasks();
+};
   
   /* ===== OFFLINE ===== */
   if (!navigator.onLine) {
@@ -222,73 +271,64 @@ function resolveStatus(task) {
   return task.status || "PENDING";
 }
 
-async function uploadNow(taskKey, blob, takenAt, _unusedFilename, deliveryData = {}) {
-  // ===== GET TASK DATA =====
-  const cached = JSON.parse(localStorage.getItem("cachedTasks") || "[]");
-  const task = cached.find(t => t._key === taskKey) || {};
+async function uploadNow(taskKey, blob, takenAt, _ignoredFilename, deliveryData = {}) {
+  const taskSnap = await get(ref(db, `tasks/${taskKey}`));
+  const task = taskSnap.val() || {};
 
-  // ===== GET GPS =====
-  let latitude = "NA";
-  let longitude = "NA";
-
+  // ===== GET LOCATION =====
+  let coords = {};
   try {
-    const pos = await new Promise((resolve, reject) =>
-      navigator.geolocation.getCurrentPosition(resolve, reject, {
-        enableHighAccuracy: true,
-        timeout: 15000,
-        maximumAge: 0
-      })
+    const pos = await new Promise((res, rej) =>
+      navigator.geolocation.getCurrentPosition(
+        p => res(p.coords),
+        () => res(null),
+        { enableHighAccuracy: true, timeout: 10000 }
+      )
     );
+    if (pos) coords = pos;
+  } catch {}
 
-    latitude = pos.coords.latitude.toFixed(6);
-    longitude = pos.coords.longitude.toFixed(6);
-  } catch {
-    // GPS failure allowed
-  }
+  // ===== BUILD FILENAME =====
+  const safe = v => String(v || "")
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, "_")
+    .replace(/^_|_$/g, "");
 
-  // ===== DATE & TIME (UPLOAD TIME) =====
-  const now = new Date();
-  const pad = n => String(n).padStart(2, "0");
-
-  const dateTime =
-    `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_` +
-    `${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
-
-  // ===== SAFE STRING =====
-  const safe = v =>
-    String(v || "")
-      .toUpperCase()
-      .replace(/[^A-Z0-9]/g, "_")
-      .replace(/_+/g, "_")
-      .replace(/^_|_$/g, "");
-
-  const customer = safe(task.CUSTOMERNAME);
-  const address  = safe(task.ADDRESS);
-  const driver   = safe(DRIVER_ID);
-
-  // ===== FINAL FILENAME =====
   const filename =
-    `${customer}_${address}_${longitude}_${latitude}_${driver}_${dateTime}.jpg`;
+    `${safe(task.CUSTOMERNAME)}_${safe(task.ADDRESS)}_` +
+    `${coords.longitude || "0"}_${coords.latitude || "0"}_` +
+    `${task.driverId}_${new Date().toISOString().replace(/[-:T.Z]/g, "").slice(0,14)}.jpg`;
 
-  // ===== UPLOAD IMAGE =====
+  // ===== UPLOAD =====
   const imgRef = sRef(storage, `tasks/${taskKey}/${filename}`);
   await uploadBytes(imgRef, blob);
   const url = await getDownloadURL(imgRef);
 
-  // ===== UPDATE DATABASE =====
-  await update(ref(db, `tasks/${taskKey}`), {
+  // ===== FLATTEN DATA =====
+  const updatePayload = {
     status: "COMPLETED",
     imageUrl: url,
     filename,
-    latitude: latitude !== "NA" ? Number(latitude) : null,
-    longitude: longitude !== "NA" ? Number(longitude) : null,
     takenAt,
-    uploadedAt: now.toISOString(),
-    deliveryData
-  });
+    uploadedAt: new Date().toISOString(),
+    deliveryType: deliveryData.deliveryType || ""
+  };
+
+  for (const [k, v] of Object.entries(deliveryData)) {
+    if (k !== "deliveryType") updatePayload[k] = v;
+  }
+
+  if (coords.latitude) {
+    updatePayload.latitude = coords.latitude;
+    updatePayload.longitude = coords.longitude;
+  }
+
+  await update(ref(db, `tasks/${taskKey}`), updatePayload);
 }
+
   
-/* ===== LOAD TASKS ===== */async function loadTasks() {
+/* ===== LOAD TASKS ===== */
+async function loadTasks() {
   let tasks = JSON.parse(localStorage.getItem(TASK_CACHE_KEY) || "[]");
 
   if (navigator.onLine) {
@@ -414,40 +454,38 @@ async function renderDynamicDelivery(t) {
 
 window.showDynamicFields = async function(taskKey, jobType, method) {
   if (!BILLING_CACHE[taskKey]) BILLING_CACHE[taskKey] = {};
-
   BILLING_CACHE[taskKey].deliveryType = method;
 
   const cfg = await loadDriverUI(jobType);
-  const fields = cfg?.[method];
   const box = document.getElementById(`dyn_${taskKey}`);
-
-  if (!fields || !box) {
-    box.innerHTML = "";
-    return;
-  }
-
   let html = "";
 
-  Object.entries(fields).forEach(([fieldKey, field]) => {
+  const fields = cfg?.[method] || {};
+
+  for (const [fieldKey, field] of Object.entries(fields)) {
+    const requiredMark = field.required ? " *" : "";
+
     if (field.type === "textarea") {
       html += `
         <textarea
-          data-key="${fieldKey}"
-          placeholder="${field.label}${field.required ? " *" : ""}">
-        </textarea>
+          placeholder="${field.label}${requiredMark}"
+          oninput="BILLING_CACHE['${taskKey}']['${fieldKey}'] = this.value"
+        ></textarea>
       `;
     } else {
       html += `
         <input
-          data-key="${fieldKey}"
-          placeholder="${field.label}${field.required ? " *" : ""}">
+          placeholder="${field.label}${requiredMark}"
+          oninput="BILLING_CACHE['${taskKey}']['${fieldKey}'] = this.value"
+        >
       `;
     }
-  });
+  }
 
   box.innerHTML = html;
 };
 
+  
 function getCurrentLocation() {
   return new Promise((resolve, reject) => {
     if (!navigator.geolocation) {
@@ -473,26 +511,22 @@ function getCurrentLocation() {
 }
   
 function validateDynamic(taskKey) {
-  // 🔒 FORCE DOM → CACHE SYNC FIRST
-  syncDynamicFields(taskKey);
-
   const data = BILLING_CACHE[taskKey];
   if (!data?.deliveryType) {
-    alert("Please select delivery method");
+    alert("Select delivery method");
     return false;
   }
 
-  const cachedTasks = JSON.parse(localStorage.getItem("cachedTasks") || "[]");
-  const task = cachedTasks.find(t => t._key === taskKey);
+  const task = JSON.parse(localStorage.getItem("cachedTasks") || "[]")
+    .find(t => t._key === taskKey);
+
   if (!task) return false;
 
-  const cfg = DRIVER_UI_CACHE[task.JOBTYPE];
-  const fields = cfg?.[data.deliveryType];
+  const cfg = DRIVER_UI_CACHE[task.JOBTYPE]?.[data.deliveryType];
+  if (!cfg) return true;
 
-  if (!fields) return true;
-
-  for (const [fieldKey, field] of Object.entries(fields)) {
-    if (field.required && !data[fieldKey]) {
+  for (const [key, field] of Object.entries(cfg)) {
+    if (field.required && !data[key]) {
       alert(`${field.label} is required`);
       return false;
     }
