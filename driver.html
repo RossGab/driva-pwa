@@ -124,7 +124,7 @@ const db = getDatabase(app);
 const storage = getStorage(app);
 
 /* ================= GLOBAL ================= */
-const VERSION = "Driver v3.5.0.1";
+const VERSION = "Driver v3.5.0.2";
 const QUEUE_KEY = "offlineQueue";
 const TASK_CACHE_KEY = "cachedTasks";
 const BILLING_CACHE = {};
@@ -331,8 +331,50 @@ function compressImage(file) {
   });
 }
 
-function queueOffline() {}
-async function uploadNow() {}
+function queueOffline(taskKey, blob, takenAt, coords, filename) {
+  const q = JSON.parse(localStorage.getItem(QUEUE_KEY) || "[]");
+
+  q.push({
+    taskKey,
+    image: URL.createObjectURL(blob),
+    takenAt,
+    latitude: coords?.latitude,
+    longitude: coords?.longitude,
+    filename,
+    ...BILLING_CACHE[taskKey]
+  });
+
+  localStorage.setItem(QUEUE_KEY, JSON.stringify(q));
+}
+  
+async function uploadNow(
+  taskKey,
+  blob,
+  takenAt,
+  coords,
+  filename
+) {
+  const uploadedAt = new Date().toISOString();
+  const imgRef = sRef(storage, `tasks/${taskKey}/${filename}`);
+
+  await uploadBytes(imgRef, blob);
+  const url = await getDownloadURL(imgRef);
+
+  const billing = BILLING_CACHE[taskKey] || {};
+
+  await update(ref(db, `tasks/${taskKey}`), {
+    status: "COMPLETED",
+    imageUrl: url,
+    takenAt,
+    uploadedAt,
+    latitude: coords?.latitude,
+    longitude: coords?.longitude,
+    filename,
+
+    deliveryType: billing.deliveryType || "",
+    ...billing
+  });
+}
 
 await loadDriverUIConfig();
 loadTasks();
