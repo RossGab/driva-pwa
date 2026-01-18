@@ -42,7 +42,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebas
 import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.4.28-DYNAMIC";
+const VERSION = "Driver v3.4.29-DYNAMIC";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 
@@ -116,6 +116,21 @@ const toBase64 = b => new Promise(r => {
 
 /* ===== CAMERA ===== */
 window.CURRENT_TASK = null;
+
+function saveToGallery(blob, filename) {
+  const url = URL.createObjectURL(blob);
+
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+
+  document.body.appendChild(a);
+  a.click();
+
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
 cameraInput.onchange = async e => {
   if (!e.target.files[0] || !CURRENT_TASK) return;
 
@@ -137,11 +152,14 @@ cameraInput.onchange = async e => {
   loadTasks();
 
   const takenAt = new Date().toISOString();
-  const blob = await compressImage(e.target.files[0]);
-
   const filename =
     `${task._key}_${takenAt.replace(/[:.]/g, "-")}_${DRIVER_ID}.jpg`;
 
+  const blob = await compressImage(e.target.files[0]);
+
+  saveToGallery(blob, filename)
+
+  
   /* ===== OFFLINE ===== */
   if (!navigator.onLine) {
     const q = getQueue();
@@ -191,18 +209,26 @@ function resolveStatus(task) {
 async function uploadNow(taskKey, blob, takenAt, filename, deliveryData = {}) {
   const imgRef = sRef(storage, `tasks/${taskKey}/${filename}`);
   await uploadBytes(imgRef, blob);
-
   const url = await getDownloadURL(imgRef);
 
-  await update(ref(db, `tasks/${taskKey}`), {
+  // 🔑 build payload dynamically
+  const payload = {
     status: "COMPLETED",
     imageUrl: url,
     takenAt,
     uploadedAt: new Date().toISOString(),
-    deliveryData
+    deliveryType: deliveryData.deliveryType || ""
+  };
+
+  // 🔑 copy all dynamic fields using fieldKey
+  Object.entries(deliveryData).forEach(([key, value]) => {
+    if (key !== "deliveryType") {
+      payload[key] = value;
+    }
   });
-}
-  
+
+  await update(ref(db, `tasks/${taskKey}`), payload);
+}  
 /* ===== OFFLINE RETRY ===== */
 setInterval(async () => {
   if (!navigator.onLine) return;
@@ -333,29 +359,67 @@ async function renderDynamicDelivery(t) {
 
 window.showDynamicFields = async function(taskKey, jobType, method) {
   if (!BILLING_CACHE[taskKey]) BILLING_CACHE[taskKey] = {};
+
+  // store selected method
   BILLING_CACHE[taskKey].deliveryType = method;
 
   const cfg = await loadDriverUI(jobType);
+  const fields = cfg?.[method];
   const box = document.getElementById(`dyn_${taskKey}`);
+
+  if (!fields) {
+    box.innerHTML = "";
+    return;
+  }
+
   let html = "";
 
-  for (const f of Object.values(cfg[method])) {
-    html += f.type === "textarea"
-      ? `<textarea placeholder="${f.label}" oninput="BILLING_CACHE['${taskKey}']['${f.label}']=this.value"></textarea>`
-      : `<input placeholder="${f.label}" oninput="BILLING_CACHE['${taskKey}']['${f.label}']=this.value">`;
-  }
+  Object.entries(fields).forEach(([fieldKey, field]) => {
+    if (field.type === "textarea") {
+      html += `
+        <textarea
+          placeholder="${field.label}${field.required ? " *" : ""}"
+          oninput="BILLING_CACHE['${taskKey}']['${fieldKey}']=this.value">
+        </textarea>
+      `;
+    } else {
+      html += `
+        <input
+          placeholder="${field.label}${field.required ? " *" : ""}"
+          oninput="BILLING_CACHE['${taskKey}']['${fieldKey}']=this.value">
+      `;
+    }
+  });
+
   box.innerHTML = html;
 };
 
 function validateDynamic(taskKey) {
   const data = BILLING_CACHE[taskKey];
   if (!data?.deliveryType) {
-    alert("Select delivery method");
+    alert("Please select delivery method");
     return false;
   }
+
+  const task = JSON.parse(localStorage.getItem("cachedTasks") || "[]")
+    .find(t => t._key === taskKey);
+
+  if (!task) return false;
+
+  const cfg = DRIVER_UI_CACHE[task.JOBTYPE];
+  const fields = cfg?.[data.deliveryType];
+
+  if (!fields) return true;
+
+  for (const [fieldKey, field] of Object.entries(fields)) {
+    if (field.required && !data[fieldKey]) {
+      alert(`${field.label} is required`);
+      return false;
+    }
+  }
+
   return true;
 }
-
 loadTasks();
 </script>
 
