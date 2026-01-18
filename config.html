@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
+<meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>Driver UI Configuration</title>
 
@@ -11,8 +11,24 @@ body {
   background:#f3f3f3;
   padding:12px;
 }
-
 h2 { text-align:center; }
+
+.tabs {
+  display:flex;
+  gap:8px;
+  margin-bottom:12px;
+}
+.tabs button {
+  flex:1;
+  padding:10px;
+  border:none;
+  border-radius:6px;
+  cursor:pointer;
+}
+.tabs .active {
+  background:#007bff;
+  color:#fff;
+}
 
 .card {
   background:#fff;
@@ -29,7 +45,7 @@ label {
   margin-top:10px;
 }
 
-input, select, textarea {
+input, select {
   width:100%;
   padding:8px;
   margin-top:4px;
@@ -43,12 +59,10 @@ button {
   border:none;
   border-radius:6px;
   cursor:pointer;
-  font-size:14px;
 }
 
 .primary { background:#007bff; color:#fff; }
 .secondary { background:#555; color:#fff; }
-.danger { background:#c0392b; color:#fff; }
 
 .method-box {
   border:1px solid #ddd;
@@ -59,7 +73,7 @@ button {
 
 .field-row {
   background:#f7f7f7;
-  padding:8px;
+  padding:6px;
   border-radius:6px;
   margin-top:6px;
   font-size:13px;
@@ -69,18 +83,26 @@ button {
 
 <body>
 
-<h2>⚙ Driver UI ConfigurationV1.0.2</h2>
+<h2>⚙ Driver UI Configuration V1.0.4</h2>
 
-<div class="card">
+<div class="tabs">
+  <button id="tabAdd" class="active">➕ Add Job Type</button>
+  <button id="tabUpdate">✏️ Update Job Type</button>
+</div>
+
+<div class="card" id="addSection">
   <label>Job Type</label>
-  <input id="jobTypeInput" placeholder="e.g. RTP">
+  <input id="jobTypeInput" placeholder="e.g. TEST_BILLING">
 
   <label>Delivery Method</label>
-  <input id="deliveryMethodInput" placeholder="e.g. N1-Received">
+  <input id="deliveryMethodInput" placeholder="e.g. D1-Received">
 
-  <button class="secondary" onclick="addDeliveryMethod()">
-    ➕ Add Delivery Method
-  </button>
+  <button class="secondary" onclick="addDeliveryMethod()">➕ Add Delivery Method</button>
+</div>
+
+<div class="card" id="updateSection" style="display:none">
+  <label>Select Job Type</label>
+  <select id="jobTypeSelect"></select>
 </div>
 
 <div class="card">
@@ -89,7 +111,7 @@ button {
 </div>
 
 <div class="card">
-  <button class="primary" onclick="saveConfig()">💾 Save / Update Template</button>
+  <button class="primary" onclick="saveConfig()">💾 Save</button>
   <button class="secondary" onclick="location.href='admin.html'">⬅ Back</button>
 </div>
 
@@ -97,153 +119,127 @@ button {
 import { initializeApp } from
   "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 import {
-  getDatabase, ref, update
+  getDatabase, ref, get, set
 } from
   "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
-/* ===== FIREBASE ===== */
-const firebaseConfig = {
+const app = initializeApp({
   apiKey: "AIzaSyDFW61pnwLvh6HGKWt10zLYNr860fI8vkg",
-  authDomain: "driva-pwa.firebaseapp.com",
-  databaseURL: "https://driva-pwa-default-rtdb.firebaseio.com",
-  projectId: "driva-pwa",
-  storageBucket: "driva-pwa.firebasestorage.app",
-  messagingSenderId: "299138219722",
-  appId: "1:299138219722:web:623ff6b0a067ea822dfe33"
-};
-
-const app = initializeApp(firebaseConfig);
+  databaseURL: "https://driva-pwa-default-rtdb.firebaseio.com"
+});
 const db = getDatabase(app);
 
-/* ===== STATE ===== */
-const STATE = {
-  jobType: "",
-  methods: {}
+const STATE = { jobType:"", methods:{} };
+
+/* ===== TABS ===== */
+tabAdd.onclick = () => {
+  tabAdd.classList.add("active");
+  tabUpdate.classList.remove("active");
+  addSection.style.display = "block";
+  updateSection.style.display = "none";
+  resetState();
+};
+
+tabUpdate.onclick = async () => {
+  tabUpdate.classList.add("active");
+  tabAdd.classList.remove("active");
+  addSection.style.display = "none";
+  updateSection.style.display = "block";
+  await loadJobTypes();
 };
 
 /* ===== ADD DELIVERY METHOD ===== */
 window.addDeliveryMethod = function () {
-  const jobType = jobTypeInput.value.trim();
+  const job = jobTypeInput.value.trim();
   const method = deliveryMethodInput.value.trim();
+  if (!job || !method) return alert("Required");
 
-  if (!jobType || !method) {
-    alert("Job Type and Delivery Method required");
-    return;
-  }
+  STATE.jobType = job;
+  STATE.methods[method] ??= {
+    remarks: {
+      label:"Other Remarks",
+      type:"textarea",
+      required:false
+    }
+  };
 
-  STATE.jobType = jobType;
-
-  if (!STATE.methods[method]) {
-    STATE.methods[method] = [];
-
-    // default Other Remarks
-    STATE.methods[method].push({
-      key: "remarks",
-      label: "Other Remarks",
-      type: "textarea",
-      required: false
-    });
-  }
-
-  deliveryMethodInput.value = "";
+  deliveryMethodInput.value="";
   renderMethods();
 };
 
 /* ===== ADD FIELD ===== */
-function addField(method, container) {
-  console.log("addField fired for", method); // 👈 DEBUG PROOF
+function addField(method, box) {
+  const key = box.querySelector(".field-key").value.trim();
+  const label = box.querySelector(".field-label").value.trim();
+  const type = box.querySelector(".field-type").value;
+  const required = box.querySelector(".field-required").checked;
 
-  const label = container.querySelector(".field-label").value.trim();
-  const type = container.querySelector(".field-type").value;
-  const required = container.querySelector(".field-required").checked;
+  if (!key || !label) return alert("Key & Label required");
 
-  if (!label) {
-    alert("Please enter a description label");
-    return;
-  }
-
-  STATE.methods[method].push({
-    label,
-    type,
-    required
-  });
-
+  STATE.methods[method][key] = { label, type, required };
   renderMethods();
 }
-  
+
 /* ===== RENDER ===== */
 function renderMethods() {
-  const box = document.getElementById("methodsContainer");
-  box.innerHTML = "";
-
-  Object.entries(STATE.methods).forEach(([method, fields]) => {
-    const div = document.createElement("div");
-    div.className = "method-box";
-
-    div.innerHTML = `
+  methodsContainer.innerHTML="";
+  Object.entries(STATE.methods).forEach(([method, fields])=>{
+    const div=document.createElement("div");
+    div.className="method-box";
+    div.innerHTML=`
       <b>${method}</b>
 
-      <label>Add Description / Field</label>
-      <input class="field-label" placeholder="e.g. Received by">
-
+      <input class="field-key" placeholder="Field key (e.g. receivedBy)">
+      <input class="field-label" placeholder="Label (e.g. Received by)">
       <select class="field-type">
         <option value="text">Text</option>
         <option value="textarea">Textarea</option>
       </select>
+      <label><input type="checkbox" class="field-required"> Required</label>
+      <button class="secondary add">➕ Add Description</button>
 
-      <label>
-        <input type="checkbox" class="field-required"> Required
-      </label>
-
-      <button class="secondary add-desc-btn">
-        ➕ Add Description
-      </button>
-
-      <div class="field-list">
-        ${fields.map(f => `
-          <div class="field-row">
-            ${f.label} — ${f.type} ${f.required ? "(required)" : ""}
-          </div>
-        `).join("")}
-      </div>
+      ${Object.entries(fields).map(([k,f])=>`
+        <div class="field-row">${k} → ${f.label}</div>
+      `).join("")}
     `;
-
-    // ✅ ATTACH EVENT LISTENER HERE
-    div.querySelector(".add-desc-btn").addEventListener("click", () => {
-      addField(method, div);
-    });
-
-    box.appendChild(div);
+    div.querySelector(".add").onclick=()=>addField(method,div);
+    methodsContainer.appendChild(div);
   });
 }
 
-  /* ===== SAVE ===== */
+/* ===== SAVE ===== */
 window.saveConfig = async function () {
-  if (!STATE.jobType || !Object.keys(STATE.methods).length) {
-    alert("Nothing to save");
-    return;
-  }
+  if (!STATE.jobType) return alert("No job type");
+  await set(
+    ref(db, `config/driverUI/jobTypes/${STATE.jobType}`),
+    { deliveryMethods: STATE.methods }
+  );
+  alert("✅ Saved");
+};
 
-  const payload = {};
-
-  Object.entries(STATE.methods).forEach(([method, fields]) => {
-    payload[method] = { fields:{} };
-    fields.forEach(f => {
-      payload[method].fields[f.key] = {
-        label: f.label,
-        type: f.type,
-        required: f.required
-      };
-    });
+/* ===== LOAD EXISTING ===== */
+async function loadJobTypes() {
+  const snap = await get(ref(db,"config/driverUI/jobTypes"));
+  const data = snap.val()||{};
+  jobTypeSelect.innerHTML="<option value=''>Select</option>";
+  Object.keys(data).forEach(j=>{
+    const o=document.createElement("option");
+    o.value=j; o.textContent=j;
+    jobTypeSelect.appendChild(o);
   });
 
-  await update(
-    ref(db, `config/driverUI/jobTypes/${STATE.jobType}`),
-    { deliveryMethods: payload }
-  );
+  jobTypeSelect.onchange=()=>{
+    STATE.jobType=jobTypeSelect.value;
+    STATE.methods=data[STATE.jobType]?.deliveryMethods||{};
+    renderMethods();
+  };
+}
 
-  alert("✅ Configuration saved");
-};
+function resetState(){
+  STATE.jobType="";
+  STATE.methods={};
+  methodsContainer.innerHTML="";
+}
 </script>
 
 </body>
