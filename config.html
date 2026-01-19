@@ -113,7 +113,7 @@ button {
 
 <body>
 
-<h2>⚙ Driver UI Configuration V1.0.21</h2>
+<h2>⚙ Driver UI Configuration V1.0.22</h2>
 
 <div class="tabs">
   <button id="tabAdd" class="active">➕ Add Job Type</button>
@@ -498,7 +498,30 @@ window.removeMethod = (method) => {
   renderMethods();
 };
 
+function addRadioOption(method, fieldKey, optionValue, extraLabel = null, extraRequired = false) {
+  const field = STATE.methods[method][fieldKey];
 
+  if (!field.options) field.options = [];
+
+  if (field.options.find(o => o.value === optionValue)) {
+    alert("Radio option already exists");
+    return;
+  }
+
+  const option = { value: optionValue };
+
+  if (extraLabel) {
+    option.extraField = {
+      label: extraLabel,
+      type: "text",
+      required: extraRequired
+    };
+  }
+
+  field.options.push(option);
+  IS_DIRTY = true;
+  renderMethods();
+}
   
 /* ===== SAVE ===== */
 window.saveConfig = async function () {
