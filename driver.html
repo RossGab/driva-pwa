@@ -24,6 +24,30 @@ textarea { width:100%;min-height:60px;margin-top:6px;padding:6px;font-size:14px;
 button { width:100%;padding:10px;margin-top:6px;border-radius:6px;border:none;font-size:14px; }
 .capture { background:#007bff;color:#fff; }
 .toggle { background:#0069d9;color:#fff; }
+.delivery-fields {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+  margin-top: 10px;
+}
+
+.delivery-fields label {
+  font-weight: bold;
+  font-size: 13px;
+}
+
+.delivery-fields input,
+.delivery-fields textarea {
+  width: 100%;
+  padding: 8px;
+  font-size: 14px;
+  box-sizing: border-box;
+}
+
+.delivery-fields textarea {
+  min-height: 90px;
+  resize: vertical;
+}
 img { width:100%;margin-top:8px;border-radius:6px; }
 </style>
 </head>
@@ -42,7 +66,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebas
 import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.4.37-DYNAMIC";
+const VERSION = "Driver v3.4.38-DYNAMIC";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 
@@ -422,9 +446,10 @@ window.showDynamicFields = async function (taskKey, jobType, method) {
 
   const cfg = await loadDriverUI(jobType);
   const box = document.getElementById(`dyn_${taskKey}`);
-  let html = "";
 
   const fields = cfg?.[method] || {};
+
+  let html = `<div class="delivery-fields">`;
 
   for (const [fieldKey, field] of Object.entries(fields)) {
     const requiredMark = field.required ? " *" : "";
@@ -445,10 +470,12 @@ window.showDynamicFields = async function (taskKey, jobType, method) {
           data-key="${fieldKey}"
           oninput="BILLING_CACHE['${taskKey}']['${fieldKey}'] = this.value"
         >
+      hookup
       `;
     }
   }
 
+  html += `</div>`;
   box.innerHTML = html;
 };  
   
