@@ -66,7 +66,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebas
 import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.4.39-DYNAMIC";
+const VERSION = "Driver v3.4.40-DYNAMIC";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 
@@ -204,12 +204,7 @@ cameraInput.onchange = async e => {
   let blob;
   try {
     blob = await compressImage(e.target.files[0]);
-        // 🔒 TEMP filename (final filename is built after GPS)
-    const tempFilename =
-      `TEMP_${CURRENT_TASK}_${Date.now()}.jpg`;
     
-    // ✅ SAVE TO LOCAL GALLERY
-    saveToGallery(blob, tempFilename);
   } catch {
     alert("Image processing failed");
     delete processingMap[CURRENT_TASK];
@@ -292,6 +287,9 @@ async function uploadNow(taskKey, blob, takenAt, _ignoredFilename, deliveryData 
     `${safe(task.CUSTOMERNAME)}_${safe(task.ADDRESS)}_` +
     `${coords.longitude || "0"}_${coords.latitude || "0"}_` +
     `${task.driverId}_${new Date().toISOString().replace(/[-:T.Z]/g, "").slice(0,14)}.jpg`;
+
+  // ✅ SAVE FINAL IMAGE TO LOCAL GALLERY
+  saveToGallery(blob, filename);
 
   // ===== UPLOAD =====
   const imgRef = sRef(storage, `tasks/${taskKey}/${filename}`);
