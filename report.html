@@ -57,7 +57,7 @@ button:hover {
 
 <body>
 
-<h2>📊 Task Report V1.1.3</h2>
+<h2>📊 Task Report V2.0.0</h2>
 
 <button
   onclick="location.href='admin.html'"
@@ -127,6 +127,31 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 
+const SYSTEM_FIELDS = new Set([
+  "_key",
+  "status",
+  "JOBTYPE",
+  "BA",
+  "DMZ",
+  "MRU",
+  "SEQUENCE",
+  "METERNUMBER",
+  "ACCOUNTNUMBER",
+  "CUSTOMERNAME",
+  "ADDRESS",
+  "ZIPCODE",
+  "LATITUDE",
+  "LONGITUDE",
+  "AGENTID",
+  "AGENTNAME",
+  "createdAt",
+  "uploadedAt",
+  "takenAt",
+  "imageUrl",
+  "filename",
+  "deliveryType"
+]);
+
 let ALL_TASKS = [];
 
 /* ===== LOAD TASKS ===== */
@@ -138,6 +163,18 @@ async function loadTasks() {
 }
 
 loadTasks();
+
+function extractDynamicFields(task) {
+  const out = {};
+
+  for (const [key, value] of Object.entries(task)) {
+    if (!SYSTEM_FIELDS.has(key) && value !== "") {
+      out[key.toUpperCase()] = value;
+    }
+  }
+
+  return out;
+}
 
 /* ===== DEFAULT DATE (TODAY) ===== */
 function setDefaultDates() {
@@ -216,42 +253,32 @@ window.generateReport = function () {
     JOB_TYPE: t.JOBTYPE || "",
     BA: t.BA || "",
     DMZ: t.DMZ || "",
-
+  
     CUSTOMER_NAME: t.CUSTOMERNAME || "",
     ADDRESS: t.ADDRESS || "",
     ZIPCODE: t.ZIPCODE || "",
-    MRU: t.MRU || "",
-    SEQUENCE: t.SEQUENCE || "",
-
+  
     ACCOUNT_NUMBER: t.ACCOUNTNUMBER || "",
     METER_NUMBER: t.METERNUMBER || "",
-
+  
     DRIVER_ID: t.AGENTID || "",
     DRIVER_NAME: t.AGENTNAME || "",
-
+  
     DELIVERY_TYPE: t.deliveryType || "",
-    RECEIVED_BY: t.receivedBy || "",
-    RELATIONSHIP: t.relationship || "",
-    REMARKS: t.remarks || "",
-
+  
+    // 🔥 HERE IS THE MAGIC
+    ...extractDynamicFields(t),
+  
     LATITUDE: t.latitude || "",
     LONGITUDE: t.longitude || "",
-
+  
     CREATED_AT: t.createdAt || "",
     COMPLETED_AT: t.uploadedAt || "",
-
-    IMAGE_URL: t.imageUrl
-      ? {
-          t: "s",
-          v: "View Image",
-          l: { Target: t.imageUrl }
-        }
-      : "",
-
-    IMAGE_TAKEN_AT: t.takenAt || "",
-    IMAGE_UPLOADED_AT: t.uploadedAt || "",
+  
     IMAGE_FILENAME: t.filename || "",
-    HAS_IMAGE: t.imageUrl ? "YES" : "NO"
+    IMAGE_URL: t.imageUrl
+      ? { t: "s", v: "View Image", l: { Target: t.imageUrl } }
+      : ""
   }));
 
   const ws = XLSX.utils.json_to_sheet(data);
