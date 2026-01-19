@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Driver UI Configuration</title>
+
+<style>
+body {
+  font-family: Arial, sans-serif;
+  background:#f3f3f3;
+  padding:12px;
+}
+h2 { text-align:center; }
+
+.tabs {
+  display:flex;
+  gap:8px;
+  margin-bottom:12px;
+}
+.tabs button {
+  flex:1;
+  padding:10px;
+  border:none;
+  border-radius:6px;
+  cursor:pointer;
+}
+.tabs .active {
+  background:#007bff;
+  color:#fff;
+}
+
+.danger {
+  background:#c0392b;
+  color:#fff;
+}
+
+.field-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.field-main {
+  flex: 1;
+}
+
+.field-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.required-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: bold;
+}
+
+.required-row input {
+  margin: 0;
+}
+
+
+.card {
+  background:#fff;
+  padding:14px;
+  border-radius:10px;
+  box-shadow:0 0 4px rgba(0,0,0,.1);
+  margin-bottom:12px;
+}
+
+label {
+  font-weight:bold;
+  font-size:13px;
+  display:block;
+  margin-top:10px;
+}
+
+input, select {
+  width:100%;
+  padding:8px;
+  margin-top:4px;
+  border-radius:6px;
+  border:1px solid #ccc;
+}
+
+button {
+  margin-top:10px;
+  padding:10px;
+  border:none;
+  border-radius:6px;
+  cursor:pointer;
+}
+
+.primary { background:#007bff; color:#fff; }
+.secondary { background:#555; color:#fff; }
+
+.method-box {
+  border:1px solid #ddd;
+  border-radius:8px;
+  padding:10px;
+  margin-top:10px;
+}
+
+</style>
+</head>
+
+<body>
+
+<h2>⚙ Driver UI Configuration V1.0.20</h2>
+
+<div class="tabs">
+  <button id="tabAdd" class="active">➕ Add Job Type</button>
+  <button id="tabUpdate">✏️ Update Job Type</button>
+</div>
+
+<div class="card" id="addSection">
+  <label>Job Type</label>
+  <input id="jobTypeInput" placeholder="e.g. TEST_BILLING">
+
+  <div class="card">
+  <label>Delivery Method</label>
+  <input id="deliveryMethodInput" placeholder="e.g. D1-Received">
+
+  <button class="secondary" onclick="addDeliveryMethod()">➕ Add Delivery Method</button>
+</div>
+</div>
+
+<div class="card" id="updateSection" style="display:none">
+  <label>Select Job Type</label>
+  <select id="jobTypeSelect"></select>
+
+  <hr style="margin:12px 0">
+  
+  <label>New Delivery Method</label>
+  <input id="updateDeliveryMethodInput" placeholder="e.g. D7-Neighbor">
+
+  <button class="secondary" onclick="addDeliveryMethodFromUpdate()">
+    ➕ Add Delivery Method
+  </button>
+</div>
+
+<div class="card">
+  <h3>Delivery Methods</h3>
+  <div id="methodsContainer"></div>
+</div>
+
+<div class="card">
+  <button class="primary" onclick="saveConfig()">💾 Save</button>
+  <button class="secondary" onclick="location.href='admin.html'">⬅ Back</button>
+</div>
+
+<script type="module">
+import { initializeApp } from
+  "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import {
+  getDatabase, ref, get, update
+} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+
+const app = initializeApp({
+  apiKey: "AIzaSyDFW61pnwLvh6HGKWt10zLYNr860fI8vkg",
+  databaseURL: "https://driva-pwa-default-rtdb.firebaseio.com"
+});
+const db = getDatabase(app);
+
+const STATE = { jobType:"", methods:{} };
+let IS_DIRTY = false;
+
+let MODE = "ADD"; // or "UPDATE"
+
+/* ===== TABS ===== */
+tabAdd.onclick = () => {
+  MODE = "ADD";
+  jobTypeInput.disabled = false;
+  tabAdd.classList.add("active");
+  tabUpdate.classList.remove("active");
+  addSection.style.display = "block";
+  updateSection.style.display = "none";
+  resetState();
+};
+
+tabUpdate.onclick = async () => {
+  MODE = "UPDATE";
+
+  jobTypeInput.disabled = true;
+  deliveryMethodInput.value = "";
+
+  tabUpdate.classList.add("active");
+  tabAdd.classList.remove("active");
+
+  addSection.style.display = "none";
+  updateSection.style.display = "block";
+
+  await loadJobTypes(); // loads RTP + existing methods
+};
+
+
+
+
+/* ===== ADD DELIVERY METHOD ===== */
+window.addDeliveryMethod = async function () {
+  const jobType = jobTypeInput.value.trim();
+  const method = deliveryMethodInput.value.trim();
+
+  const existing = await get(
+    ref(db, `config/driverUI/jobTypes/${jobType}`)
+  );
+  if (existing.exists()) {
+    alert("Job Type already exists. Use Update instead.");
+    return;
+  }
+
+  if (!jobType || !method) {
+    alert("Job Type and Delivery Method required");
+    return;
+  }
+
+  // 🔥 COMMIT ALL PENDING FIELDS FIRST
+  document.querySelectorAll(".method-box").forEach(box => {
+    const m = box.querySelector("b")?.innerText;
+    if (m) commitPendingField(m, box);
+  });
+
+  STATE.jobType = jobType;
+
+  if (STATE.methods[method]) {
+    alert("Delivery Method already exists");
+    return;
+  }
+
+  STATE.methods[method] = {
+  remarks: {
+    label: "Other Remarks",
+    type: "textarea",
+    required: false
+  }
+};
+
+IS_DIRTY = true;
+
+  deliveryMethodInput.value = "";
+  renderMethods();
+};
+
+window.addDeliveryMethodFromUpdate = function () {
+  if (!STATE.jobType) {
+    alert("Please select a Job Type first");
+    return;
+  }
+
+  const method = updateDeliveryMethodInput.value.trim();
+  if (!method) {
+    alert("Delivery Method is required");
+    return;
+  }
+
+  if (STATE.methods[method]) {
+    alert("Delivery Method already exists");
+    return;
+  }
+
+  STATE.methods = {
+    ...STATE.methods,
+    [method]: {
+      remarks: {
+        label: "Other Remarks",
+        type: "textarea",
+        required: false
+      }
+    }
+  };
+
+  IS_DIRTY = true;
+
+  updateDeliveryMethodInput.value = "";
+  renderMethods();
+};
+  
+/* ===== ADD FIELD ===== */
+function addField(method, container) {
+  const label = container.querySelector(".field-label").value.trim();
+  const type = container.querySelector(".field-type").value;
+  const required = container.querySelector(".field-required").checked;
+
+  if (!label) {
+    alert("Please enter a description label");
+    return;
+  }
+
+  const key = makeKey(label);
+
+  if (STATE.methods[method][key]) {
+    alert("Field already exists");
+    return;
+  }
+
+  STATE.methods[method][key] = {
+    label,
+    type,
+    required
+  };
+
+  IS_DIRTY = true;
+
+  container.querySelector(".field-label").value = "";
+  container.querySelector(".field-required").checked = false;
+
+  renderMethods();
+}
+
+ function commitPendingField(method, container) {
+  const labelInput = container.querySelector(".field-label");
+  const typeSelect = container.querySelector(".field-type");
+  const requiredCheck = container.querySelector(".field-required");
+
+  if (!labelInput) return;
+
+  const label = labelInput.value.trim();
+  if (!label) return;
+
+  const key = makeKey(label);
+
+  if (!STATE.methods[method][key]) {
+    STATE.methods[method][key] = {
+      label,
+      type: typeSelect?.value || "text",
+      required: !!requiredCheck?.checked
+    };
+    IS_DIRTY = true;
+  }
+
+  labelInput.value = "";
+  if (requiredCheck) requiredCheck.checked = false;
+}
+  
+/* ===== RENDER ===== */
+function renderMethods() {
+  methodsContainer.innerHTML = "";
+
+  Object.entries(STATE.methods).forEach(([method, fields]) => {
+    const div = document.createElement("div");
+    div.className = "method-box";
+
+    div.innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <b>${method}</b>
+        <button class="danger" onclick="removeMethod('${method}')">❌</button>
+      </div>
+
+      <input class="field-label" placeholder="Label (e.g. Received by)">
+      <select class="field-type">
+        <option value="text">Text</option>
+        <option value="textarea">Textarea</option>
+      </select>
+
+      <label class="required-row">
+        <input type="checkbox" class="field-required">
+        <span>Required</span>
+      </label>
+
+      <button class="secondary add">➕ Add Description</button>
+
+      <div class="field-list">
+        ${Object.entries(fields).map(([key, f]) => `
+          <div class="field-row">
+            <div class="field-main">
+              <input
+                value="${f.label}"
+                onchange="updateFieldLabel('${method}','${key}',this.value)"
+              >
+
+              <select onchange="updateFieldType('${method}','${key}',this.value)">
+                <option value="text" ${f.type==="text"?"selected":""}>Text</option>
+                <option value="textarea" ${f.type==="textarea"?"selected":""}>Textarea</option>
+              </select>
+            </div>
+
+            <div class="field-actions">
+              <label class="required-row">
+                <input type="checkbox"
+                  ${f.required ? "checked" : ""}
+                  onchange="updateFieldRequired('${method}','${key}',this.checked)">
+                <span>Required</span>
+              </label>
+
+              <button class="danger"
+                onclick="removeField('${method}','${key}')">
+                ❌
+              </button>
+            </div>
+          </div>
+        `).join("")}
+      </div>
+    `;
+
+    div.querySelector(".add").onclick = () => addField(method, div);
+
+// 🔥 AUTO-COMMIT before save
+div.addEventListener("blur", () => {
+  commitPendingField(method, div);
+}, true);
+    methodsContainer.appendChild(div);
+  });
+}
+  window.updateFieldLabel = (method, key, value) => {
+  const newKey = makeKey(value);
+  if (!newKey) return;
+
+  const field = STATE.methods[method][key];
+  delete STATE.methods[method][key];
+
+  STATE.methods[method][newKey] = {
+    ...field,
+    label: value
+  };
+
+  IS_DIRTY = true;
+  renderMethods();
+};
+
+window.updateFieldType = (method, key, value) => {
+  STATE.methods[method][key].type = value;
+  IS_DIRTY = true;
+};
+
+window.updateFieldRequired = (method, key, value) => {
+  STATE.methods[method][key].required = value;
+  IS_DIRTY = true;
+};
+
+window.removeField = (method, key) => {
+  if (key === "remarks") {
+    alert("Other Remarks cannot be removed");
+    return;
+  }
+
+  if (!confirm("Remove this field?")) return;
+
+  delete STATE.methods[method][key];
+  renderMethods();
+};
+
+window.removeMethod = (method) => {
+  if (!confirm(`Remove delivery method ${method}?`)) return;
+  delete STATE.methods[method];
+  renderMethods();
+};
+
+
+  
+/* ===== SAVE ===== */
+window.saveConfig = async function () {
+
+  if (MODE === "ADD") {
+    STATE.jobType = jobTypeInput.value.trim();
+  }
+
+  if (!STATE.jobType || !Object.keys(STATE.methods).length) {
+    alert("Nothing to save");
+    return;
+  }
+
+  // 🔥 Commit any unsubmitted label before saving
+  document.querySelectorAll(".method-box").forEach(box => {
+    const method = box.querySelector("b")?.innerText;
+    if (method) commitPendingField(method, box);
+  });
+
+  const payload = structuredClone(STATE.methods);
+
+  await update(
+    ref(db, `config/driverUI/jobTypes/${STATE.jobType}`),
+    {
+      deliveryMethods: payload,
+      updatedAt: new Date().toISOString()
+    }
+  );
+
+  IS_DIRTY = false;
+  alert("✅ Configuration saved successfully");
+};
+  
+/* ===== LOAD EXISTING ===== */async function loadJobTypes() {
+  const snap = await get(ref(db, "config/driverUI/jobTypes"));
+  const data = snap.val() || {};
+
+  jobTypeSelect.innerHTML = "<option value=''>Select Job Type</option>";
+
+  const keys = Object.keys(data);
+
+  keys.forEach(j => {
+    const o = document.createElement("option");
+    o.value = j;
+    o.textContent = j;
+    jobTypeSelect.appendChild(o);
+  });
+
+  if (!keys.length) return;
+
+  // ✅ INITIAL LOAD (CLONE ONCE)
+  jobTypeSelect.value = keys[0];
+  STATE.jobType = keys[0];
+  STATE.methods = structuredClone(
+    data[keys[0]]?.deliveryMethods || {}
+  );
+  renderMethods();
+
+  // ✅ CHANGE JOB TYPE — CLONE AGAIN
+  jobTypeSelect.onchange = () => {
+    if (IS_DIRTY && !confirm("Discard unsaved changes?")) {
+      jobTypeSelect.value = STATE.jobType;
+      return;
+    }
+  
+    IS_DIRTY = false;
+    STATE.jobType = jobTypeSelect.value;
+    STATE.methods = structuredClone(
+      data[STATE.jobType]?.deliveryMethods || {}
+    );
+    renderMethods();
+  };
+}
+
+function resetState(){
+  STATE.jobType="";
+  STATE.methods={};
+  methodsContainer.innerHTML="";
+}
+
+function makeKey(label) {
+  return label
+    .toLowerCase()
+    .replace(/[^a-z0-9 ]/g, "")     // remove symbols
+    .trim()
+    .split(" ")
+    .map((w, i) =>
+      i === 0 ? w : w.charAt(0).toUpperCase() + w.slice(1)
+    )
+    .join("");
+}
+</script>
+
+</body>
+</html>
