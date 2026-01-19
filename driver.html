@@ -55,6 +55,10 @@ img { width:100%;margin-top:8px;border-radius:6px; }
 <body>
 
 <div id="appVersion"></div>
+<div id="taskCounter"
+   style="background:#fff;padding:8px;text-align:center;
+        margin-bottom:10px;border-radius:6px;font-weight:bold;">
+</div>
 <div id="offlineBanner">⚠ Offline — photos will upload automatically</div>
 
 <input id="searchBox" placeholder="Search tasks">
@@ -66,7 +70,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebas
 import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.4.45-DYNAMIC";
+const VERSION = "Driver v3.4.46-DYNAMIC";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -392,8 +396,20 @@ async function loadTasks() {
     return (priority[resolveStatus(a)] || 99) -
            (priority[resolveStatus(b)] || 99);
   });
-
+  updateRemainingCounter(tasks);
   render(tasks);
+}
+  
+function updateRemainingCounter(tasks) {
+  const remaining = tasks.filter(t => {
+    const status = resolveStatus(t);
+    return status !== "COMPLETED";
+  }).length;
+
+  const el = document.getElementById("taskCounter");
+  if (el) {
+    el.innerText = `📦 Remaining Tasks: ${remaining}`;
+  }
 }
   
 /* ===== RENDER ===== */
@@ -424,7 +440,7 @@ async function render(tasks) {
     `;
 
     /* ===== PENDING (ONLINE / EDITABLE) ===== */
-    if (status === "PENDING") {
+    if (status === "PENDING" && navigator.onLine) {
       html += await renderDynamicDelivery(t);
       html += `
         <button class="capture"
@@ -530,6 +546,15 @@ window.showDynamicFields = async function (taskKey, jobType, method) {
 
   html += `</div>`;
   box.innerHTML = html;
+  // 🔒 HARD LOCK if task is no longer pending
+  const task = JSON.parse(localStorage.getItem("cachedTasks") || "[]")
+    .find(t => t._key === taskKey);
+  
+  if (!task || resolveStatus(task) !== "PENDING") {
+    box.querySelectorAll("input, textarea").forEach(el => {
+      el.disabled = true;
+    });
+  }
 };  
   
 function getCurrentLocation() {
