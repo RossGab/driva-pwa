@@ -70,7 +70,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebas
 import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.4.48-DYNAMIC";
+const VERSION = "Driver v3.4.49-DYNAMIC";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -211,15 +211,13 @@ window.CURRENT_TASK = null;
 cameraInput.onchange = async e => {
   if (!e.target.files[0] || !CURRENT_TASK) return;
 
-  // ✅ Get task from cache
-  const cached = JSON.parse(localStorage.getItem("cachedTasks") || "[]");
-  const task = cached.find(t => t._key === CURRENT_TASK);
-
-  if (!task) {
-    alert("Task data not found. Please refresh.");
+  // 🔥 Validate AFTER camera opens
+  if (!validateDynamic(CURRENT_TASK)) {
     CURRENT_TASK = null;
     return;
   }
+
+  // continue processing...
 
   // ===== START PROCESSING =====
   processingMap[CURRENT_TASK] = true;
@@ -437,9 +435,6 @@ async function render(tasks) {
       html += `
         <button class="capture"
           onclick="
-            // 🔥 VALIDATE BEFORE OPENING CAMERA
-            if (!validateDynamic('${t._key}')) return;
-        
             window.CURRENT_TASK='${t._key}';
             document.getElementById('cameraInput').value='';
             document.getElementById('cameraInput').click();
