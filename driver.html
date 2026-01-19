@@ -70,7 +70,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebas
 import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.4.50-DYNAMIC";
+const VERSION = "Driver v3.4.51-DYNAMIC";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -537,14 +537,6 @@ window.showDynamicFields = async function (taskKey, jobType, method) {
   html += `</div>`;
   box.innerHTML = html;
   // 🔒 HARD LOCK if task is no longer pending
-  const task = JSON.parse(localStorage.getItem("cachedTasks") || "[]")
-    .find(t => t._key === taskKey);
-  
-  if (!task || resolveStatus(task) !== "PENDING") {
-    box.querySelectorAll("input, textarea").forEach(el => {
-      el.disabled = true;
-    });
-  }
 };  
   
 function getCurrentLocation() {
@@ -583,24 +575,42 @@ if (!DRIVER_UI_CACHE[task.JOBTYPE]) {
 }
   
 function validateDynamic(taskKey) {
-  // 🔥 FORCE SYNC FROM DOM → CACHE
+  // Sync inputs → cache
   syncDynamicFields(taskKey);
 
   const data = BILLING_CACHE[taskKey];
+
+  // 1️⃣ Delivery method required
   if (!data?.deliveryType) {
     alert("Select delivery method");
     return false;
   }
 
+  // 2️⃣ Task must exist
   const task = JSON.parse(localStorage.getItem("cachedTasks") || "[]")
     .find(t => t._key === taskKey);
 
-  if (!task) return false;
+  if (!task) {
+    alert("Task not found. Please refresh.");
+    return false;
+  }
 
-  const cfg = DRIVER_UI_CACHE[task.JOBTYPE]?.[data.deliveryType];
-  if (!cfg) return true;
+  // 3️⃣ Config MUST exist (offline-safe)
+  const jobCfg = DRIVER_UI_CACHE[task.JOBTYPE];
+  if (!jobCfg) {
+    alert("Delivery configuration not available. Please go online once.");
+    return false;
+  }
 
-  for (const [fieldKey, field] of Object.entries(cfg)) {
+  // 4️⃣ Method config must exist
+  const methodCfg = jobCfg[data.deliveryType];
+  if (!methodCfg) {
+    alert("Invalid delivery method. Please reselect.");
+    return false;
+  }
+
+  // 5️⃣ Required fields enforcement
+  for (const [fieldKey, field] of Object.entries(methodCfg)) {
     if (field.required && !data[fieldKey]) {
       alert(`${field.label} is required`);
       return false;
@@ -608,8 +618,7 @@ function validateDynamic(taskKey) {
   }
 
   return true;
-}
-  
+}  
 loadTasks();
 
 async function processOfflineQueue() {
