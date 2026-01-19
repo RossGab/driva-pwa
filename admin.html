@@ -248,7 +248,7 @@ button {
 
 <body>
 
-<h2>🧑‍💼 Admin Dashboard V2.4.0.5</h2>
+<h2>🧑‍💼 Admin Dashboard V2.4.1</h2>
 
 <!-- ===== DASHBOARD ===== -->
 <div class="dashboard">
@@ -1238,6 +1238,23 @@ window.scrollToTop = function () {
   });
 };
 
+async function ensureDriverStatusNodes() {
+  const statusSnap = await get(ref(db, "driverStatus"));
+  const statusData = statusSnap.val() || {};
+
+  for (const driverId of Object.keys(DRIVER_CACHE)) {
+    if (!statusData[driverId]) {
+      console.log("➕ Creating driverStatus for", driverId);
+
+      await update(ref(db, `driverStatus/${driverId}`), {
+        lastSeen: null,
+        latitude: null,
+        longitude: null
+      });
+    }
+  }
+}
+
 /* INIT */
 function setLoaderText(txt) {
   const el = document.querySelector(".loader-text");
@@ -1249,8 +1266,11 @@ function setLoaderText(txt) {
   try {
     await loadDrivers();
 
+    // 🔥 ADD THIS
+    await ensureDriverStatusNodes();
+
     showLoader("Loading driver config…");
-    await loadDriverUIConfig(); // 🔥 REQUIRED
+    await loadDriverUIConfig();
 
     showLoader("Loading dashboard…");
     await refreshDashboard();
