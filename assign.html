@@ -64,7 +64,7 @@ button {
 
 <body>
 
-<h2>➕ Assign Task V3.0.3</h2>
+<h2>➕ Assign Task V3.0.4</h2>
 
 <button onclick="location.href='admin.html'"
   style="
@@ -188,7 +188,12 @@ window.uploadCSV = async function (uploadBtn) {
     }
 
     if (extra.length) {
-      console.warn("Extra CSV columns ignored:", extra);
+      status.innerText =
+        "❌ Extra columns not allowed:\n" + extra.join(", ");
+      uploadBtn.disabled = false;
+      uploadBtn.style.opacity = "1";
+      uploadBtn.innerText = "Upload CSV";
+      return;
     }
 
     // ✅ 3. BUILD UPDATES
