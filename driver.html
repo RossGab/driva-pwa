@@ -66,9 +66,10 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebas
 import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.4.42-DYNAMIC";
+const VERSION = "Driver v3.4.43-DYNAMIC";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
+const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
 
 const firebaseConfig = {
   apiKey: "AIzaSyDFW61pnwLvh6HGKWt10zLYNr860fI8vkg",
@@ -96,10 +97,40 @@ localStorage.setItem("driverId", DRIVER_ID);
 appVersion.innerText = `Driver: ${DRIVER_ID} | ${VERSION}`;
 
 async function loadDriverUI(jobType) {
+  // 1️⃣ Memory cache
   if (DRIVER_UI_CACHE[jobType]) return DRIVER_UI_CACHE[jobType];
-  const snap = await get(ref(db, `config/driverUI/jobTypes/${jobType}/deliveryMethods`));
-  DRIVER_UI_CACHE[jobType] = snap.val() || {};
-  return DRIVER_UI_CACHE[jobType];
+
+  // 2️⃣ LocalStorage cache (OFFLINE SAFE)
+  const stored = JSON.parse(
+    localStorage.getItem(DRIVER_UI_STORAGE_KEY) || "{}"
+  );
+
+  if (stored[jobType]) {
+    DRIVER_UI_CACHE[jobType] = stored[jobType];
+    return stored[jobType];
+  }
+
+  // 3️⃣ Online fetch ONLY if online
+  if (!navigator.onLine) {
+    return {}; // offline + no cache = empty
+  }
+
+  const snap = await get(
+    ref(db, `config/driverUI/jobTypes/${jobType}/deliveryMethods`)
+  );
+
+  const data = snap.val() || {};
+
+  // 4️⃣ Save to memory + localStorage
+  DRIVER_UI_CACHE[jobType] = data;
+  stored[jobType] = data;
+
+  localStorage.setItem(
+    DRIVER_UI_STORAGE_KEY,
+    JSON.stringify(stored)
+  );
+
+  return data;
 }
 
 function syncDynamicFields(taskKey) {
@@ -215,8 +246,7 @@ cameraInput.onchange = async e => {
 
   /* ================= OFFLINE ================= */
   if (!navigator.onLine) {
-    // ✅ SAVE TEMP IMAGE TO GALLERY (OFFLINE ONLY)
-    processingMap[CURRENT_TASK] = true;
+    
 const tempFilename =
   `TEMP_${CURRENT_TASK}_${Date.now()}.jpg`;
   saveToGallery(blob, tempFilename);
@@ -323,6 +353,13 @@ async function uploadNow(taskKey, blob, takenAt, _ignoredFilename, deliveryData 
   await update(ref(db, `tasks/${taskKey}`), updatePayload);
 }
 
+async function preloadDriverUIConfig(tasks) {
+  for (const t of tasks) {
+    if (t.JOBTYPE) {
+      await loadDriverUI(t.JOBTYPE);
+    }
+  }
+}
   
 /* ===== LOAD TASKS ===== */
 async function loadTasks() {
@@ -330,11 +367,7 @@ async function loadTasks() {
 
   if (navigator.onLine) {
     const snap = await get(
-      query(
-        ref(db, "tasks"),
-        orderByChild("driverId"),
-        equalTo(DRIVER_ID)
-      )
+      query(ref(db, "tasks"), orderByChild("driverId"), equalTo(DRIVER_ID))
     );
 
     const raw = snap.val() || {};
@@ -342,29 +375,26 @@ async function loadTasks() {
     localStorage.setItem(TASK_CACHE_KEY, JSON.stringify(tasks));
   }
 
-  // ✅ SORT HERE (VERY IMPORTANT)
+  // ✅ ALWAYS preload config (uses localStorage when offline)
+  await preloadDriverUIConfig(tasks);
+
   tasks.sort((a, b) => {
-    const pa = resolveStatus(a);
-    const pb = resolveStatus(b);
-
-    const priority = {
-      "PENDING": 1,
-      "PROCESSING": 2,
-      "UPLOADING": 3,
-      "COMPLETED": 4
-    };
-
-    return (priority[pa] || 99) - (priority[pb] || 99);
+    const priority = { PENDING:1, PROCESSING:2, UPLOADING:3, COMPLETED:4 };
+    return (priority[resolveStatus(a)] || 99) -
+           (priority[resolveStatus(b)] || 99);
   });
 
   render(tasks);
 }
-
+  
 /* ===== RENDER ===== */
 async function render(tasks) {
   taskList.innerHTML = "";
 
   for (const t of tasks) {
+    if (!BILLING_CACHE[t._key]) {
+      BILLING_CACHE[t._key] = {};
+    }
     const status = resolveStatus(t);
 
     const div = document.createElement("div");
