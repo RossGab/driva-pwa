@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Assign TaskV1.0.1</title>
+<title>Assign TaskV1.1.1</title>
 
 <style>
 body {
@@ -84,7 +84,7 @@ button {
 
 <input type="file" id="csvFile" accept=".csv">
 
-<button onclick="uploadCSV()"
+<button onclick="uploadCSV(this)"
   style="background:#007bff;color:#fff;padding:10px;border:none;border-radius:6px;width:100%;margin-top:6px;">
   Upload CSV
 </button>
@@ -126,17 +126,16 @@ async function loadDriverCache() {
 loadDriverCache();
 
 /* ===== BULK UPLOAD ===== */
-window.uploadCSV = async function () {
+window.uploadCSV = async function (uploadBtn) {
+  if (uploadBtn.disabled) return;
   const fileInput = document.getElementById("csvFile");
   const status = document.getElementById("uploadStatus");
-  const uploadBtn = event.target;
 
   if (!fileInput.files.length) {
     alert("Please select a CSV file");
     return;
   }
 
-  // 🔒 Lock button
   uploadBtn.disabled = true;
   uploadBtn.style.opacity = "0.6";
   uploadBtn.innerText = "Uploading…";
@@ -148,7 +147,7 @@ window.uploadCSV = async function () {
     const text = await file.text();
 
     const rows = text
-      .replace(/\r/g, "")          // ✅ Windows-safe
+      .replace(/\r/g, "")
       .split("\n")
       .map(r => r.trim())
       .filter(Boolean);
@@ -160,9 +159,13 @@ window.uploadCSV = async function () {
 
     const headers = rows.shift().split(",").map(h => h.trim());
     const total = rows.length;
-    let uploaded = 0;
 
-    for (const row of rows) {
+    const updates = {};
+    const now = new Date().toISOString();
+
+    const base = Date.now();
+
+    rows.forEach((row, index) => {
       const values = row.split(",");
       const task = {};
 
@@ -170,21 +173,20 @@ window.uploadCSV = async function () {
         task[h] = values[i]?.trim() || "";
       });
 
-      const taskId = `TASK_${Date.now()}_${uploaded}`;
-
-      await update(ref(db, `tasks/${taskId}`), {
+      const taskId = `TASK_${base}_${index}`;
+      
+      updates[`tasks/${taskId}`] = {
         ...task,
         driverId: task.AGENTID || "",
         status: "PENDING",
-        createdAt: new Date().toISOString()
-      });
+        createdAt: now
+      };
+    });
 
-      uploaded++;
-      const percent = Math.round((uploaded / total) * 100);
-      status.innerText = `⬆ Uploading… ${percent}% (${uploaded}/${total})`;
-    }
+    // 🚀 ONE FAST NETWORK CALL
+    await update(ref(db), updates);
 
-    status.innerText = `✅ Upload complete — ${uploaded} tasks added`;
+    status.innerText = `✅ Upload complete — ${total} tasks added`;
     uploadBtn.innerText = "✔ Done";
 
   } catch (err) {
@@ -196,41 +198,6 @@ window.uploadCSV = async function () {
     uploadBtn.innerText = "Upload CSV";
   }
 };
-
-document.getElementById("taskForm").addEventListener("submit", async e => {
-  e.preventDefault();
-
-  const payload = {
-    JOBTYPE: JOBTYPE.value,
-    BA: BA.value,
-    DMZ: DMZ.value,
-    MRU: MRU.value,
-    SEQUENCE: SEQUENCE.value,
-    METERNUMBER: METERNUMBER.value,
-    ACCOUNTNUMBER: ACCOUNTNUMBER.value,
-    CUSTOMERNAME: CUSTOMERNAME.value,
-    ADDRESS: ADDRESS.value,
-    ZIPCODE: ZIPCODE.value,
-    LATITUDE: LATITUDE.value,
-    LONGITUDE: LONGITUDE.value,
-
-    driverId: AGENTID.value || "",
-    AGENTID: AGENTID.value || "",
-    AGENTNAME: AGENTNAME.value || "",
-
-    status: "PENDING",
-
-    // ✅ STEP 1 — CREATION DATE
-    createdAt: new Date().toISOString()
-  };
-
-  const taskId = `TASK_${Date.now()}`;
-
-  await update(ref(db, `tasks/${taskId}`), payload);
-
-  alert("✅ Task created");
-  location.href = "admin.html";
-});
   
 </script>
 </body>
