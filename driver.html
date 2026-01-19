@@ -93,7 +93,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebas
 import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.4.58-DYNAMIC";
+const VERSION = "Driver v3.4.59-DYNAMIC";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -121,7 +121,6 @@ let SEARCH_TERM = "";
 let DRIVER_ID = localStorage.getItem("driverId");
 while (!DRIVER_ID) DRIVER_ID = prompt("Enter Driver ID");
 localStorage.setItem("driverId", DRIVER_ID);
-startGPSTracking(DRIVER_ID);
 appVersion.innerText = `Driver: ${DRIVER_ID} | ${VERSION}`;
 
 let gpsWatchId = null;
@@ -414,29 +413,36 @@ async function preloadDriverUIConfig(tasks) {
   
 /* ===== LOAD TASKS ===== */
 async function loadTasks() {
-  let tasks = JSON.parse(localStorage.getItem(TASK_CACHE_KEY) || "[]");
+  try {
+    let tasks = JSON.parse(localStorage.getItem(TASK_CACHE_KEY) || "[]");
 
-  if (navigator.onLine) {
-    const snap = await get(
-      query(ref(db, "tasks"), orderByChild("driverId"), equalTo(DRIVER_ID))
-    );
+    if (navigator.onLine) {
+      const snap = await get(
+        query(ref(db, "tasks"), orderByChild("driverId"), equalTo(DRIVER_ID))
+      );
 
-    const raw = snap.val() || {};
-    tasks = Object.keys(raw).map(k => ({ _key: k, ...raw[k] }));
-    localStorage.setItem(TASK_CACHE_KEY, JSON.stringify(tasks));
+      const raw = snap.val() || {};
+      tasks = Object.keys(raw).map(k => ({ _key: k, ...raw[k] }));
+      localStorage.setItem(TASK_CACHE_KEY, JSON.stringify(tasks));
+    }
+
+    await preloadDriverUIConfig(tasks);
+
+    tasks.sort((a, b) => {
+      const priority = { PENDING:1, PROCESSING:2, UPLOADING:3, COMPLETED:4 };
+      return (priority[resolveStatus(a)] || 99) -
+             (priority[resolveStatus(b)] || 99);
+    });
+
+    updateRemainingCounter(tasks);
+    render(tasks.filter(t => resolveStatus(t) !== "COMPLETED"));
+
+    if (!gpsWatchId) {
+      setTimeout(() => startGPSTracking(DRIVER_ID), 1000);
+    }
+  } catch (e) {
+    taskList.innerHTML = "⚠️ Failed to load tasks. Pull to refresh.";
   }
-
-  // ✅ ALWAYS preload config (uses localStorage when offline)
-  await preloadDriverUIConfig(tasks);
-
-  tasks.sort((a, b) => {
-    const priority = { PENDING:1, PROCESSING:2, UPLOADING:3, COMPLETED:4 };
-    return (priority[resolveStatus(a)] || 99) -
-           (priority[resolveStatus(b)] || 99);
-  });
-  updateRemainingCounter(tasks);
-  const visibleTasks = tasks.filter(t => resolveStatus(t) !== "COMPLETED");
-  render(visibleTasks);
 }
   
 function updateRemainingCounter(tasks) {
