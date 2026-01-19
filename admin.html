@@ -248,7 +248,7 @@ button {
 
 <body>
 
-<h2>🧑‍💼 Admin Dashboard V2.4.1</h2>
+<h2>🧑‍💼 Admin Dashboard V2.4.2</h2>
 
 <!-- ===== DASHBOARD ===== -->
 <div class="dashboard">
@@ -1009,25 +1009,25 @@ function log(msg) {
   box.scrollTop = box.scrollHeight;
 }
 
-function renderDriverList(drivers) {
+function renderDriverList(statusData = {}) {
   const list = document.getElementById("driverItems");
   list.innerHTML = "";
 
-  Object.entries(drivers).forEach(([id, d]) => {
+  const driverIds = Object.keys(DRIVER_CACHE);
 
-    // 🔥 BA FILTER (LIVE MAP)
-    if (!driverMatchesBA(id)) return;
+  driverIds.forEach(driverId => {
+    const driverInfo = DRIVER_CACHE[driverId];
+    const status = statusData[driverId] || {};
 
-    // 🔥 Must have location to show on map
-    if (!d.latitude || !d.longitude) return;
+    // 🔹 BA filter (based on tasks, not GPS)
+    if (!driverMatchesBA(driverId)) return;
 
-    const status = getDriverStatus(d.lastSeen);
-    const stats = TASK_STATS[id] || { open: 0, completed: 0 };
+    const hasLocation =
+      status.latitude != null &&
+      status.longitude != null;
 
-    // 👤 Driver info from driver cache
-    const driverInfo = DRIVER_CACHE[id] || {};
-    const driverName = driverInfo.name || "Unknown Driver";
-    const driverContact = driverInfo.contact || "—";
+    const driverStatus = getDriverStatus(status.lastSeen);
+    const stats = TASK_STATS[driverId] || { open: 0, completed: 0 };
 
     const row = document.createElement("div");
     row.style.cssText = `
@@ -1035,8 +1035,9 @@ function renderDriverList(drivers) {
       gap:8px;
       padding:8px 0;
       border-bottom:1px solid #eee;
-      cursor:pointer;
+      cursor:${hasLocation ? "pointer" : "default"};
       align-items:flex-start;
+      opacity:${hasLocation ? "1" : "0.6"};
     `;
 
     row.innerHTML = `
@@ -1046,28 +1047,29 @@ function renderDriverList(drivers) {
         height:10px;
         margin-top:4px;
         border-radius:50%;
-        background:${status.color};
+        background:${driverStatus.color};
         flex-shrink:0;
       "></div>
 
       <!-- DRIVER INFO -->
       <div style="flex:1">
         <div style="font-size:13px;font-weight:bold;">
-          ${driverName}
+          ${driverInfo.name || "Unnamed Driver"}
         </div>
 
         <div style="font-size:12px;color:#444;">
-          📞 ${driverContact}
+          📞 ${driverInfo.contact || "—"}
         </div>
 
         <div style="font-size:11px;color:#666;margin-top:2px;">
-          ${id} · ${status.label}
+          ${driverId} · ${driverStatus.label}
+          ${!hasLocation ? " · No GPS yet" : ""}
         </div>
 
         <div style="font-size:11px;color:#444;margin-top:4px;">
           <span
             style="color:orange;cursor:pointer;font-weight:bold"
-            onclick="event.stopPropagation(); showDriverOpenTasks('${id}')">
+            onclick="event.stopPropagation(); showDriverOpenTasks('${driverId}')">
             🟠 Open: ${stats.open}
           </span>
           |
@@ -1078,24 +1080,26 @@ function renderDriverList(drivers) {
       </div>
     `;
 
-    // 🗺 Click row → focus map
-    row.onclick = () => {
-      map.setView([d.latitude, d.longitude], 15);
-      markers[id]?.openPopup();
-    };
+    // 🗺 Focus map ONLY if GPS exists
+    if (hasLocation) {
+      row.onclick = () => {
+        map.setView([status.latitude, status.longitude], 15);
+        markers[driverId]?.openPopup();
+      };
+    }
 
     list.appendChild(row);
   });
 
-  // 💤 Empty state
   if (!list.children.length) {
     list.innerHTML = `
       <div style="font-size:12px;color:#888;padding:6px 0;">
-        No active drivers
+        No drivers available
       </div>
     `;
   }
-}  
+}
+  
 async function buildTaskStats() {
   const snap = await withTimeout(get(ref(db, "tasks")), 8000);
   const tasks = snap.val() || {};
