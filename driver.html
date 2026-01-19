@@ -93,7 +93,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebas
 import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.4.55-DYNAMIC";
+const VERSION = "Driver v3.4.56-DYNAMIC";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -450,13 +450,16 @@ async function render(tasks) {
     if (status === "PENDING") {
       html += await renderDynamicDelivery(t);
       html += `
-        <label class="capture capture-label">
+        <label
+          class="capture capture-label"
+          onclick="return beforeCamera('${t._key}', event)"
+        >
           📸 Take Picture
           <input
             type="file"
             accept="image/*"
             capture="environment"
-            onchange="handleCamera('${t._key}', event)"
+            onchange="afterCamera('${t._key}', event)"
             hidden
           />
         </label>
@@ -501,6 +504,27 @@ async function render(tasks) {
     taskList.appendChild(div);
   }
 }
+
+// ✅ RUNS BEFORE CAMERA OPENS
+window.beforeCamera = function (taskKey, e) {
+  if (!validateDynamic(taskKey)) {
+    e.preventDefault(); // 🚫 STOP camera
+    e.stopPropagation();
+    return false;
+  }
+  return true; // ✅ ALLOW camera
+};
+
+// ✅ RUNS AFTER PHOTO IS TAKEN
+window.afterCamera = function (taskKey, e) {
+  if (!e.target.files || !e.target.files[0]) return;
+
+  window.CURRENT_TASK = taskKey;
+
+  // forward to existing pipeline
+  cameraInput.files = e.target.files;
+  cameraInput.onchange({ target: e.target });
+};
   
 async function renderDynamicDelivery(t) {
   const methods = await loadDriverUI(t.JOBTYPE);
