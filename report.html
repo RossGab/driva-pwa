@@ -57,7 +57,7 @@ button:hover {
 
 <body>
 
-<h2>📊 Task Report V2.0.0</h2>
+<h2>📊 Task Report V2.0.1</h2>
 
 <button
   onclick="location.href='admin.html'"
@@ -247,40 +247,51 @@ window.generateReport = function () {
   }
 
   /* ===== FULL EXPORT DATA ===== */
-  const data = rows.map(t => ({
-    TASK_ID: t._key || "",
-    STATUS: t.status || "",
-    JOB_TYPE: t.JOBTYPE || "",
-    BA: t.BA || "",
-    DMZ: t.DMZ || "",
-  
-    CUSTOMER_NAME: t.CUSTOMERNAME || "",
-    ADDRESS: t.ADDRESS || "",
-    ZIPCODE: t.ZIPCODE || "",
-  
-    ACCOUNT_NUMBER: t.ACCOUNTNUMBER || "",
-    METER_NUMBER: t.METERNUMBER || "",
-  
-    DRIVER_ID: t.AGENTID || "",
-    DRIVER_NAME: t.AGENTNAME || "",
-  
-    DELIVERY_TYPE: t.deliveryType || "",
-  
-    // 🔥 HERE IS THE MAGIC
-    ...extractDynamicFields(t),
-  
-    LATITUDE: t.latitude || "",
-    LONGITUDE: t.longitude || "",
-  
-    CREATED_AT: t.createdAt || "",
-    COMPLETED_AT: t.uploadedAt || "",
-  
-    IMAGE_FILENAME: t.filename || "",
-    IMAGE_URL: t.imageUrl
-      ? { t: "s", v: "View Image", l: { Target: t.imageUrl } }
-      : ""
-  }));
+  const data = rows.map(t => {
+  const row = {};
 
+  /* ===== CORE TASK INFO ===== */
+  row.TASK_ID = t._key || "";
+  row.STATUS = t.status || "";
+  row.JOB_TYPE = t.JOBTYPE || "";
+  row.BA = t.BA || "";
+  row.DMZ = t.DMZ || "";
+
+  row.CUSTOMER_NAME = t.CUSTOMERNAME || "";
+  row.ADDRESS = t.ADDRESS || "";
+  row.ZIPCODE = t.ZIPCODE || "";
+
+  row.ACCOUNT_NUMBER = t.ACCOUNTNUMBER || "";
+  row.METER_NUMBER = t.METERNUMBER || "";
+
+  row.DRIVER_ID = t.AGENTID || "";
+  row.DRIVER_NAME = t.AGENTNAME || "";
+
+  row.DELIVERY_TYPE = t.deliveryType || "";
+
+  /* ===== DYNAMIC DELIVERY FIELDS (MIDDLE) ===== */
+  const dynamic = extractDynamicFields(t);
+  Object.keys(dynamic)
+    .sort() // optional: keeps columns stable across rows
+    .forEach(k => {
+      row[k] = dynamic[k];
+    });
+
+  /* ===== FINAL SYSTEM COLUMNS (ALWAYS LAST) ===== */
+  row.LATITUDE = t.latitude || "";
+  row.LONGITUDE = t.longitude || "";
+
+  row.CREATED_AT = t.createdAt || "";
+  row.COMPLETED_AT = t.uploadedAt || "";
+
+  row.IMAGE_FILENAME = t.filename || "";
+  row.IMAGE_URL = t.imageUrl
+    ? { t: "s", v: "View Image", l: { Target: t.imageUrl } }
+    : "";
+
+  return row;
+});
+  
   const ws = XLSX.utils.json_to_sheet(data);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "Tasks");
