@@ -113,7 +113,7 @@ button {
 
 <body>
 
-<h2>⚙ Driver UI Configuration V1.0.23</h2>
+<h2>⚙ Driver UI Configuration V1.0.24</h2>
 
 <div class="tabs">
   <button id="tabAdd" class="active">➕ Add Job Type</button>
@@ -367,7 +367,7 @@ function renderMethods() {
                   <b>Radio Options</b>
               
                   ${(f.options || []).map((opt, idx) => `
-                    <div style="border:1px solid #ddd;padding:6px;margin-top:6px;border-radius:6px;">
+                    <div class="radio-option" style="border:1px solid #ddd;padding:6px;margin-top:6px;border-radius:6px;">
                       <input
                         value="${opt.value}"
                         placeholder="Option value"
@@ -480,7 +480,9 @@ function renderMethods() {
     };
 
     // 🔥 AUTO-COMMIT BEFORE SAVE (keeps your existing behavior)
-    div.addEventListener("blur", () => {
+    div.addEventListener("blur", (e) => {
+      // ignore radio-option interactions
+      if (e.target.closest(".radio-option")) return;
       commitPendingField(method, div);
     }, true);
 
@@ -580,31 +582,6 @@ window.removeMethod = (method) => {
   delete STATE.methods[method];
   renderMethods();
 };
-
-function addRadioOption(method, fieldKey, optionValue, extraLabel = null, extraRequired = false) {
-  const field = STATE.methods[method][fieldKey];
-
-  if (!field.options) field.options = [];
-
-  if (field.options.find(o => o.value === optionValue)) {
-    alert("Radio option already exists");
-    return;
-  }
-
-  const option = { value: optionValue };
-
-  if (extraLabel) {
-    option.extraField = {
-      label: extraLabel,
-      type: "text",
-      required: extraRequired
-    };
-  }
-
-  field.options.push(option);
-  IS_DIRTY = true;
-  renderMethods();
-}
   
 /* ===== SAVE ===== */
 window.saveConfig = async function () {
