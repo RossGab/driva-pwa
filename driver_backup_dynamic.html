@@ -1,0 +1,517 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>Driver Tasks</title>
+
+<link rel="manifest" href="./manifest.json">
+<meta name="theme-color" content="#222222">
+
+<style>
+body { font-family: Arial, sans-serif; background:#f4f4f4; padding:10px; }
+#appVersion { background:#222;color:#fff;padding:8px;text-align:center;margin-bottom:6px; }
+#offlineBanner { background:#c0392b;color:#fff;padding:6px;text-align:center;margin-bottom:10px;display:none; }
+#searchBox { width:100%;padding:10px;margin-bottom:10px;border-radius:6px;border:1px solid #ccc;font-size:14px; }
+.task { background:#fff;padding:12px;margin-bottom:10px;border-radius:8px;border-left:5px solid orange; }
+.task.completed { border-left-color:green; }
+.small { font-size:13px;color:#555;margin-top:4px; }
+.radio-group label { display:block;margin-top:4px; }
+textarea { width:100%;min-height:60px;margin-top:6px;padding:6px;font-size:14px; }
+.offline-indicator { font-weight:bold;color:#c0392b;margin-top:6px; }
+.uploading { font-weight:bold;color:#f39c12;margin-top:6px; }
+button { width:100%;padding:10px;margin-top:6px;border-radius:6px;border:none;font-size:14px; }
+.capture { background:#007bff;color:#fff; }
+.toggle { background:#0069d9;color:#fff; }
+img { width:100%;margin-top:8px;border-radius:6px; }
+</style>
+</head>
+
+<body>
+
+<div id="appVersion"></div>
+<div id="offlineBanner">⚠ Offline — photos will upload automatically</div>
+
+<input id="searchBox" placeholder="Search tasks">
+<div id="taskList">Loading tasks…</div>
+<input type="file" id="cameraInput" accept="image/*" capture="environment" hidden>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
+
+const VERSION = "Driver v3.4.37-DYNAMIC";
+const BILLING_CACHE = {};
+const DRIVER_UI_CACHE = {};
+
+const firebaseConfig = {
+  apiKey: "AIzaSyDFW61pnwLvh6HGKWt10zLYNr860fI8vkg",
+  authDomain: "driva-pwa.firebaseapp.com",
+  databaseURL: "https://driva-pwa-default-rtdb.firebaseio.com",
+  projectId: "driva-pwa",
+  storageBucket: "driva-pwa.firebasestorage.app", // ✅ FIX
+  messagingSenderId: "299138219722",
+  appId: "1:299138219722:web:623ff6b0a067ea822dfe33"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
+const storage = getStorage(app);
+
+const QUEUE_KEY = "offlineQueue";
+const TASK_CACHE_KEY = "cachedTasks";
+const processingMap = {};
+const uploadingMap = {};
+let SEARCH_TERM = "";
+
+let DRIVER_ID = localStorage.getItem("driverId");
+while (!DRIVER_ID) DRIVER_ID = prompt("Enter Driver ID");
+localStorage.setItem("driverId", DRIVER_ID);
+appVersion.innerText = `Driver: ${DRIVER_ID} | ${VERSION}`;
+
+async function loadDriverUI(jobType) {
+  if (DRIVER_UI_CACHE[jobType]) return DRIVER_UI_CACHE[jobType];
+  const snap = await get(ref(db, `config/driverUI/jobTypes/${jobType}/deliveryMethods`));
+  DRIVER_UI_CACHE[jobType] = snap.val() || {};
+  return DRIVER_UI_CACHE[jobType];
+}
+
+function syncDynamicFields(taskKey) {
+  const box = document.getElementById(`dyn_${taskKey}`);
+  if (!box) return;
+
+  if (!BILLING_CACHE[taskKey]) BILLING_CACHE[taskKey] = {};
+
+  const inputs = box.querySelectorAll("input, textarea");
+
+  inputs.forEach(el => {
+    const fieldKey = el.getAttribute("data-key");
+    if (!fieldKey) return;
+
+    BILLING_CACHE[taskKey][fieldKey] = el.value.trim();
+  });
+}
+
+/* ===== NETWORK ===== */
+function updateNetwork() {
+  offlineBanner.style.display = navigator.onLine ? "none" : "block";
+}
+window.addEventListener("online", updateNetwork);
+window.addEventListener("offline", updateNetwork);
+updateNetwork();
+
+/* ===== QUEUE ===== */
+const getQueue = () => JSON.parse(localStorage.getItem(QUEUE_KEY) || "[]");
+const setQueue = q => localStorage.setItem(QUEUE_KEY, JSON.stringify(q));
+
+/* ===== IMAGE ===== */
+function compressImage(file) {
+  return new Promise(resolve => {
+    const img = new Image();
+    const r = new FileReader();
+    r.onload = e => img.src = e.target.result;
+    img.onload = () => {
+      const c = document.createElement("canvas");
+      let w = img.width, h = img.height;
+      if (w > 1280) { h *= 1280 / w; w = 1280; }
+      c.width = w; c.height = h;
+      c.getContext("2d").drawImage(img, 0, 0, w, h);
+      c.toBlob(b => resolve(b), "image/jpeg", 0.65);
+    };
+    r.readAsDataURL(file);
+  });
+}
+
+const toBase64 = b => new Promise(r => {
+  const f = new FileReader();
+  f.onloadend = () => r(f.result);
+  f.readAsDataURL(b);
+});
+
+/* ===== CAMERA ===== */
+window.CURRENT_TASK = null;
+
+function saveToGallery(blob, filename) {
+  const url = URL.createObjectURL(blob);
+
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+
+  document.body.appendChild(a);
+  a.click();
+
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+window.CURRENT_TASK = null;
+
+cameraInput.onchange = async e => {
+  if (!e.target.files[0] || !CURRENT_TASK) return;
+
+  // 🔥 FORCE SYNC FROM DOM → CACHE
+  syncDynamicFields(CURRENT_TASK);
+
+  // THEN validate
+  if (!validateDynamic(CURRENT_TASK)) {
+    CURRENT_TASK = null;
+    return;
+  }
+
+  // ✅ Get task from cache
+  const cached = JSON.parse(localStorage.getItem("cachedTasks") || "[]");
+  const task = cached.find(t => t._key === CURRENT_TASK);
+
+  if (!task) {
+    alert("Task data not found. Please refresh.");
+    CURRENT_TASK = null;
+    return;
+  }
+
+  // ===== START PROCESSING =====
+  processingMap[CURRENT_TASK] = true;
+  loadTasks();
+
+  const takenAt = new Date().toISOString();
+
+  let blob;
+  try {
+    blob = await compressImage(e.target.files[0]);
+  } catch {
+    alert("Image processing failed");
+    delete processingMap[CURRENT_TASK];
+    CURRENT_TASK = null;
+    loadTasks();
+    return;
+  }
+
+  /* ================= OFFLINE ================= */
+  if (!navigator.onLine) {
+    const q = getQueue();
+    q.push({
+      taskKey: CURRENT_TASK,
+      image: await toBase64(blob),
+      takenAt,
+      deliveryData: BILLING_CACHE[CURRENT_TASK] || {}
+    });
+    setQueue(q);
+
+    delete processingMap[CURRENT_TASK];
+    CURRENT_TASK = null;
+    loadTasks();
+    return;
+  }
+
+  /* ================= ONLINE ================= */
+  uploadingMap[CURRENT_TASK] = true;
+  delete processingMap[CURRENT_TASK];
+  loadTasks();
+
+  try {
+    // 🔥 DO NOT PASS FILENAME ANYMORE
+    await uploadNow(
+      CURRENT_TASK,
+      blob,
+      takenAt,
+      null, // filename intentionally ignored
+      BILLING_CACHE[CURRENT_TASK] || {}
+    );
+  } catch {
+    alert("Upload failed. Please retry.");
+  }
+
+  delete uploadingMap[CURRENT_TASK];
+  CURRENT_TASK = null;
+  loadTasks();
+};
+  
+  
+function resolveStatus(task) {
+  if (processingMap[task._key]) return "PROCESSING";
+  if (uploadingMap[task._key]) return "UPLOADING";
+  return task.status || "PENDING";
+}
+
+async function uploadNow(taskKey, blob, takenAt, _ignoredFilename, deliveryData = {}) {
+  const taskSnap = await get(ref(db, `tasks/${taskKey}`));
+  const task = taskSnap.val() || {};
+
+  // ===== GET LOCATION =====
+  let coords = {};
+  try {
+    const pos = await new Promise((res, rej) =>
+      navigator.geolocation.getCurrentPosition(
+        p => res(p.coords),
+        () => res(null),
+        { enableHighAccuracy: true, timeout: 10000 }
+      )
+    );
+    if (pos) coords = pos;
+  } catch {}
+
+  // ===== BUILD FILENAME =====
+  const safe = v => String(v || "")
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, "_")
+    .replace(/^_|_$/g, "");
+
+  const filename =
+    `${safe(task.CUSTOMERNAME)}_${safe(task.ADDRESS)}_` +
+    `${coords.longitude || "0"}_${coords.latitude || "0"}_` +
+    `${task.driverId}_${new Date().toISOString().replace(/[-:T.Z]/g, "").slice(0,14)}.jpg`;
+
+  // ===== UPLOAD =====
+  const imgRef = sRef(storage, `tasks/${taskKey}/${filename}`);
+  await uploadBytes(imgRef, blob);
+  const url = await getDownloadURL(imgRef);
+
+  // ===== FLATTEN DATA =====
+  const updatePayload = {
+    status: "COMPLETED",
+    imageUrl: url,
+    filename,
+    takenAt,
+    uploadedAt: new Date().toISOString(),
+    deliveryType: deliveryData.deliveryType || ""
+  };
+
+  for (const [k, v] of Object.entries(deliveryData)) {
+    if (k !== "deliveryType") updatePayload[k] = v;
+  }
+
+  if (coords.latitude) {
+    updatePayload.latitude = coords.latitude;
+    updatePayload.longitude = coords.longitude;
+  }
+
+  await update(ref(db, `tasks/${taskKey}`), updatePayload);
+}
+
+  
+/* ===== LOAD TASKS ===== */
+async function loadTasks() {
+  let tasks = JSON.parse(localStorage.getItem(TASK_CACHE_KEY) || "[]");
+
+  if (navigator.onLine) {
+    const snap = await get(
+      query(
+        ref(db, "tasks"),
+        orderByChild("driverId"),
+        equalTo(DRIVER_ID)
+      )
+    );
+
+    const raw = snap.val() || {};
+    tasks = Object.keys(raw).map(k => ({ _key: k, ...raw[k] }));
+    localStorage.setItem(TASK_CACHE_KEY, JSON.stringify(tasks));
+  }
+
+  // ✅ SORT HERE (VERY IMPORTANT)
+  tasks.sort((a, b) => {
+    const pa = resolveStatus(a);
+    const pb = resolveStatus(b);
+
+    const priority = {
+      "PENDING": 1,
+      "PROCESSING": 2,
+      "UPLOADING": 3,
+      "COMPLETED": 4
+    };
+
+    return (priority[pa] || 99) - (priority[pb] || 99);
+  });
+
+  render(tasks);
+}
+
+/* ===== RENDER ===== */
+async function render(tasks) {
+  taskList.innerHTML = "";
+
+  for (const t of tasks) {
+    const status = resolveStatus(t);
+
+    const div = document.createElement("div");
+    div.className = `task ${status === "COMPLETED" ? "completed" : ""}`;
+
+    let html = `
+      <b>${t.CUSTOMERNAME || "—"}</b>
+
+      <div class="small">📍 ${t.ADDRESS || "—"}</div>
+
+      <div class="small"><b>Account #:</b> ${t.ACCOUNTNUMBER || "—"}</div>
+      <div class="small"><b>MRU:</b> ${t.MRU || "—"}</div>
+      <div class="small"><b>Meter #:</b> ${t.METERNUMBER || "—"}</div>
+      <div class="small"><b>DMZ:</b> ${t.DMZ || "—"}</div>
+      <div class="small"><b>Sequence:</b> ${t.SEQUENCE || "—"}</div>
+      <div class="small"><b>Job Type:</b> ${t.JOBTYPE || "—"}</div>
+      <div class="small"><b>Status:</b> ${status}</div>
+    `;
+
+    /* ===== PENDING ===== */
+    if (status === "PENDING") {
+      html += await renderDynamicDelivery(t);
+      html += `
+        <button class="capture"
+          onclick="
+            window.CURRENT_TASK='${t._key}';
+            document.getElementById('cameraInput').value='';
+            document.getElementById('cameraInput').click();
+          ">
+          📸 Take Picture
+        </button>
+      `;
+    }
+
+    /* ===== PROCESSING ===== */
+    if (status === "PROCESSING") {
+      html += `<div class="uploading">🛠 Processing image…</div>`;
+    }
+
+    /* ===== UPLOADING ===== */
+    if (status === "UPLOADING") {
+      html += `<div class="uploading">⏳ Uploading photo…</div>`;
+    }
+
+    /* ===== COMPLETED ===== */
+    if (status === "COMPLETED") {
+      html += `
+        <button class="toggle"
+          onclick="
+            const img = this.parentElement.querySelector('img');
+            if (!img) return;
+            img.style.display = img.style.display === 'none'
+              ? 'block'
+              : 'none';
+          ">
+          👁 Show / Hide Photo
+        </button>
+
+        <img src="${t.imageUrl}" style="display:none">
+      `;
+    }
+
+    div.innerHTML = html;
+    taskList.appendChild(div);
+  }
+}
+  
+async function renderDynamicDelivery(t) {
+  const methods = await loadDriverUI(t.JOBTYPE);
+  if (!methods || !Object.keys(methods).length) return "";
+
+  let html = `<div class="radio-group"><b>Delivery Method</b>`;
+  for (const m of Object.keys(methods)) {
+    html += `
+      <label>
+        <input type="radio" name="delivery_${t._key}" value="${m}"
+          onchange="showDynamicFields('${t._key}','${t.JOBTYPE}','${m}')">
+        ${m}
+      </label>`;
+  }
+  html += `</div><div id="dyn_${t._key}"></div>`;
+  return html;
+}
+
+window.showDynamicFields = async function (taskKey, jobType, method) {
+  if (!BILLING_CACHE[taskKey]) BILLING_CACHE[taskKey] = {};
+  BILLING_CACHE[taskKey].deliveryType = method;
+
+  const cfg = await loadDriverUI(jobType);
+  const box = document.getElementById(`dyn_${taskKey}`);
+  let html = "";
+
+  const fields = cfg?.[method] || {};
+
+  for (const [fieldKey, field] of Object.entries(fields)) {
+    const requiredMark = field.required ? " *" : "";
+
+    if (field.type === "textarea") {
+      html += `
+        <label>${field.label}${requiredMark}</label>
+        <textarea
+          data-key="${fieldKey}"
+          oninput="BILLING_CACHE['${taskKey}']['${fieldKey}'] = this.value"
+        ></textarea>
+      `;
+    } else {
+      html += `
+        <label>${field.label}${requiredMark}</label>
+        <input
+          type="text"
+          data-key="${fieldKey}"
+          oninput="BILLING_CACHE['${taskKey}']['${fieldKey}'] = this.value"
+        >
+      `;
+    }
+  }
+
+  box.innerHTML = html;
+};  
+  
+function getCurrentLocation() {
+  return new Promise((resolve, reject) => {
+    if (!navigator.geolocation) {
+      reject("Geolocation not supported");
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      pos => {
+        resolve({
+          latitude: pos.coords.latitude,
+          longitude: pos.coords.longitude
+        });
+      },
+      err => reject(err.message),
+      {
+        enableHighAccuracy: true,
+        timeout: 15000,
+        maximumAge: 0
+      }
+    );
+  });
+}
+  
+function validateDynamic(taskKey) {
+  // 🔥 FORCE SYNC FROM DOM → CACHE
+  syncDynamicFields(taskKey);
+
+  const data = BILLING_CACHE[taskKey];
+  if (!data?.deliveryType) {
+    alert("Select delivery method");
+    return false;
+  }
+
+  const task = JSON.parse(localStorage.getItem("cachedTasks") || "[]")
+    .find(t => t._key === taskKey);
+
+  if (!task) return false;
+
+  const cfg = DRIVER_UI_CACHE[task.JOBTYPE]?.[data.deliveryType];
+  if (!cfg) return true;
+
+  for (const [fieldKey, field] of Object.entries(cfg)) {
+    if (field.required && !data[fieldKey]) {
+      alert(`${field.label} is required`);
+      return false;
+    }
+  }
+
+  return true;
+}
+  
+loadTasks();
+</script>
+
+<script>
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("./sw.js");
+}
+</script>
+
+</body>
+</html>
