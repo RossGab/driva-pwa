@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Assign Task</title>
+<title>Assign TaskV1.0.1</title>
 
 <style>
 body {
@@ -93,90 +93,6 @@ button {
 
 <hr>
 
-<form id="taskForm">
-
-<!-- ===== JOB DETAILS ===== -->
-<label>JOB TYPE</label>
-<select id="JOBTYPE" required>
-  <option value="">Select</option>
-  <option>INSTALL</option>
-  <option>DISCONNECT</option>
-  <option>READING</option>
-  <option>OTHER</option>
-</select>
-
-<label>BA</label>
-<input id="BA">
-
-<label>DMZ</label>
-<input id="DMZ">
-
-<label>MRU</label>
-<input id="MRU">
-
-<label>SEQUENCE</label>
-<input id="SEQUENCE" type="number">
-
-<!-- ===== METER / ACCOUNT ===== -->
-<label>METER NUMBER</label>
-<input id="METERNUMBER">
-
-<label>ACCOUNT NUMBER</label>
-<input id="ACCOUNTNUMBER">
-
-<!-- ===== CUSTOMER ===== -->
-<label>CUSTOMER NAME *</label>
-<input id="CUSTOMERNAME" required>
-
-<label>ADDRESS *</label>
-<textarea id="ADDRESS" required></textarea>
-
-<label>ZIP CODE</label>
-<input id="ZIPCODE">
-
-<!-- ===== LOCATION ===== -->
-<label>LATITUDE</label>
-<input id="LATITUDE" type="number" step="any">
-
-<label>LONGITUDE</label>
-<input id="LONGITUDE" type="number" step="any">
-
-<!-- ===== DRIVER ===== -->
-<label>AGENT (Search)</label>
-<input id="agentSearch" placeholder="Type driver ID or name">
-
-<div id="agentResults" style="
-  background:#fff;
-  border:1px solid #ccc;
-  border-radius:6px;
-  max-height:180px;
-  overflow-y:auto;
-  display:none;
-"></div>
-
-<label>AGENT ID</label>
-<input id="AGENTID" class="readonly" readonly>
-
-<label>AGENT NAME</label>
-<input id="AGENTNAME" class="readonly" readonly>
-<!-- ===== READ ONLY (SYSTEM) ===== -->
-<label>START TIME</label>
-<input class="readonly" readonly placeholder="Auto by driver">
-
-<label>END TIME</label>
-<input class="readonly" readonly placeholder="Auto on completion">
-
-<label>REMARKS</label>
-<textarea class="readonly" readonly placeholder="From driver"></textarea>
-
-<label>LOCKING DEVICE</label>
-<input class="readonly" readonly>
-
-<label>REFERENCE IMAGE</label>
-<input class="readonly" readonly placeholder="Shown after completion">
-
-<button type="submit">💾 Save Task</button>
-</form>
 
 <script type="module">
 import { initializeApp } from
