@@ -66,7 +66,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebas
 import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.4.43-DYNAMIC";
+const VERSION = "Driver v3.4.45-DYNAMIC";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -250,15 +250,23 @@ cameraInput.onchange = async e => {
 const tempFilename =
   `TEMP_${CURRENT_TASK}_${Date.now()}.jpg`;
   saveToGallery(blob, tempFilename);
-    const q = getQueue();
-    q.push({
-      taskKey: CURRENT_TASK,
-      image: await toBase64(blob),
-      takenAt,
-      deliveryData: BILLING_CACHE[CURRENT_TASK] || {}
-    });
-    setQueue(q);
-
+        // save to offline queue
+      const q = getQueue();
+      q.push({
+        taskKey: CURRENT_TASK,
+        image: await toBase64(blob),
+        takenAt,
+        deliveryData: BILLING_CACHE[CURRENT_TASK] || {}
+      });
+      setQueue(q);
+      
+      // 🔒 MARK TASK AS OFFLINE_PENDING LOCALLY
+      const cachedTasks = JSON.parse(localStorage.getItem(TASK_CACHE_KEY) || "[]");
+      const idx = cachedTasks.findIndex(t => t._key === CURRENT_TASK);
+      if (idx !== -1) {
+        cachedTasks[idx].status = "OFFLINE_PENDING";
+      }
+      localStorage.setItem(TASK_CACHE_KEY, JSON.stringify(cachedTasks));
     delete processingMap[CURRENT_TASK];
     CURRENT_TASK = null;
     loadTasks();
@@ -292,6 +300,7 @@ const tempFilename =
 function resolveStatus(task) {
   if (processingMap[task._key]) return "PROCESSING";
   if (uploadingMap[task._key]) return "UPLOADING";
+  if (task.status === "OFFLINE_PENDING") return "PROCESSING";
   return task.status || "PENDING";
 }
 
@@ -414,7 +423,7 @@ async function render(tasks) {
       <div class="small"><b>Status:</b> ${status}</div>
     `;
 
-    /* ===== PENDING ===== */
+    /* ===== PENDING (ONLINE / EDITABLE) ===== */
     if (status === "PENDING") {
       html += await renderDynamicDelivery(t);
       html += `
@@ -428,10 +437,16 @@ async function render(tasks) {
         </button>
       `;
     }
-
+    
     /* ===== PROCESSING ===== */
     if (status === "PROCESSING") {
-      html += `<div class="uploading">🛠 Processing image…</div>`;
+      html += `
+        <div class="uploading">
+          ${!navigator.onLine
+            ? "📴 Saved offline — waiting for connection"
+            : "🛠 Processing image…"}
+        </div>
+      `;
     }
 
     /* ===== UPLOADING ===== */
