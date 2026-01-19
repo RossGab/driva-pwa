@@ -113,7 +113,7 @@ button {
 
 <body>
 
-<h2>⚙ Driver UI Configuration V1.0.20</h2>
+<h2>⚙ Driver UI Configuration V1.0.21</h2>
 
 <div class="tabs">
   <button id="tabAdd" class="active">➕ Add Job Type</button>
@@ -283,36 +283,7 @@ window.addDeliveryMethodFromUpdate = function () {
 };
   
 /* ===== ADD FIELD ===== */
-function addField(method, container) {
-  const label = container.querySelector(".field-label").value.trim();
-  const type = container.querySelector(".field-type").value;
-  const required = container.querySelector(".field-required").checked;
 
-  if (!label) {
-    alert("Please enter a description label");
-    return;
-  }
-
-  const key = makeKey(label);
-
-  if (STATE.methods[method][key]) {
-    alert("Field already exists");
-    return;
-  }
-
-  STATE.methods[method][key] = {
-    label,
-    type,
-    required
-  };
-
-  IS_DIRTY = true;
-
-  container.querySelector(".field-label").value = "";
-  container.querySelector(".field-required").checked = false;
-
-  renderMethods();
-}
 
  function commitPendingField(method, container) {
   const labelInput = container.querySelector(".field-label");
@@ -353,11 +324,20 @@ function renderMethods() {
         <button class="danger" onclick="removeMethod('${method}')">❌</button>
       </div>
 
+      <!-- ADD NEW FIELD -->
       <input class="field-label" placeholder="Label (e.g. Received by)">
+
       <select class="field-type">
         <option value="text">Text</option>
         <option value="textarea">Textarea</option>
+        <option value="radio">Radio (Options)</option>
       </select>
+
+      <input
+        class="field-options"
+        placeholder="Options (comma separated)"
+        style="display:none;margin-top:6px;"
+      >
 
       <label class="required-row">
         <input type="checkbox" class="field-required">
@@ -366,6 +346,7 @@ function renderMethods() {
 
       <button class="secondary add">➕ Add Description</button>
 
+      <!-- EXISTING FIELDS -->
       <div class="field-list">
         ${Object.entries(fields).map(([key, f]) => `
           <div class="field-row">
@@ -378,7 +359,19 @@ function renderMethods() {
               <select onchange="updateFieldType('${method}','${key}',this.value)">
                 <option value="text" ${f.type==="text"?"selected":""}>Text</option>
                 <option value="textarea" ${f.type==="textarea"?"selected":""}>Textarea</option>
+                <option value="radio" ${f.type==="radio"?"selected":""}>Radio</option>
               </select>
+
+              ${
+                f.type === "radio"
+                  ? `<input
+                      value="${(f.options || []).join(", ")}"
+                      onchange="updateFieldOptions('${method}','${key}',this.value)"
+                      placeholder="Options (comma separated)"
+                      style="margin-top:6px;"
+                    >`
+                  : ""
+              }
             </div>
 
             <div class="field-actions">
@@ -399,15 +392,68 @@ function renderMethods() {
       </div>
     `;
 
-    div.querySelector(".add").onclick = () => addField(method, div);
+    // 🔁 TOGGLE OPTIONS INPUT FOR NEW FIELD
+    const typeSelect = div.querySelector(".field-type");
+    const optionsInput = div.querySelector(".field-options");
 
-// 🔥 AUTO-COMMIT before save
-div.addEventListener("blur", () => {
-  commitPendingField(method, div);
-}, true);
+    typeSelect.onchange = () => {
+      optionsInput.style.display =
+        typeSelect.value === "radio" ? "block" : "none";
+    };
+
+    // ➕ ADD FIELD HANDLER
+    div.querySelector(".add").onclick = () => {
+      const label = div.querySelector(".field-label").value.trim();
+      const type = div.querySelector(".field-type").value;
+      const required = div.querySelector(".field-required").checked;
+      const optionsRaw = optionsInput.value;
+
+      if (!label) {
+        alert("Please enter a description label");
+        return;
+      }
+
+      const key = makeKey(label);
+      if (STATE.methods[method][key]) {
+        alert("Field already exists");
+        return;
+      }
+
+      STATE.methods[method][key] = {
+        label,
+        type,
+        required,
+        ...(type === "radio"
+          ? { options: optionsRaw.split(",").map(o => o.trim()).filter(Boolean) }
+          : {})
+      };
+
+      IS_DIRTY = true;
+
+      // reset inputs
+      div.querySelector(".field-label").value = "";
+      div.querySelector(".field-required").checked = false;
+      optionsInput.value = "";
+      optionsInput.style.display = "none";
+
+      renderMethods();
+    };
+
+    // 🔥 AUTO-COMMIT BEFORE SAVE (keeps your existing behavior)
+    div.addEventListener("blur", () => {
+      commitPendingField(method, div);
+    }, true);
+
     methodsContainer.appendChild(div);
   });
 }
+  window.updateFieldOptions = (method, key, value) => {
+  STATE.methods[method][key].options =
+    value.split(",").map(v => v.trim()).filter(Boolean);
+
+  IS_DIRTY = true;
+};
+  
   window.updateFieldLabel = (method, key, value) => {
   const newKey = makeKey(value);
   if (!newKey) return;
