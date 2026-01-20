@@ -127,6 +127,13 @@ window.addDeliveryMethod = function () {
   renderMethods();
 };
 
+window.removeDeliveryMethod = function (method) {
+  if (!confirm(`Remove delivery method "${method}"?`)) return;
+
+  delete STATE.methods[method];
+  renderMethods();
+};
+
 /* ================= RENDER ================= */
 function renderMethods() {
   methodsContainer.innerHTML = "";
@@ -137,6 +144,11 @@ function renderMethods() {
 
     div.innerHTML = `
       <b>${method}</b>
+      <button class="danger"
+        style="float:right"
+        onclick="removeDeliveryMethod('${method}')">
+        ❌ Remove Method
+      </button>
 
       <input class="field-label" placeholder="Field label (e.g. C100-Disconnected)">
       <select class="field-type">
