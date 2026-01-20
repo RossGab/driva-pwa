@@ -96,7 +96,17 @@ img { width:100%;margin-top:8px;border-radius:6px; }
     font-size:14px;
   "
 >
-  
+<div id="jobTypeFilter"
+  style="
+    background:#fff;
+    padding:10px;
+    margin-bottom:8px;
+    border-radius:6px;
+    font-size:13px;
+  ">
+  <b>Job Type</b>
+  <div id="jobTypeOptions"></div>
+</div>
 <input id="searchBox" placeholder="Search tasks">
 <div id="taskList">Loading tasks…</div>
 <input type="file" id="cameraInput" accept="image/*" capture="environment" hidden>
@@ -106,10 +116,11 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebas
 import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.4.73-DYNAMIC";
+const VERSION = "Driver v3.4.74-DYNAMIC";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
+const selectedJobTypes = new Set();
 
 const firebaseConfig = {
   apiKey: "AIzaSyDFW61pnwLvh6HGKWt10zLYNr860fI8vkg",
@@ -268,6 +279,43 @@ function disablePullToRefresh() {
 
 function enablePullToRefresh() {
   document.body.style.overscrollBehaviorY = "";
+}
+
+function renderJobTypeFilters(tasks) {
+  const container = document.getElementById("jobTypeOptions");
+  if (!container) return;
+
+  const jobTypes = [
+    ...new Set(tasks.map(t => t.JOBTYPE).filter(Boolean))
+  ].sort();
+
+  // Preserve existing selections
+  container.innerHTML = "";
+
+  jobTypes.forEach(type => {
+    const id = `job_${type.replace(/\s+/g, "_")}`;
+
+    const wrapper = document.createElement("label");
+    wrapper.style.display = "block";
+
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.checked =
+      selectedJobTypes.size === 0 || selectedJobTypes.has(type);
+
+    checkbox.onchange = () => {
+      if (checkbox.checked) {
+        selectedJobTypes.add(type);
+      } else {
+        selectedJobTypes.delete(type);
+      }
+      loadTasks();
+    };
+
+    wrapper.appendChild(checkbox);
+    wrapper.append(` ${type}`);
+    container.appendChild(wrapper);
+  });
 }
 
 function syncDynamicFields(taskKey) {
@@ -608,19 +656,30 @@ async function loadTasks() {
     });
 
     updateRemainingCounter(tasks);
+    renderJobTypeFilters(tasks);
     const selectedDate = dateFilter.value; // YYYY-MM-DD
 
 const filtered = tasks
   .filter(t => {
     const status = resolveStatus(t);
 
-    // ❌ NEVER show completed
+    // ❌ Never show completed
     if (status === "COMPLETED") return false;
 
-    // ✅ Pending / processing → match CREATED DATE
-    if (!t.createdAt) return false;
+    // ❌ Must match selected date
+    if (!t.createdAt || !t.createdAt.startsWith(selectedDate)) {
+      return false;
+    }
 
-    return t.createdAt.startsWith(selectedDate);
+    // ❌ Job type filter
+    if (
+      selectedJobTypes.size > 0 &&
+      !selectedJobTypes.has(t.JOBTYPE)
+    ) {
+      return false;
+    }
+
+    return true;
   })
   .filter(t => {
     if (!SEARCH_TERM) return true;
