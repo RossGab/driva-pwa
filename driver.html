@@ -100,6 +100,23 @@ img { width:100%;margin-top:8px;border-radius:6px; }
 
 <body>
 
+<button id="settingsBtn"
+  style="
+    position: fixed;
+    top: 10px;
+    right: 10px;
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    border: none;
+    background: #fff;
+    font-size: 20px;
+    box-shadow: 0 2px 6px rgba(0,0,0,.2);
+    z-index: 99999;
+  ">
+  ⚙️
+</button>
+
 <div id="appVersion"></div>
 <div id="taskCounter"
    style="background:#fff;padding:8px;text-align:center;
@@ -200,6 +217,19 @@ searchBox.addEventListener("input", e => {
 let DRIVER_ID = localStorage.getItem("driverId");
 while (!DRIVER_ID) DRIVER_ID = prompt("Enter Driver ID");
 localStorage.setItem("driverId", DRIVER_ID);
+
+document.getElementById("settingsBtn").onclick = () => {
+  const current = localStorage.getItem("driverId") || "";
+
+  const next = prompt("Enter new Driver ID", current);
+  if (!next) return;
+  if (next === current) return;
+
+  localStorage.setItem("driverId", next);
+  alert("Driver ID changed. Reloading…");
+  location.reload();
+};
+  
 appVersion.innerText = `Driver: ${DRIVER_ID} | ${VERSION}`;
 
 let gpsWatchId = null;
