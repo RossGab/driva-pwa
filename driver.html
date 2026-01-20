@@ -93,7 +93,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebas
 import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.4.59-DYNAMIC";
+const VERSION = "Driver v3.4.60-DYNAMIC";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -125,43 +125,67 @@ appVersion.innerText = `Driver: ${DRIVER_ID} | ${VERSION}`;
 
 let gpsWatchId = null;
 
-
 async function loadDriverUI(jobType) {
-  // 1️⃣ Memory cache
-  if (DRIVER_UI_CACHE[jobType]) return DRIVER_UI_CACHE[jobType];
+  const STORAGE_KEY = "driverUIConfigCache";
+  const cache = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
 
-  // 2️⃣ LocalStorage cache (OFFLINE SAFE)
-  const stored = JSON.parse(
-    localStorage.getItem(DRIVER_UI_STORAGE_KEY) || "{}"
-  );
+  // If online, check Firebase for updates
+  if (navigator.onLine) {
+    const snap = await get(
+      ref(db, `config/driverUI/jobTypes/${jobType}`)
+    );
 
-  if (stored[jobType]) {
-    DRIVER_UI_CACHE[jobType] = stored[jobType];
-    return stored[jobType];
+    if (snap.exists()) {
+      const remote = snap.val();
+      const localUpdatedAt = cache[jobType]?.updatedAt;
+
+      // 🔥 Only refresh if changed
+      if (remote.updatedAt !== localUpdatedAt) {
+        cache[jobType] = remote;
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(cache));
+      }
+    }
   }
 
-  // 3️⃣ Online fetch ONLY if online
-  if (!navigator.onLine) {
-    return {}; // offline + no cache = empty
-  }
-
-  const snap = await get(
-    ref(db, `config/driverUI/jobTypes/${jobType}/deliveryMethods`)
-  );
-
-  const data = snap.val() || {};
-
-  // 4️⃣ Save to memory + localStorage
-  DRIVER_UI_CACHE[jobType] = data;
-  stored[jobType] = data;
-
-  localStorage.setItem(
-    DRIVER_UI_STORAGE_KEY,
-    JSON.stringify(stored)
-  );
-
-  return data;
+  return cache[jobType]?.deliveryMethods || {};
 }
+
+// async function loadDriverUI(jobType) {
+//   // 1️⃣ Memory cache
+//   if (DRIVER_UI_CACHE[jobType]) return DRIVER_UI_CACHE[jobType];
+
+//   // 2️⃣ LocalStorage cache (OFFLINE SAFE)
+//   const stored = JSON.parse(
+//     localStorage.getItem(DRIVER_UI_STORAGE_KEY) || "{}"
+//   );
+
+//   if (stored[jobType]) {
+//     DRIVER_UI_CACHE[jobType] = stored[jobType];
+//     return stored[jobType];
+//   }
+
+//   // 3️⃣ Online fetch ONLY if online
+//   if (!navigator.onLine) {
+//     return {}; // offline + no cache = empty
+//   }
+
+//   const snap = await get(
+//     ref(db, `config/driverUI/jobTypes/${jobType}/deliveryMethods`)
+//   );
+
+//   const data = snap.val() || {};
+
+//   // 4️⃣ Save to memory + localStorage
+//   DRIVER_UI_CACHE[jobType] = data;
+//   stored[jobType] = data;
+
+//   localStorage.setItem(
+//     DRIVER_UI_STORAGE_KEY,
+//     JSON.stringify(stored)
+//   );
+
+//   return data;
+// }
 
 function syncDynamicFields(taskKey) {
   const box = document.getElementById(`dyn_${taskKey}`);
