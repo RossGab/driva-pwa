@@ -18,6 +18,18 @@
       height: 100vh;
       margin: 0;
     }
+    .logo-wrap {
+      display: flex;
+      justify-content: center;
+      margin-top: 40px;
+      margin-bottom: 24px;
+    }
+    
+    .logo-wrap img {
+      max-width: 160px;
+      width: 60%;
+      height: auto;
+    }
     .box {
       background: #fff;
       padding: 24px;
@@ -53,44 +65,62 @@
 <body>
 
 <div class="box">
-  <h1>Driver App</h1>
-  <p>Install the app to continue</p>
+  <div class="logo-wrap">
+  <img src="./logo.png" alt="Company Logo">
+</div>
 
-  <button id="installBtn" disabled>
-    Waiting for install…
-  </button>
+<h1>Driver App</h1>
+<p id="statusText">Install the app to continue</p>
+
+<button id="installBtn" disabled>
+  Waiting for install…
+</button>
 </div>
 
 <script>
 let deferredPrompt = null;
+const statusText = document.getElementById("statusText");
+const installBtn = document.getElementById("installBtn");
 
+function isStandalone() {
+  return window.matchMedia("(display-mode: standalone)").matches ||
+         window.navigator.standalone === true;
+}
+
+// If already installed → instruct user
+if (isStandalone()) {
+  statusText.innerText = "App already installed. Open it from your app list.";
+  installBtn.style.display = "none";
+}
+
+// Capture install prompt
 window.addEventListener("beforeinstallprompt", e => {
   e.preventDefault();
   deferredPrompt = e;
 
-  const btn = document.getElementById("installBtn");
-  btn.disabled = false;
-  btn.innerText = "📲 Install Driver App";
-
-  btn.onclick = async () => {
-    btn.disabled = true;
-    await deferredPrompt.prompt();
-    await deferredPrompt.userChoice;
-  };
+  installBtn.disabled = false;
+  installBtn.innerText = "📲 Install Driver App";
 });
 
+// Install button click
+installBtn.onclick = async () => {
+  if (!deferredPrompt) return;
+
+  installBtn.disabled = true;
+  installBtn.innerText = "Installing…";
+
+  await deferredPrompt.prompt();
+  await deferredPrompt.userChoice;
+
+  deferredPrompt = null;
+};
+
+// After install → DO NOT REDIRECT
 window.addEventListener("appinstalled", () => {
-  // Redirect into the app after install
-  window.location.href = "./driver.html";
+  installBtn.style.display = "none";
+  statusText.innerText =
+    "✅ App installed!\n\nPlease open **Driver App** from your app list or home screen.";
 });
-
-// If already installed → skip installer
-if (
-  window.matchMedia("(display-mode: standalone)").matches ||
-  window.navigator.standalone === true
-) {
-  window.location.href = "./driver.html";
-}
 </script>
 
 </body>
