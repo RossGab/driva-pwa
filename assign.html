@@ -64,7 +64,7 @@ button {
 
 <body>
 
-<h2>➕ Assign Task V3.0.4</h2>
+<h2>➕ Assign Task V3.0.5</h2>
 
 <button onclick="location.href='admin.html'"
   style="
@@ -132,6 +132,18 @@ const REQUIRED_HEADERS = [
   "AGENTNAME"
 ];
 
+function getLocalISODateTime() {
+  const d = new Date();
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  const hour = String(d.getHours()).padStart(2, "0");
+  const min = String(d.getMinutes()).padStart(2, "0");
+  const sec = String(d.getSeconds()).padStart(2, "0");
+
+  return `${year}-${month}-${day}T${hour}:${min}:${sec}`;
+}
+
 /* ===== DRIVER CACHE ===== */
 let DRIVER_CACHE = {};
 
@@ -198,27 +210,30 @@ window.uploadCSV = async function (uploadBtn) {
 
     // ✅ 3. BUILD UPDATES
     const updates = {};
-    const now = new Date().toISOString();
+    const now = getLocalISODateTime();
     const base = Date.now();
 
     rows.forEach((row, index) => {
-      const values = row.split(",");
-      const task = {};
+  const values = row.split(",");
+  const task = {};
 
-      headers.forEach((h, i) => {
-        task[h] = values[i]?.trim() || "";
-      });
+  headers.forEach((h, i) => {
+    task[h] = values[i]?.trim() || "";
+  });
 
-      const taskId = `TASK_${base}_${index}`;
+  const taskId = `TASK_${base}_${index}`;
 
-      updates[`tasks/${taskId}`] = {
-        ...task,
-        driverId: task.AGENTID || "",
-        status: "PENDING",
-        createdAt: now
-      };
-    });
+  updates[`tasks/${taskId}`] = {
+    ...task,
+    driverId: task.AGENTID || "",
+    status: "PENDING",
 
+    // ✅ ORDER PRESERVATION
+    rowIndex: index + 1,       // Excel row order (1-based)
+    uploadBatch: base,         // Same upload group
+    createdAt: now
+  };
+});
     // 🚀 4. SINGLE FAST WRITE
     await update(ref(db), updates);
 
