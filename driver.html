@@ -93,7 +93,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebas
 import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.4.65-DYNAMIC";
+const VERSION = "Driver v3.4.66-DYNAMIC";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -117,6 +117,15 @@ const TASK_CACHE_KEY = "cachedTasks";
 const processingMap = {};
 const uploadingMap = {};
 let SEARCH_TERM = "";
+
+function isBusy() {
+  const queue = JSON.parse(localStorage.getItem("offlineQueue") || "[]");
+  return (
+    queue.length > 0 ||
+    Object.keys(processingMap).length > 0 ||
+    Object.keys(uploadingMap).length > 0
+  );
+}
 
 searchBox.addEventListener("input", e => {
   SEARCH_TERM = e.target.value.toLowerCase();
@@ -231,6 +240,14 @@ async function loadDriverUI(jobType) {
 //   return data;
 // }
 
+function disablePullToRefresh() {
+  document.body.style.overscrollBehaviorY = "contain";
+}
+
+function enablePullToRefresh() {
+  document.body.style.overscrollBehaviorY = "";
+}
+
 function syncDynamicFields(taskKey) {
   const box = document.getElementById(`dyn_${taskKey}`);
   if (!box) return;
@@ -339,6 +356,8 @@ cameraInput.onchange = async e => {
   processingMap[CURRENT_TASK] = true;
   loadTasks();
 
+  updateRefreshLock();
+
   const takenAt = new Date().toISOString();
 
   let blob;
@@ -375,6 +394,7 @@ const tempFilename =
       if (idx !== -1) {
         cachedTasks[idx].status = "OFFLINE_PENDING";
         cachedTasks[idx].finalized = true; 
+        updateRefreshLock();
       }
       localStorage.setItem(TASK_CACHE_KEY, JSON.stringify(cachedTasks));
     delete processingMap[CURRENT_TASK];
@@ -387,6 +407,7 @@ const tempFilename =
   uploadingMap[CURRENT_TASK] = true;
   delete processingMap[CURRENT_TASK];
   loadTasks();
+  updateRefreshLock();
 
   try {
     // 🔥 DO NOT PASS FILENAME ANYMORE
@@ -405,6 +426,14 @@ const tempFilename =
   CURRENT_TASK = null;
   loadTasks();
 };
+
+function updateRefreshLock() {
+  if (isBusy()) {
+    disablePullToRefresh();
+  } else {
+    enablePullToRefresh();
+  }
+}
   
   
 function resolveStatus(task) {
@@ -470,6 +499,7 @@ async function uploadNow(taskKey, blob, takenAt, _ignoredFilename, deliveryData 
   }
 
   await update(ref(db, `tasks/${taskKey}`), updatePayload);
+  updateRefreshLock();
 }
 
 async function preloadDriverUIConfig(tasks) {
@@ -810,10 +840,10 @@ async function processOfflineQueue() {
   for (const item of q) {
     try {
       const blob = await fetch(item.image).then(r => r.blob());
-
+  
       uploadingMap[item.taskKey] = true;
       loadTasks();
-
+  
       await uploadNow(
         item.taskKey,
         blob,
@@ -821,8 +851,32 @@ async function processOfflineQueue() {
         null,
         item.deliveryData || {}
       );
-
+  
+      /* ================= FIX 1 START ================= */
+  
+      // ✅ UPDATE LOCAL TASK CACHE AFTER OFFLINE UPLOAD
+      const cachedTasks =
+        JSON.parse(localStorage.getItem(TASK_CACHE_KEY) || "[]");
+  
+      const idx = cachedTasks.findIndex(t => t._key === item.taskKey);
+      if (idx !== -1) {
+        cachedTasks[idx].status = "COMPLETED";
+        cachedTasks[idx].finalized = true;
+      }
+  
+      localStorage.setItem(
+        TASK_CACHE_KEY,
+        JSON.stringify(cachedTasks)
+      );
+  
+      /* ================= FIX 1 END ================= */
+  
+      // ✅ CLEAR FLAGS
       delete uploadingMap[item.taskKey];
+      updateRefreshLock();
+      delete processingMap[item.taskKey];
+  
+      loadTasks();
     } catch (e) {
       console.error("❌ Offline upload failed", e);
       return; // STOP if one fails
@@ -831,12 +885,38 @@ async function processOfflineQueue() {
 
   // ✅ CLEAR QUEUE ONLY AFTER SUCCESS
   setQueue([]);
+  updateRefreshLock();
 }
 
 window.addEventListener("online", async () => {
   await processOfflineQueue();
   loadTasks();
 });
+
+let startY = 0;
+
+window.addEventListener(
+  "touchstart",
+  e => {
+    if (e.touches.length === 1) {
+      startY = e.touches[0].clientY;
+    }
+  },
+  { passive: true }
+);
+
+window.addEventListener(
+  "touchmove",
+  e => {
+    const y = e.touches[0].clientY;
+    const pullingDown = y > startY;
+
+    if (pullingDown && window.scrollY === 0 && isBusy()) {
+      e.preventDefault();
+    }
+  },
+  { passive: false }
+);
   
 </script>
 
