@@ -56,7 +56,7 @@ button {
 
 <body>
 
-<h2>⚙ Driver UI ConfigurationV2.0.2</h2>
+<h2>⚙ Driver UI Configuration v2.1.0</h2>
 
 <div class="card">
   <label>Job Type</label>
@@ -123,7 +123,8 @@ function renderMethods() {
 
     div.innerHTML = `
       <b>${method}</b>
-      <input class="field-label" placeholder="Field label (e.g. Payment Method)">
+
+      <input class="field-label" placeholder="Field label">
       <select class="field-type">
         <option value="text">Text</option>
         <option value="textarea">Textarea</option>
@@ -133,63 +134,10 @@ function renderMethods() {
 
       <div class="field-list">
         ${Object.entries(fields).map(([key, f]) => `
-          <div style="margin-top:10px;border-top:1px dashed #ccc;padding-top:10px;">
+          <div style="margin-top:12px;border-top:1px dashed #ccc;padding-top:10px;">
             <b>${f.label}</b> (${f.type})
 
-          ${f.type === "radio" ? `
-  <div style="margin-top:8px;border-top:1px dashed #ccc;padding-top:8px;">
-    <b>Radio Options</b>
-
-    ${(f.options || []).map((opt, idx) => `
-      <div style="border:1px solid #ddd;padding:8px;margin-top:8px;border-radius:6px;">
-          <input
-    placeholder="Option name (e.g. C100-Disconnected)"
-    value="${opt.value}"
-    onchange="updateRadioOptionValue('${method}','${key}',${idx},this.value)">
-
-        <div style="margin-left:12px;margin-top:6px;">
-          ${(opt.extraFields || []).map((ef, efIdx) => `
-            <div style="margin-top:6px;">
-              <input
-                placeholder="Textbox label"
-                value="${ef.label}"
-                onchange="updateRadioExtraLabel('${method}','${key}',${idx},${efIdx},this.value)"
-              >
-
-              <label class="required-row">
-                <input type="checkbox"
-                  ${ef.required ? "checked" : ""}
-                  onchange="updateRadioExtraRequired('${method}','${key}',${idx},${efIdx},this.checked)">
-                <span>Required</span>
-              </label>
-
-              <button class="danger"
-                onclick="removeRadioExtraField('${method}','${key}',${idx},${efIdx})">
-                ❌
-              </button>
-            </div>
-          `).join("")}
-
-          <button class="secondary"
-            onclick="addRadioExtraField('${method}','${key}',${idx})">
-            ➕ Add textbox for this option
-          </button>
-        </div>
-
-        <button class="danger"
-          style="margin-top:6px;"
-          onclick="removeRadioOption('${method}','${key}',${idx})">
-          ❌ Remove Option
-        </button>
-      </div>
-    `).join("")}
-
-    <button class="secondary"
-      onclick="addRadioOption('${method}','${key}')">
-      ➕ Add Option
-    </button>
-  </div>
-` : ""}  
+            ${f.type === "radio" ? renderRadio(method, key, f) : ""}
           </div>
         `).join("")}
       </div>
@@ -199,12 +147,9 @@ function renderMethods() {
       const label = div.querySelector(".field-label").value.trim();
       const type = div.querySelector(".field-type").value;
 
-      if (!label) {
-        alert("Please enter a field label");
-        return;
-      }
+      if (!label) return alert("Field label required");
 
-      const key = label.toLowerCase().replace(/\s+/g,"");
+      const key = label.toLowerCase().replace(/\s+/g,"_");
 
       STATE.methods[method][key] = {
         label,
@@ -220,41 +165,114 @@ function renderMethods() {
   });
 }
 
-/* ================= RADIO FUNCTIONS ================= */
-window.addRadioOption = (method, field) => {
-  STATE.methods[method][field].options.push({
-    value:"",
-    extraFields:[]
-  });
+/* ================= RADIO RENDER ================= */
+function renderRadio(method, fieldKey, field) {
+  return `
+    <div style="margin-top:8px;">
+      <b>Radio Options</b>
+
+      ${(field.options || []).map((opt, idx) => `
+        <div style="border:1px solid #ddd;padding:8px;margin-top:8px;border-radius:6px;">
+          <input
+            placeholder="Option name"
+            value="${opt.value}"
+            onchange="updateRadioOptionValue('${method}','${fieldKey}',${idx},this.value)">
+
+          ${(opt.extraFields || []).map((ef, j) => `
+            <div style="margin-top:6px;margin-left:12px;">
+              <b>${ef.type}</b>
+              <input
+                placeholder="Field label"
+                value="${ef.label}"
+                onchange="updateRadioExtraLabel('${method}','${fieldKey}',${idx},${j},this.value)">
+
+              <label class="required-row">
+                <input type="checkbox"
+                  ${ef.required ? "checked" : ""}
+                  onchange="updateRadioExtraRequired('${method}','${fieldKey}',${idx},${j},this.checked)">
+                Required
+              </label>
+
+              <button class="danger"
+                onclick="removeRadioExtraField('${method}','${fieldKey}',${idx},${j})">
+                ❌ Remove Field
+              </button>
+            </div>
+          `).join("")}
+
+          <select style="margin-top:6px;">
+            <option value="text">Text</option>
+            <option value="textarea">Textarea</option>
+            <option value="radio">Radio</option>
+          </select>
+
+          <button class="secondary"
+            onclick="
+              addRadioExtraField(
+                '${method}',
+                '${fieldKey}',
+                ${idx},
+                this.previousElementSibling.value
+              )">
+            ➕ Add Field
+          </button>
+
+          <button class="danger"
+            onclick="removeRadioOption('${method}','${fieldKey}',${idx})">
+            ❌ Remove Option
+          </button>
+        </div>
+      `).join("")}
+
+      <button class="secondary"
+        onclick="addRadioOption('${method}','${fieldKey}')">
+        ➕ Add Option
+      </button>
+    </div>
+  `;
+}
+
+/* ================= RADIO LOGIC ================= */
+window.addRadioOption = (m,f) => {
+  STATE.methods[m][f].options.push({ value:"", extraFields:[] });
   renderMethods();
 };
 
-window.updateRadioValue = (m,f,i,val) => {
-  STATE.methods[m][f].options[i].value = val;
+window.updateRadioOptionValue = (m,f,i,v) => {
+  STATE.methods[m][f].options[i].value = v;
 };
 
-window.addExtraField = (m,f,i) => {
+window.addRadioExtraField = (m,f,i,type) => {
   STATE.methods[m][f].options[i].extraFields.push({
     label:"",
-    required:false
+    type,
+    required:false,
+    ...(type === "radio" ? { options: [] } : {})
   });
   renderMethods();
 };
 
-window.updateExtraLabel = (m,f,i,j,val) => {
-  STATE.methods[m][f].options[i].extraFields[j].label = val;
+window.updateRadioExtraLabel = (m,f,i,j,v) => {
+  STATE.methods[m][f].options[i].extraFields[j].label = v;
 };
 
-window.updateExtraRequired = (m,f,i,j,val) => {
-  STATE.methods[m][f].options[i].extraFields[j].required = val;
+window.updateRadioExtraRequired = (m,f,i,j,v) => {
+  STATE.methods[m][f].options[i].extraFields[j].required = v;
+};
+
+window.removeRadioExtraField = (m,f,i,j) => {
+  STATE.methods[m][f].options[i].extraFields.splice(j,1);
+  renderMethods();
+};
+
+window.removeRadioOption = (m,f,i) => {
+  STATE.methods[m][f].options.splice(i,1);
+  renderMethods();
 };
 
 /* ================= SAVE ================= */
 window.saveConfig = async function () {
-  if (!STATE.jobType) {
-    alert("Nothing to save");
-    return;
-  }
+  if (!STATE.jobType) return alert("Nothing to save");
 
   await update(
     ref(db, `config/driverUI/jobTypes/${STATE.jobType}`),
@@ -265,76 +283,6 @@ window.saveConfig = async function () {
   );
 
   alert("✅ Configuration saved");
-};
-
-// ✅ Add a radio option (no textbox yet)
-window.addRadioOption = (method, fieldKey) => {
-  const field = STATE.methods[method][fieldKey];
-  if (!field.options) field.options = [];
-
-  field.options.push({
-    value: "",
-    extraFields: []
-  });
-
-  IS_DIRTY = true;
-  renderMethods();
-};
-
-// ✅ Update radio option label
-window.updateRadioOptionValue = (method, fieldKey, optIdx, value) => {
-  STATE.methods[method][fieldKey].options[optIdx].value = value.trim();
-  IS_DIRTY = true;
-};
-
-// ✅ Add textbox under a specific radio option
-window.addRadioExtraField = (method, fieldKey, optIdx) => {
-  const opt = STATE.methods[method][fieldKey].options[optIdx];
-  if (!opt.extraFields) opt.extraFields = [];
-
-  opt.extraFields.push({
-    label: "",
-    type: "text",
-    required: false
-  });
-
-  IS_DIRTY = true;
-  renderMethods();
-};
-
-// ✅ Update textbox label
-window.updateRadioExtraLabel = (method, fieldKey, optIdx, fieldIdx, value) => {
-  STATE.methods[method][fieldKey]
-    .options[optIdx]
-    .extraFields[fieldIdx].label = value;
-
-  IS_DIRTY = true;
-};
-
-// ✅ Toggle required for textbox
-window.updateRadioExtraRequired = (method, fieldKey, optIdx, fieldIdx, value) => {
-  STATE.methods[method][fieldKey]
-    .options[optIdx]
-    .extraFields[fieldIdx].required = value;
-
-  IS_DIRTY = true;
-};
-
-// ❌ Remove textbox under option
-window.removeRadioExtraField = (method, fieldKey, optIdx, fieldIdx) => {
-  STATE.methods[method][fieldKey]
-    .options[optIdx]
-    .extraFields.splice(fieldIdx, 1);
-
-  IS_DIRTY = true;
-  renderMethods();
-};
-
-// ❌ Remove radio option
-window.removeRadioOption = (method, fieldKey, optIdx) => {
-  STATE.methods[method][fieldKey].options.splice(optIdx, 1);
-  IS_DIRTY = true;
-  renderMethods();
 };
 </script>
 
