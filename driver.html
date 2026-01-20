@@ -139,7 +139,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebas
 import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.4.81-DYNAMIC";
+const VERSION = "Driver v3.4.82-DYNAMIC";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -706,28 +706,28 @@ async function loadTasks() {
     await preloadDriverUIConfig(tasks);
 
     tasks.sort((a, b) => {
-  const priority = {
-    PENDING: 1,
-    PROCESSING: 2,
-    UPLOADING: 3,
-    COMPLETED: 4
-  };
-
-  const sa = priority[resolveStatus(a)] || 99;
-  const sb = priority[resolveStatus(b)] || 99;
-
-  // 1️⃣ STATUS FIRST
-  if (sa !== sb) return sa - sb;
-
-  // 2️⃣ SAME UPLOAD BATCH
-  if (a.uploadBatch !== b.uploadBatch) {
-    return (a.uploadBatch || 0) - (b.uploadBatch || 0);
-  }
-
-  // 3️⃣ PRESERVE EXCEL ROW ORDER
-  return (a.rowIndex || 0) - (b.rowIndex || 0);
-});
-
+      const priority = {
+        PENDING: 1,
+        PROCESSING: 99,
+        UPLOADING: 99,
+        COMPLETED: 100
+      };
+    
+      const sa = priority[resolveStatus(a)] ?? 999;
+      const sb = priority[resolveStatus(b)] ?? 999;
+    
+      // 1️⃣ STATUS FIRST
+      if (sa !== sb) return sa - sb;
+    
+      // 2️⃣ SAME UPLOAD BATCH
+      if (a.uploadBatch !== b.uploadBatch) {
+        return (a.uploadBatch || 0) - (b.uploadBatch || 0);
+      }
+    
+      // 3️⃣ PRESERVE EXCEL ROW ORDER
+      return (a.rowIndex || 0) - (b.rowIndex || 0);
+    });
+    
     updateRemainingCounter(tasks);
     renderJobTypeFilters(tasks);
     const selectedDate = dateFilter.value; // YYYY-MM-DD
