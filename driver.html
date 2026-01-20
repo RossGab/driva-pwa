@@ -93,7 +93,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebas
 import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.4.60-DYNAMIC";
+const VERSION = "Driver v3.4.61-DYNAMIC";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -126,28 +126,67 @@ appVersion.innerText = `Driver: ${DRIVER_ID} | ${VERSION}`;
 let gpsWatchId = null;
 
 async function loadDriverUI(jobType) {
-  const STORAGE_KEY = "driverUIConfigCache";
-  const cache = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
-
-  // If online, check Firebase for updates
-  if (navigator.onLine) {
-    const snap = await get(
-      ref(db, `config/driverUI/jobTypes/${jobType}`)
-    );
-
-    if (snap.exists()) {
-      const remote = snap.val();
-      const localUpdatedAt = cache[jobType]?.updatedAt;
-
-      // 🔥 Only refresh if changed
-      if (remote.updatedAt !== localUpdatedAt) {
-        cache[jobType] = remote;
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(cache));
-      }
-    }
+  // 1️⃣ Memory cache
+  if (DRIVER_UI_CACHE[jobType]) {
+    return DRIVER_UI_CACHE[jobType];
   }
 
-  return cache[jobType]?.deliveryMethods || {};
+  // 2️⃣ LocalStorage cache
+  const stored = JSON.parse(
+    localStorage.getItem(DRIVER_UI_STORAGE_KEY) || "{}"
+  );
+
+  const cached = stored[jobType];
+
+  // 3️⃣ If offline → use cache if available
+  if (!navigator.onLine) {
+    if (cached) {
+      DRIVER_UI_CACHE[jobType] = cached.deliveryMethods || cached;
+      return DRIVER_UI_CACHE[jobType];
+    }
+    return {};
+  }
+
+  // 4️⃣ Fetch metadata (updatedAt) FIRST
+  const metaSnap = await get(
+    ref(db, `config/driverUI/jobTypes/${jobType}/updatedAt`)
+  );
+
+  const serverUpdatedAt = metaSnap.val();
+
+  // 5️⃣ Cache HIT + same version → reuse
+  if (
+    cached &&
+    cached.updatedAt &&
+    serverUpdatedAt &&
+    cached.updatedAt === serverUpdatedAt
+  ) {
+    DRIVER_UI_CACHE[jobType] = cached.deliveryMethods;
+    return DRIVER_UI_CACHE[jobType];
+  }
+
+  // 6️⃣ Fetch FULL config (changed or first load)
+  const snap = await get(
+    ref(db, `config/driverUI/jobTypes/${jobType}/deliveryMethods`)
+  );
+
+  const deliveryMethods = snap.val() || {};
+
+  // 7️⃣ Save fresh cache
+  const payload = {
+    updatedAt: serverUpdatedAt || new Date().toISOString(),
+    deliveryMethods
+  };
+
+  DRIVER_UI_CACHE[jobType] = deliveryMethods;
+  stored[jobType] = payload;
+
+  localStorage.setItem(
+    DRIVER_UI_STORAGE_KEY,
+    JSON.stringify(stored)
+  );
+
+  return deliveryMethods;
 }
 
 // async function loadDriverUI(jobType) {
