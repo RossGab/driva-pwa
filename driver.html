@@ -93,7 +93,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebas
 import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.4.63-DYNAMIC";
+const VERSION = "Driver v3.4.64-DYNAMIC";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -117,6 +117,11 @@ const TASK_CACHE_KEY = "cachedTasks";
 const processingMap = {};
 const uploadingMap = {};
 let SEARCH_TERM = "";
+
+searchBox.addEventListener("input", e => {
+  SEARCH_TERM = e.target.value.toLowerCase();
+  loadTasks(); // re-render with filter
+});
 
 let DRIVER_ID = localStorage.getItem("driverId");
 while (!DRIVER_ID) DRIVER_ID = prompt("Enter Driver ID");
@@ -512,7 +517,24 @@ async function loadTasks() {
     });
 
     updateRemainingCounter(tasks);
-    render(tasks.filter(t => resolveStatus(t) !== "COMPLETED"));
+    const filtered = tasks
+      .filter(t => resolveStatus(t) !== "COMPLETED")
+      .filter(t => {
+        if (!SEARCH_TERM) return true;
+    
+        const haystack = `
+          ${t.CUSTOMERNAME || ""}
+          ${t.ADDRESS || ""}
+          ${t.ACCOUNTNUMBER || ""}
+          ${t.METERNUMBER || ""}
+          ${t.MRU || ""}
+          ${t.SEQUENCE || ""}
+        `.toLowerCase();
+    
+        return haystack.includes(SEARCH_TERM);
+      });
+    
+    render(filtered);
 
     if (!gpsWatchId) {
       setTimeout(() => startGPSTracking(DRIVER_ID), 1000);
