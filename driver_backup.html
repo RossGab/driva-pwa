@@ -10,155 +10,164 @@
 <meta name="theme-color" content="#222222">
 
 <style>
-body {
-  font-family: Arial, sans-serif;
-  background: #f4f4f4;
-  padding: 10px;
-}
-
-#appVersion {
-  background: #222;
-  color: #fff;
-  padding: 8px;
-  text-align: center;
-  margin-bottom: 6px;
-}
-
-#offlineBanner {
-  background: #c0392b;
-  color: #fff;
-  padding: 6px;
-  text-align: center;
-  margin-bottom: 10px;
-  display: none;
-}
-
-/* 🔍 SEARCH */
-#searchBox {
-  width: 100%;
-  padding: 10px;
-  margin-bottom: 10px;
-  border-radius: 6px;
-  border: 1px solid #ccc;
-  font-size: 14px;
-}
-
-.task {
-  background: #fff;
-  padding: 12px;
-  margin-bottom: 10px;
-  border-radius: 8px;
-  border-left: 5px solid orange;
-}
-
-.task.completed {
-  border-left-color: green;
-}
-
-.small {
-  font-size: 13px;
-  color: #555;
-  margin-top: 4px;
-}
-.radio-group {
-  margin-top: 6px;
-  font-size: 14px;
-}
-
-.radio-group label {
+body { font-family: Arial, sans-serif; background:#f4f4f4; padding:10px; }
+#appVersion { background:#222;color:#fff;padding:8px;text-align:center;margin-bottom:6px; }
+#offlineBanner { background:#c0392b;color:#fff;padding:6px;text-align:center;margin-bottom:10px;display:none; }
+#searchBox { width:100%;padding:10px;margin-bottom:10px;border-radius:6px;border:1px solid #ccc;font-size:14px; }
+.task { background:#fff;padding:12px;margin-bottom:10px;border-radius:8px;border-left:5px solid orange; }
+.task.completed { border-left-color:green; }
+.small { font-size:13px;color:#555;margin-top:4px; }
+.radio-group label { display:block;margin-top:4px; }
+textarea { width:100%;min-height:60px;margin-top:6px;padding:6px;font-size:14px; }
+.offline-indicator { font-weight:bold;color:#c0392b;margin-top:6px; }
+.uploading { font-weight:bold;color:#f39c12;margin-top:6px; }
+button { width:100%;padding:10px;margin-top:6px;border-radius:6px;border:none;font-size:14px; }
+.capture { background:#007bff;color:#fff; }
+.capture-label {
   display: block;
-  margin-top: 4px;
+  text-align: center;
+  background: #007bff;
+  color: #fff;
+  padding: 12px;
+  border-radius: 6px;
+  font-size: 14px;
+  cursor: pointer;
+  user-select: none;
+}
+#jobTypeOptions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 6px;
 }
 
-textarea {
+.job-type-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: #fff;
+  border: 1px solid #ddd;
+  padding: 6px 10px;
+  border-radius: 18px;
+  font-size: 13px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.job-type-chip input {
+  margin: 0;
+}
+.uploading,
+.offline-indicator {
+  pointer-events: none;
+}
+.task {
+  pointer-events: auto;
+}
+button.capture {
+  position: relative;
+  z-index: 9999;
+  pointer-events: auto;
+}
+.toggle { background:#0069d9;color:#fff; }
+.delivery-fields {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+  margin-top: 10px;
+}
+
+.delivery-fields label {
+  font-weight: bold;
+  font-size: 13px;
+}
+
+.delivery-fields input,
+.delivery-fields textarea {
   width: 100%;
-  min-height: 60px;
-  margin-top: 6px;
-  padding: 6px;
+  padding: 8px;
   font-size: 14px;
+  box-sizing: border-box;
+}
+
+.delivery-fields textarea {
+  min-height: 90px;
   resize: vertical;
 }
-
-.radio-group input:disabled {
-  opacity: 0.6;
-}
-
-.radio-group input:disabled + span {
-  color: #999;
-}
-
-.offline-indicator {
-  margin-top: 6px;
-  font-weight: bold;
-  color: #c0392b;
-}
-
-.uploading {
-  margin-top: 6px;
-  font-weight: bold;
-  color: #f39c12;
-}
-
-button {
-  width: 100%;
-  padding: 10px;
-  margin-top: 6px;
-  border-radius: 6px;
-  border: none;
-  font-size: 14px;
-}
-
-button:disabled {
-  background: #aaa;
-}
-
-.capture { background: #007bff; color: #fff; }
-.toggle { background: #0069d9; color: #fff; }
-
-img {
-  width: 100%;
-  margin-top: 8px;
-  border-radius: 6px;
-}
+img { width:100%;margin-top:8px;border-radius:6px; }
 </style>
 </head>
 
 <body>
+<button id="settingsBtn"
+  style="
+    position: fixed;
+    top: 10px;
+    right: 10px;
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    border: none;
+    background: #fff;
+    font-size: 20px;
+    box-shadow: 0 2px 6px rgba(0,0,0,.2);
+    z-index: 99999;
+  ">
+  ⚙️
+</button>
 
 <div id="appVersion"></div>
+<div id="taskCounter"
+   style="background:#fff;padding:8px;text-align:center;
+        margin-bottom:10px;border-radius:6px;font-weight:bold;">
+</div>
 <div id="offlineBanner">⚠ Offline — photos will upload automatically</div>
 
-<!-- 🔍 SEARCH INPUT -->
-<input id="searchBox" placeholder="Search tasks (name, address, remarks, etc.)">
-
-<div id="taskList">Loading tasks...</div>
-
+<input
+  type="date"
+  id="dateFilter"
+  style="
+    width:100%;
+    padding:10px;
+    margin-bottom:8px;
+    border-radius:6px;
+    border:1px solid #ccc;
+    font-size:14px;
+  "
+>
+<div id="jobTypeFilter"
+  style="
+    background:#fff;
+    padding:10px;
+    margin-bottom:8px;
+    border-radius:6px;
+    font-size:13px;
+  ">
+  <b>Job Type</b>
+  <div id="jobTypeOptions"></div>
+</div>
+<input id="searchBox" placeholder="Search tasks">
+<div id="taskList">Loading tasks…</div>
 <input type="file" id="cameraInput" accept="image/*" capture="environment" hidden>
 
-
-
 <script type="module">
-  
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import {
-  getDatabase, ref, get, update, query,
-  orderByChild, equalTo
-} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
-import {
-  getStorage, ref as sRef, uploadBytes, getDownloadURL
-} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
+import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.4.17";
-  // 🔒 Billing data cache (per task)
+const VERSION = "Driver v3.4.84-DYNAMIC-test";
 const BILLING_CACHE = {};
+const DRIVER_UI_CACHE = {};
+const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
+const selectedJobTypes = new Set();
+let jobTypeFilterInitialized = false;
 
-/* ================= CONFIG ================= */
 const firebaseConfig = {
   apiKey: "AIzaSyDFW61pnwLvh6HGKWt10zLYNr860fI8vkg",
   authDomain: "driva-pwa.firebaseapp.com",
   databaseURL: "https://driva-pwa-default-rtdb.firebaseio.com",
   projectId: "driva-pwa",
-  storageBucket: "driva-pwa.firebasestorage.app",
+  storageBucket: "driva-pwa.firebasestorage.app", // ✅ FIX
   messagingSenderId: "299138219722",
   appId: "1:299138219722:web:623ff6b0a067ea822dfe33"
 };
@@ -167,55 +176,269 @@ const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 const storage = getStorage(app);
 
-/* ================= CONSTANTS ================= */
 const QUEUE_KEY = "offlineQueue";
 const TASK_CACHE_KEY = "cachedTasks";
-const PRIORITY = {
-  PENDING: 1,
-  PROCESSING: 1.5,
-  UPLOADING: 2,
-  SAVED: 2,
-  COMPLETED: 3
-};
-
 const processingMap = {};
 const uploadingMap = {};
 let SEARCH_TERM = "";
+const dateFilter = document.getElementById("dateFilter");
 
-/* ================= DRIVER ================= */
+// ✅ Default to today
+function getLocalDateYYYYMMDD() {
+  const d = new Date();
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+dateFilter.value = getLocalDateYYYYMMDD();
+
+// Re-load when date changes
+dateFilter.addEventListener("change", () => {
+  loadTasks();
+});
+
+function isBusy() {
+  const queue = JSON.parse(localStorage.getItem("offlineQueue") || "[]");
+  return (
+    queue.length > 0 ||
+    Object.keys(processingMap).length > 0 ||
+    Object.keys(uploadingMap).length > 0
+  );
+}
+
+searchBox.addEventListener("input", e => {
+  SEARCH_TERM = e.target.value.toLowerCase();
+  loadTasks(); // re-render with filter
+});
+
 let DRIVER_ID = localStorage.getItem("driverId");
 while (!DRIVER_ID) DRIVER_ID = prompt("Enter Driver ID");
 localStorage.setItem("driverId", DRIVER_ID);
-document.getElementById("appVersion").innerText =
-  `Driver: ${DRIVER_ID} | ${VERSION}`;
 
+document.getElementById("settingsBtn").onclick = () => {
+  const current = localStorage.getItem("driverId") || "";
 
-// ================= LIVE DRIVER LOCATION =================
-const LOCATION_INTERVAL = 45000; // 45 seconds
-let lastLocationSent = 0;
+  const next = prompt("Enter new Driver ID", current);
+  if (!next) return;
+  if (next === current) return;
 
-function startLiveTracking() {
-  if (!("geolocation" in navigator)) {
-    console.warn("Geolocation not supported");
-    return;
+  localStorage.setItem("driverId", next);
+  alert("Driver ID changed. Reloading…");
+  location.reload();
+};
+
+appVersion.innerText = `Driver: ${DRIVER_ID} | ${VERSION}`;
+
+let gpsWatchId = null;
+
+async function loadDriverUI(jobType) {
+  // 1️⃣ Memory cache
+  if (DRIVER_UI_CACHE[jobType]) {
+    return DRIVER_UI_CACHE[jobType];
   }
 
-  navigator.geolocation.watchPosition(
+  // 2️⃣ LocalStorage cache
+  const stored = JSON.parse(
+    localStorage.getItem(DRIVER_UI_STORAGE_KEY) || "{}"
+  );
+
+  const cached = stored[jobType];
+
+  // 3️⃣ If offline → use cache if available
+  if (!navigator.onLine) {
+    if (cached) {
+      DRIVER_UI_CACHE[jobType] = cached.deliveryMethods || cached;
+      return DRIVER_UI_CACHE[jobType];
+    }
+    return {};
+  }
+
+  // 4️⃣ Fetch metadata (updatedAt) FIRST
+  const metaSnap = await get(
+    ref(db, `config/driverUI/jobTypes/${jobType}/updatedAt`)
+  );
+
+  const serverUpdatedAt = metaSnap.val();
+
+  // 5️⃣ Cache HIT + same version → reuse
+  if (
+    cached &&
+    cached.updatedAt &&
+    serverUpdatedAt &&
+    cached.updatedAt === serverUpdatedAt
+  ) {
+    DRIVER_UI_CACHE[jobType] = cached.deliveryMethods;
+    return DRIVER_UI_CACHE[jobType];
+  }
+
+  // 6️⃣ Fetch FULL config (changed or first load)
+  const snap = await get(
+    ref(db, `config/driverUI/jobTypes/${jobType}/deliveryMethods`)
+  );
+
+  const deliveryMethods = snap.val() || {};
+
+  // 7️⃣ Save fresh cache
+  const payload = {
+    updatedAt: serverUpdatedAt || new Date().toISOString(),
+    deliveryMethods
+  };
+
+  DRIVER_UI_CACHE[jobType] = deliveryMethods;
+  stored[jobType] = payload;
+
+  localStorage.setItem(
+    DRIVER_UI_STORAGE_KEY,
+    JSON.stringify(stored)
+  );
+
+  return deliveryMethods;
+}
+
+// async function loadDriverUI(jobType) {
+//   // 1️⃣ Memory cache
+//   if (DRIVER_UI_CACHE[jobType]) return DRIVER_UI_CACHE[jobType];
+
+//   // 2️⃣ LocalStorage cache (OFFLINE SAFE)
+//   const stored = JSON.parse(
+//     localStorage.getItem(DRIVER_UI_STORAGE_KEY) || "{}"
+//   );
+
+//   if (stored[jobType]) {
+//     DRIVER_UI_CACHE[jobType] = stored[jobType];
+//     return stored[jobType];
+//   }
+
+//   // 3️⃣ Online fetch ONLY if online
+//   if (!navigator.onLine) {
+//     return {}; // offline + no cache = empty
+//   }
+
+//   const snap = await get(
+//     ref(db, `config/driverUI/jobTypes/${jobType}/deliveryMethods`)
+//   );
+
+//   const data = snap.val() || {};
+
+//   // 4️⃣ Save to memory + localStorage
+//   DRIVER_UI_CACHE[jobType] = data;
+//   stored[jobType] = data;
+
+//   localStorage.setItem(
+//     DRIVER_UI_STORAGE_KEY,
+//     JSON.stringify(stored)
+//   );
+
+//   return data;
+// }
+
+function disablePullToRefresh() {
+  document.body.style.overscrollBehaviorY = "contain";
+}
+
+function enablePullToRefresh() {
+  document.body.style.overscrollBehaviorY = "";
+}
+
+function renderJobTypeFilters(tasks) {
+  const container = document.getElementById("jobTypeOptions");
+  if (!container) return;
+
+  const selectedDate = dateFilter.value; // YYYY-MM-DD
+
+  // ✅ COUNT ONLY PENDING TASKS FOR SELECTED DATE
+  const jobTypeCounts = {};
+
+  tasks.forEach(t => {
+    const status = resolveStatus(t);
+
+    // ❌ only pending
+    if (status !== "PENDING") return;
+
+    // ❌ must match selected date
+    if (!t.createdAt || !t.createdAt.startsWith(selectedDate)) return;
+
+    if (!t.JOBTYPE) return;
+
+    jobTypeCounts[t.JOBTYPE] =
+      (jobTypeCounts[t.JOBTYPE] || 0) + 1;
+  });
+
+  const jobTypes = Object.keys(jobTypeCounts).sort();
+
+  container.innerHTML = "";
+
+  jobTypes.forEach(type => {
+    const label = document.createElement("label");
+    label.className = "job-type-chip";
+
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+
+    // ✅ First render → check all
+    if (!jobTypeFilterInitialized) {
+      checkbox.checked = true;
+      selectedJobTypes.add(type);
+    } else {
+      checkbox.checked = selectedJobTypes.has(type);
+    }
+
+    checkbox.onchange = () => {
+      if (checkbox.checked) {
+        selectedJobTypes.add(type);
+      } else {
+        selectedJobTypes.delete(type);
+      }
+      loadTasks();
+    };
+
+    label.appendChild(checkbox);
+    label.append(` ${type} (${jobTypeCounts[type]})`);
+
+    container.appendChild(label);
+  });
+
+  jobTypeFilterInitialized = true;
+}
+
+function syncDynamicFields(taskKey) {
+  const box = document.getElementById(`dyn_${taskKey}`);
+  if (!box) return;
+
+  if (!BILLING_CACHE[taskKey]) BILLING_CACHE[taskKey] = {};
+
+  const inputs = box.querySelectorAll("input, textarea");
+
+  inputs.forEach(el => {
+    const fieldKey = el.getAttribute("data-key");
+    if (!fieldKey) return;
+
+    BILLING_CACHE[taskKey][fieldKey] = el.value.trim();
+  });
+}
+
+window.addEventListener("beforeunload", () => {
+  if (gpsWatchId !== null) {
+    navigator.geolocation.clearWatch(gpsWatchId);
+  }
+});
+
+function startGPSTracking(driverId) {
+  if (!navigator.geolocation) return;
+
+  gpsWatchId = navigator.geolocation.watchPosition(
     pos => {
-      if (!navigator.onLine) return;
-
-      const now = Date.now();
-      if (now - lastLocationSent < LOCATION_INTERVAL) return;
-      lastLocationSent = now;
-
-      update(ref(db, `driverStatus/${DRIVER_ID}`), {
+      update(ref(db, `driverStatus/${driverId}`), {
         latitude: pos.coords.latitude,
         longitude: pos.coords.longitude,
-        lastSeen: new Date().toISOString(),
-        driverId: DRIVER_ID
+        lastSeen: new Date().toISOString()
       });
     },
-    err => console.error("Location error:", err),
+    err => {
+      console.warn("GPS error:", err.message);
+    },
     {
       enableHighAccuracy: true,
       maximumAge: 10000,
@@ -223,557 +446,787 @@ function startLiveTracking() {
     }
   );
 }
-startLiveTracking();
 
-
-/* ================= SEARCH ================= */
-document.getElementById("searchBox").addEventListener("input", e => {
-  SEARCH_TERM = e.target.value.toLowerCase();
-  loadTasks();
-});
-
-/* ================= NETWORK ================= */
+/* ===== NETWORK ===== */
 function updateNetwork() {
-  document.getElementById("offlineBanner").style.display =
-    navigator.onLine ? "none" : "block";
+  offlineBanner.style.display = navigator.onLine ? "none" : "block";
 }
 window.addEventListener("online", updateNetwork);
 window.addEventListener("offline", updateNetwork);
 updateNetwork();
 
-/* ================= GEO ================= */
-function getLocation() {
-  return new Promise(resolve => {
-    navigator.geolocation.getCurrentPosition(
-      pos => resolve(pos.coords),
-      () => resolve(null),
-      { enableHighAccuracy: true, timeout: 10000 }
-    );
-  });
-}
+/* ===== QUEUE ===== */
+const getQueue = () => JSON.parse(localStorage.getItem(QUEUE_KEY) || "[]");
+const setQueue = q => localStorage.setItem(QUEUE_KEY, JSON.stringify(q));
 
-/* ================= QUEUE ================= */
-const getQueue = () =>
-  JSON.parse(localStorage.getItem(QUEUE_KEY) || "[]");
-
-const setQueue = q =>
-  localStorage.setItem(QUEUE_KEY, JSON.stringify(q));
-
-/* ================= IMAGE ================= */
+/* ===== IMAGE ===== */
 function compressImage(file) {
   return new Promise(resolve => {
     const img = new Image();
-    const reader = new FileReader();
-    reader.onload = e => img.src = e.target.result;
-
+    const r = new FileReader();
+    r.onload = e => img.src = e.target.result;
     img.onload = () => {
-      const canvas = document.createElement("canvas");
-      let w = img.width;
-      let h = img.height;
+      const c = document.createElement("canvas");
+      let w = img.width, h = img.height;
       if (w > 1280) { h *= 1280 / w; w = 1280; }
-      canvas.width = w;
-      canvas.height = h;
-      canvas.getContext("2d").drawImage(img, 0, 0, w, h);
-      canvas.toBlob(b => resolve(b), "image/jpeg", 0.65);
+      c.width = w; c.height = h;
+      c.getContext("2d").drawImage(img, 0, 0, w, h);
+      c.toBlob(b => resolve(b), "image/jpeg", 0.65);
     };
-    reader.readAsDataURL(file);
+    r.readAsDataURL(file);
   });
 }
 
-const toBase64 = blob =>
-  new Promise(r => {
-    const f = new FileReader();
-    f.onloadend = () => r(f.result);
-    f.readAsDataURL(blob);
-  });
+const toBase64 = b => new Promise(r => {
+  const f = new FileReader();
+  f.onloadend = () => r(f.result);
+  f.readAsDataURL(b);
+});
+
+/* ===== CAMERA ===== */
+window.CURRENT_TASK = null;
 
 function saveToGallery(blob, filename) {
   const url = URL.createObjectURL(blob);
+
   const a = document.createElement("a");
   a.href = url;
   a.download = filename;
+
   document.body.appendChild(a);
   a.click();
+
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
 }
 
-/* ================= STATUS ================= */
-function resolveStatus(task, offlineItem) {
-  const key = task._key;
+window.CURRENT_TASK = null;
 
-  if (processingMap[key]) return "PROCESSING";
-  if (task.status === "COMPLETED") return "COMPLETED";
-  if (uploadingMap[key]) return "UPLOADING";
-  if (offlineItem || task.imageUrl) return "SAVED";
-  return "PENDING";
-}
-  
-/* ================= CAMERA ================= */
-let CURRENT_TASK = null;
-const camera = document.getElementById("cameraInput");
-
-window.takePicture = key => {
-  CURRENT_TASK = key;
-
-  if (isBillingJob(key) && !validateBilling(key)) {
-    return;
-  }
-
-  camera.value = "";
-  camera.click();
-};
-
-camera.addEventListener("change", async e => {
+cameraInput.onchange = async e => {
   if (!e.target.files[0] || !CURRENT_TASK) return;
 
-  const textarea = document.getElementById(`remarks_${CURRENT_TASK}`);
-  const remarks = textarea ? textarea.value.trim() : "";
-  const selected = document.querySelector(`input[name="delivery_${CURRENT_TASK}"]:checked`);
+  // continue processing...
 
-  const deliveryType = selected ? selected.value : null;
-  
-  if (!deliveryType) {
-    alert("Please select delivery method");
-    CURRENT_TASK = null;
-    return;
-  }
-
- // 🔒 START PROCESSING (ONLY ONCE)
+  // ===== START PROCESSING =====
   processingMap[CURRENT_TASK] = true;
   loadTasks();
-  
-  // ✅ DEFINE takenAt FIRST (CRITICAL)
+
+  updateRefreshLock();
+
   const takenAt = new Date().toISOString();
-  
-  let coords;
-  try {
-    coords = await getLocation();
-  } catch {
-    coords = null;
-  }
-  
-  const cached = JSON.parse(localStorage.getItem(TASK_CACHE_KEY) || "[]");
-  const task = cached.find(t => t._key === CURRENT_TASK);
-  
-  const safe = v => String(v || "").toLowerCase().replace(/[^a-z0-9]/g, "_");
-  const filename =
-    `${safe(task?.CUSTOMERNAME)}_${safe(task?.ADDRESS)}_${coords?.latitude || "0"}_${coords?.longitude || "0"}_${takenAt.replace(/[:.]/g, "-")}_${DRIVER_ID}.jpg`;
-  
+
   let blob;
   try {
     blob = await compressImage(e.target.files[0]);
-    saveToGallery(blob, filename);
-  } catch (e) {
+    
+  } catch {
     alert("Image processing failed");
     delete processingMap[CURRENT_TASK];
+    CURRENT_TASK = null;
     loadTasks();
     return;
   }
-  
-  // ✅ PROCESSING DONE — ALWAYS CLEAR
+
+  /* ================= OFFLINE ================= */
+  if (!navigator.onLine) {
+    
+const tempFilename =
+  `TEMP_${CURRENT_TASK}_${Date.now()}.jpg`;
+  saveToGallery(blob, tempFilename);
+        // save to offline queue
+      const q = getQueue();
+      q.push({
+        taskKey: CURRENT_TASK,
+        image: await toBase64(blob),
+        takenAt,
+        deliveryData: BILLING_CACHE[CURRENT_TASK] || {}
+      });
+      setQueue(q);
+      
+      // 🔒 MARK TASK AS OFFLINE_PENDING LOCALLY
+      const cachedTasks = JSON.parse(localStorage.getItem(TASK_CACHE_KEY) || "[]");
+      const idx = cachedTasks.findIndex(t => t._key === CURRENT_TASK);
+      if (idx !== -1) {
+        cachedTasks[idx].status = "OFFLINE_PENDING";
+        cachedTasks[idx].finalized = true; 
+        updateRefreshLock();
+      }
+      localStorage.setItem(TASK_CACHE_KEY, JSON.stringify(cachedTasks));
+    delete processingMap[CURRENT_TASK];
+    CURRENT_TASK = null;
+    loadTasks();
+    return;
+  }
+
+  /* ================= ONLINE ================= */
+  uploadingMap[CURRENT_TASK] = true;
   delete processingMap[CURRENT_TASK];
   loadTasks();
+  updateRefreshLock();
 
-// ================= OFFLINE =================
-if (!navigator.onLine) {
-  const q = getQueue();
-  const billing = BILLING_CACHE[CURRENT_TASK] || {};
-
-  q.push({
-    taskKey: CURRENT_TASK,
-    image: await toBase64(blob),
-    takenAt,
-    latitude: coords?.latitude,
-    longitude: coords?.longitude,
-    filename,
-    deliveryType: billing.deliveryType || "",
-    remarks: billing.remarks || "",
-    receivedBy: billing.receivedBy || "",
-    relationship: billing.relationship || "",
-    gateColor: billing.gateColor || ""
-  });
-
-  setQueue(q);
-
-  // 🔑 DO NOT touch uploadingMap when offline
-  loadTasks();
-  return;
-}
-
-// ================= ONLINE =================
-uploadingMap[CURRENT_TASK] = true;
-loadTasks();
-
-try {
-  const billing = BILLING_CACHE[CURRENT_TASK] || {};
-
-  await uploadNow(
-    CURRENT_TASK,
-    blob,
-    takenAt,
-    coords,
-    billing.remarks || remarks || "",
-    billing.deliveryType || deliveryType || "",
-    filename,
-    billing.receivedBy || "",
-    billing.relationship || "",
-    billing.gateColor || ""
-  );
-} catch {
-  alert("Upload failed. Please retake the photo.");
-} finally {
-  delete uploadingMap[CURRENT_TASK];
-  loadTasks();
-}
-});
-
-/* ================= UPLOAD ================= */
-async function uploadNow(
-      taskKey,
+  try {
+    // 🔥 DO NOT PASS FILENAME ANYMORE
+    await uploadNow(
+      CURRENT_TASK,
       blob,
       takenAt,
-      coords,
-      remarks,
-      deliveryType,
-      filename,
-      receivedBy = "",
-      relationship = "",
-      gateColor = ""
-    ) {
-  const uploadedAt = new Date().toISOString();
-  const imgRef = sRef(storage, `tasks/${taskKey}/${filename}`);
+      null, // filename intentionally ignored
+      BILLING_CACHE[CURRENT_TASK] || {}
+    );
+  } catch {
+    alert("Upload failed. Please retry.");
+  }
 
+  delete uploadingMap[CURRENT_TASK];
+  CURRENT_TASK = null;
+  loadTasks();
+};
+
+function updateRefreshLock() {
+  if (isBusy()) {
+    disablePullToRefresh();
+  } else {
+    enablePullToRefresh();
+  }
+}
+  
+  
+function resolveStatus(task) {
+  // ✅ HARD STOP: COMPLETED ALWAYS MEANS COMPLETED
+  if (task.status === "COMPLETED") return "COMPLETED";
+
+  if (processingMap[task._key]) return "PROCESSING";
+  if (uploadingMap[task._key]) return "UPLOADING";
+  if (task.status === "OFFLINE_PENDING") return "PROCESSING";
+
+  return task.status || "PENDING";
+}
+
+async function uploadNow(taskKey, blob, takenAt, _ignoredFilename, deliveryData = {}) {
+  const taskSnap = await get(ref(db, `tasks/${taskKey}`));
+  const task = taskSnap.val() || {};
+
+  // ===== GET LOCATION =====
+  let coords = {};
+  try {
+    const pos = await new Promise((res, rej) =>
+      navigator.geolocation.getCurrentPosition(
+        p => res(p.coords),
+        () => res(null),
+        { enableHighAccuracy: true, timeout: 10000 }
+      )
+    );
+    if (pos) coords = pos;
+  } catch {}
+
+  // ===== BUILD FILENAME =====
+  const safe = v => String(v || "")
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, "_")
+    .replace(/^_|_$/g, "");
+
+  const filename =
+    `${safe(task.CUSTOMERNAME)}_${safe(task.ADDRESS)}_` +
+    `${coords.longitude || "0"}_${coords.latitude || "0"}_` +
+    `${task.driverId}_${new Date().toISOString().replace(/[-:T.Z]/g, "").slice(0,14)}.jpg`;
+
+  // ✅ SAVE FINAL IMAGE TO LOCAL GALLERY
+  saveToGallery(blob, filename);
+
+  // ===== UPLOAD =====
+  const imgRef = sRef(storage, `tasks/${taskKey}/${filename}`);
   await uploadBytes(imgRef, blob);
   const url = await getDownloadURL(imgRef);
 
-  const billing = BILLING_CACHE[taskKey] || {};
+  // ===== FLATTEN DATA =====
+  const updatePayload = {
+    status: "COMPLETED",
+    imageUrl: url,
+    filename,
+    takenAt,
+    uploadedAt: new Date().toISOString(),
+    deliveryType: deliveryData.deliveryType || ""
+  };
 
-  await update(ref(db, `tasks/${taskKey}`), {
-  status: "COMPLETED",
-  imageUrl: url,
-  takenAt,
-  uploadedAt,
-  latitude: coords?.latitude,
-  longitude: coords?.longitude,
-  filename,
+  for (const [k, v] of Object.entries(deliveryData)) {
+    if (k !== "deliveryType") updatePayload[k] = v;
+  }
 
-  deliveryType,
-  remarks,
-  receivedBy,
-  relationship,
-  gateColor
-});
+  if (coords.latitude) {
+    updatePayload.latitude = coords.latitude;
+    updatePayload.longitude = coords.longitude;
+  }
 
-  loadTasks();
+  await update(ref(db, `tasks/${taskKey}`), updatePayload);
+
+
+/* ================= FIX #3 START ================= */
+
+// ✅ FORCE CLEAN LOCAL CACHE AFTER ONLINE UPLOAD
+const cachedTasks =
+  JSON.parse(localStorage.getItem(TASK_CACHE_KEY) || "[]");
+
+const idx = cachedTasks.findIndex(t => t._key === taskKey);
+if (idx !== -1) {
+  cachedTasks[idx].status = "COMPLETED";
+  cachedTasks[idx].finalized = true;
 }
 
-/* ================= OFFLINE SYNC (RESTORED) ================= */
-setInterval(async () => {
-  if (!navigator.onLine) return;
+localStorage.setItem(
+  TASK_CACHE_KEY,
+  JSON.stringify(cachedTasks)
+);
 
-  const q = getQueue();
-  if (!q.length) return;
+/* ================= FIX #3 END ================= */
+  
+  updateRefreshLock();
+}
 
-  for (const i of q) {
-    try {
-      const blob = await (await fetch(i.image)).blob();
-
-      await uploadNow(
-        i.taskKey,
-        blob,
-        i.takenAt,
-        { latitude: i.latitude, longitude: i.longitude },
-        i.remarks,
-        i.deliveryType,
-        i.filename,
-        i.receivedBy,
-        i.relationship,
-        i.gateColor
-      );
-    } catch (err) {
-      console.error("Retry upload failed", err);
-      return; // stop loop, retry next interval
+async function preloadDriverUIConfig(tasks) {
+  for (const t of tasks) {
+    if (t.JOBTYPE) {
+      await loadDriverUI(t.JOBTYPE);
     }
   }
-
-  setQueue([]); // clear only after successful uploads
-  loadTasks();
-}, 5000);
-
-/* ================= LOAD ================= */
-async function loadTasks() {
-  let tasks = JSON.parse(localStorage.getItem(TASK_CACHE_KEY) || "[]");
-
-  if (navigator.onLine) {
-    const snap = await get(
-      query(ref(db, "tasks"), orderByChild("driverId"), equalTo(DRIVER_ID))
-    );
-    const raw = snap.val() || {};
-    tasks = Object.keys(raw).map(k => ({ _key: k, ...raw[k] }));
-    localStorage.setItem(TASK_CACHE_KEY, JSON.stringify(tasks));
-  }
-
-  if (SEARCH_TERM) {
-    tasks = tasks.filter(t =>
-      JSON.stringify(t).toLowerCase().includes(SEARCH_TERM)
-    );
-  }
-
-  render(tasks);
 }
+  
+/* ===== LOAD TASKS ===== */
+async function loadTasks() {
+  try {
+    let tasks = JSON.parse(localStorage.getItem(TASK_CACHE_KEY) || "[]");
 
-/* ================= RENDER ================= */
-function render(tasks) {
-  const list = document.getElementById("taskList");
-  list.innerHTML = "";
+    if (navigator.onLine) {
+      const snap = await get(
+        query(ref(db, "tasks"), orderByChild("driverId"), equalTo(DRIVER_ID))
+      );
+    
+      const raw = snap.val() || {};
+      const serverTasks = Object.keys(raw).map(k => ({ _key: k, ...raw[k] }));
+    
+      // 🔒 MERGE with local cache to preserve finalized/offline flags
+      const localTasks =
+        JSON.parse(localStorage.getItem(TASK_CACHE_KEY) || "[]");
+    
+      const merged = serverTasks.map(st => {
+        const local = localTasks.find(lt => lt._key === st._key);
+      
+        // ✅ SERVER COMPLETED ALWAYS WINS
+        if (st.status === "COMPLETED") {
+          return {
+            ...st,
+            finalized: true
+          };
+        }
+      
+        if (!local) return st;
 
-  const offlineMap = Object.fromEntries(
-    getQueue().map(i => [i.taskKey, i])
-  );
+        // ✅ Server always wins for dates & status
+        return {
+          ...local,
+          ...st,
+          finalized: local.finalized || st.status === "COMPLETED"
+        };
+      });
+    
+      tasks = merged;
+      localStorage.setItem(TASK_CACHE_KEY, JSON.stringify(tasks));
+    }
 
-  tasks.sort((a, b) => {
-    const sa = resolveStatus(a, offlineMap[a._key]);
-    const sb = resolveStatus(b, offlineMap[b._key]);
-    return PRIORITY[sa] - PRIORITY[sb];
+    await preloadDriverUIConfig(tasks);
+
+    tasks.sort((a, b) => {
+      const priority = {
+        PENDING: 1,
+        PROCESSING: 3,
+        UPLOADING: 4,
+        COMPLETED: 5
+      };
+    
+      const sa = priority[resolveStatus(a)] || 99;
+      const sb = priority[resolveStatus(b)] || 99;
+    
+      // 1️⃣ STATUS ORDER (pending first, uploading last)
+      if (sa !== sb) return sa - sb;
+    
+      // 2️⃣ SAME STATUS → SAME UPLOAD BATCH
+      if (a.uploadBatch !== b.uploadBatch) {
+        return (a.uploadBatch || 0) - (b.uploadBatch || 0);
+      }
+    
+      // 3️⃣ PRESERVE EXCEL ROW ORDER
+      return (a.rowIndex || 0) - (b.rowIndex || 0);
+    });
+    
+    updateRemainingCounter(tasks);
+    renderJobTypeFilters(tasks);
+    const selectedDate = dateFilter.value; // YYYY-MM-DD
+
+const filtered = tasks
+  .filter(t => {
+    const status = resolveStatus(t);
+
+    // ❌ Never show completed
+    if (status === "COMPLETED") return false;
+
+    // ❌ Must match selected date
+    if (!t.createdAt || !t.createdAt.startsWith(selectedDate)) {
+      return false;
+    }
+
+    // ❌ Job type filter
+    if (
+      selectedJobTypes.size > 0 &&
+      !selectedJobTypes.has(t.JOBTYPE)
+    ) {
+      return false;
+    }
+
+    return true;
+  })
+  .filter(t => {
+    if (!SEARCH_TERM) return true;
+
+    const haystack = Object.values(t)
+      .filter(v => typeof v === "string" || typeof v === "number")
+      .join(" ")
+      .toLowerCase();
+
+    return haystack.includes(SEARCH_TERM);
   });
+    
+    render(filtered);
 
-  tasks.forEach(t => {
-    const q = offlineMap[t._key];
-    const status = resolveStatus(t, q);
-    const isBilling = (t.JOBTYPE || "").toUpperCase().includes("BILLING");
+    if (!gpsWatchId) {
+      setTimeout(() => startGPSTracking(DRIVER_ID), 1000);
+    }
+  } catch (e) {
+    taskList.innerHTML = "⚠️ Failed to load tasks. Pull to refresh.";
+  }
+}
+  
+function updateRemainingCounter(tasks) {
+  const selectedDate =
+    document.getElementById("dateFilter")?.value;
+
+  if (!selectedDate) return;
+
+  const remaining = tasks.filter(t => {
+    const status = resolveStatus(t);
+
+    // ✅ pending only
+    if (status !== "PENDING") return false;
+
+    // ✅ must match selected date
+    if (!t.createdAt || !t.createdAt.startsWith(selectedDate)) {
+      return false;
+    }
+
+    return true;
+  }).length;
+
+  const el = document.getElementById("taskCounter");
+  if (el) {
+    el.innerText = `📄 Remaining Tasks: ${remaining}`;
+  }
+}  
+/* ===== RENDER ===== */
+async function render(tasks) {
+  taskList.innerHTML = "";
+
+  for (const t of tasks) {
+    if (!BILLING_CACHE[t._key]) {
+      BILLING_CACHE[t._key] = {};
+    }
+    const status = resolveStatus(t);
 
     const div = document.createElement("div");
     div.className = `task ${status === "COMPLETED" ? "completed" : ""}`;
 
-    div.innerHTML = `
-  <b>${t.CUSTOMERNAME || "—"}</b>
+    let html = `
+      <b>${t.CUSTOMERNAME || "—"}</b>
 
-  <div class="small">
-    📍 ${t.ADDRESS || "—"}
-  </div>
+      <div class="small">📍 ${t.ADDRESS || "—"}</div>
 
-  <div class="small">
-    <b>Account #:</b> ${t.ACCOUNTNUMBER || "—"}
-  </div>
+      <div class="small"><b>Account #:</b> ${t.ACCOUNTNUMBER || "—"}</div>
+      <div class="small"><b>MRU:</b> ${t.MRU || "—"}</div>
+      <div class="small"><b>Meter #:</b> ${t.METERNUMBER || "—"}</div>
+      <div class="small"><b>DMZ:</b> ${t.DMZ || "—"}</div>
+      <div class="small"><b>Sequence:</b> ${t.SEQUENCE || "—"}</div>
+      <div class="small"><b>Job Type:</b> ${t.JOBTYPE || "—"}</div>
+      <div class="small"><b>Status:</b> ${status}</div>
+    `;
 
-  <div class="small">
-    <b>MRU:</b> ${t.MRU || "—"}
-  </div>
-
-  <div class="small">
-    <b>Meter #:</b> ${t.METERNUMBER || "—"}
-  </div>
-
-  <div class="small">
-    <b>DMZ:</b> ${t.DMZ || "—"}
-  </div>
-
-  <div class="small">
-    <b>Sequence:</b> ${t.SEQUENCE || "—"}
-  </div>
-
-  <div class="small">
-    <b>Job Type:</b> ${t.JOBTYPE || "—"}
-  </div>
-
-  <div class="small">
-    <b>Status:</b> ${status}
-  </div>
-
-
-  ${
-    status === "PENDING"
-      ? `
-        ${isBilling ? renderBillingDelivery(t) : ""}
-  
-        ${!isBilling ? `
-          <textarea id="remarks_${t._key}" placeholder="Remarks (optional)"></textarea>
-        ` : ""}
-  
-        <button class="capture" onclick="takePicture('${t._key}')">
+    /* ===== PENDING (EDITABLE ONLINE + OFFLINE) ===== */
+    if (status === "PENDING" && !t.finalized) {
+      html += await renderDynamicDelivery(t);
+      html += `
+        <label
+          class="capture capture-label"
+          onclick="return beforeCamera('${t._key}', event)"
+        >
           📸 Take Picture
-        </button>
-      `
-      : status === "PROCESSING"
-      ? `
-        <div class="uploading">🛠 Preparing photo…</div>
-      `
-      : status === "UPLOADING"
-      ? `
-        <div class="uploading">⏳ Uploading photo…</div>
-      `
-      : status === "SAVED"
-      ? `
-        <div class="offline-indicator">🕒 Saved offline — upload pending</div>
-      `
-      : status === "COMPLETED"
-      ? `
-        ${t.remarks ? `<div class="small">📝 ${t.remarks}</div>` : ""}
-  
+          <input
+            type="file"
+            accept="image/*"
+            capture="environment"
+            onchange="afterCamera('${t._key}', event)"
+            hidden
+          />
+        </label>
+      `;
+    }
+    
+    /* ===== PROCESSING ===== */
+    if (status === "PROCESSING") {
+      html += `
+        <div class="uploading">
+          ${!navigator.onLine
+            ? "📴 Saved offline — waiting for connection"
+            : "🛠 Processing image…"}
+        </div>
+      `;
+    }
+
+    /* ===== UPLOADING ===== */
+    if (status === "UPLOADING") {
+      html += `<div class="uploading">⏳ Uploading photo…</div>`;
+    }
+
+    /* ===== COMPLETED ===== */
+    if (status === "COMPLETED") {
+      html += `
         <button class="toggle"
-          onclick="this.nextElementSibling.style.display =
-          this.nextElementSibling.style.display === 'none' ? 'block' : 'none'">
+          onclick="
+            const img = this.parentElement.querySelector('img');
+            if (!img) return;
+            img.style.display = img.style.display === 'none'
+              ? 'block'
+              : 'none';
+          ">
           👁 Show / Hide Photo
         </button>
+
         <img src="${t.imageUrl}" style="display:none">
-      `
-      : ""
+      `;
+    }
+
+    div.innerHTML = html;
+    taskList.appendChild(div);
   }
-`;
-    list.appendChild(div);
-  });
 }
 
-function renderBillingDelivery(t) {
-  return `
-    <div class="radio-group">
-      <b>Delivery Method</b>
-
-      ${billingOption(t, "D1-Received")}
-      ${billingOption(t, "D2-Put in Mailbox")}
-      ${billingOption(t, "D3-Inserted in Gate")}
-      ${billingOption(t, "D4-Slid Under Door/Window")}
-      ${billingOption(t, "D5-Delivered to SA")}
-      ${billingOption(t, "D6-Bagsakan")}
-    </div>
-
-    <div id="billing_extra_${t._key}"></div>
-  `;
-}
-
-function billingOption(t, value) {
-  const disabled = t.status === "COMPLETED" ? "disabled" : "";
-
-  return `
-    <label>
-      <input type="radio"
-        name="delivery_${t._key}"
-        value="${value}"
-        ${disabled}
-        onchange="showBillingFields('${t._key}', '${value}')">
-      ${value}
-    </label>
-  `;
-}
-  window.showBillingFields = function (taskKey, value) {
-    if (!BILLING_CACHE[taskKey]) {
-      BILLING_CACHE[taskKey] = {};
-    }
-  
-    BILLING_CACHE[taskKey].deliveryType = value;
-  
-    const box = document.getElementById(`billing_extra_${taskKey}`);
-    if (!box) return;
-  
-    let html = "";
-  
-    if (value === "D1-Received") {
-      html = `
-        <input
-          placeholder="Received by *"
-          oninput="BILLING_CACHE['${taskKey}'].receivedBy = this.value"
-        >
-        <input
-          placeholder="Relationship to owner *"
-          oninput="BILLING_CACHE['${taskKey}'].relationship = this.value"
-        >
-        <textarea
-          placeholder="Other remarks"
-          oninput="BILLING_CACHE['${taskKey}'].remarks = this.value"
-        ></textarea>
-      `;
-    }
-  
-    else if (value === "D2-Put in Mailbox" || value === "D3-Inserted in Gate") {
-      html = `
-        <input
-          placeholder="Gate / Mailbox Color *"
-          oninput="BILLING_CACHE['${taskKey}'].gateColor = this.value"
-        >
-        <textarea
-          placeholder="Other remarks"
-          oninput="BILLING_CACHE['${taskKey}'].remarks = this.value"
-        ></textarea>
-      `;
-    }
-  
-    else {
-      html = `
-        <textarea
-          placeholder="Other remarks"
-          oninput="BILLING_CACHE['${taskKey}'].remarks = this.value"
-        ></textarea>
-      `;
-    }
-  
-    box.innerHTML = html;
-
+// ✅ RUNS BEFORE CAMERA OPENS
+window.beforeCamera = function (taskKey, e) {
+  if (!validateDynamic(taskKey)) {
+    e.preventDefault(); // 🚫 STOP camera
+    e.stopPropagation();
+    return false;
+  }
+  return true; // ✅ ALLOW camera
 };
 
-function isBillingJob(taskKey) {
-  const cached = JSON.parse(localStorage.getItem("cachedTasks") || "[]");
-  const t = cached.find(x => x._key === taskKey);
-  return (t?.JOBTYPE || "").toUpperCase().includes("BILLING");
+// ✅ RUNS AFTER PHOTO IS TAKEN
+window.afterCamera = function (taskKey, e) {
+  if (!e.target.files || !e.target.files[0]) return;
+
+  window.CURRENT_TASK = taskKey;
+
+  // forward to existing pipeline
+  cameraInput.files = e.target.files;
+  cameraInput.onchange({ target: e.target });
+};
+  
+async function renderDynamicDelivery(t) {
+  const methods = await loadDriverUI(t.JOBTYPE);
+  if (!methods || !Object.keys(methods).length) return "";
+
+  let html = `<div class="radio-group"><b>Delivery Method</b>`;
+  for (const m of Object.keys(methods)) {
+    html += `
+      <label>
+        <input type="radio" name="delivery_${t._key}" value="${m}"
+          onchange="showDynamicFields('${t._key}','${t.JOBTYPE}','${m}')">
+        ${m}
+      </label>`;
+  }
+  html += `</div><div id="dyn_${t._key}"></div>`;
+  return html;
 }
 
-function validateBilling(taskKey) {
-  // 🔁 Ensure cache exists
-  if (!BILLING_CACHE[taskKey]) {
-    BILLING_CACHE[taskKey] = {};
+window.handleCamera = function (taskKey, e) {
+  // 🔒 VALIDATE FIRST — STILL BEFORE CAMERA
+  if (!validateDynamic(taskKey)) {
+    e.target.value = "";
+    return;
   }
 
-  const cache = BILLING_CACHE[taskKey];
+  window.CURRENT_TASK = taskKey;
 
-  // 🔁 SYNC FROM DOM → CACHE (CRITICAL FIX)
-  cache.receivedBy =
-    cache.receivedBy ||
-    document.querySelector(`#billing_extra_${taskKey} input[placeholder^="Received"]`)?.value || "";
+  // 🔥 Manually forward to existing handler
+  cameraInput.files = e.target.files;
+  cameraInput.onchange({ target: e.target });
+};
 
-  cache.relationship =
-    cache.relationship ||
-    document.querySelector(`#billing_extra_${taskKey} input[placeholder^="Relationship"]`)?.value || "";
+window.showDynamicFields = async function (taskKey, jobType, method) {
+  if (!BILLING_CACHE[taskKey]) BILLING_CACHE[taskKey] = {};
+  BILLING_CACHE[taskKey].deliveryType = method;
 
-  cache.gateColor =
-    cache.gateColor ||
-    document.querySelector(`#billing_extra_${taskKey} input[placeholder^="Gate"]`)?.value || "";
+  const cfg = await loadDriverUI(jobType);
+  const box = document.getElementById(`dyn_${taskKey}`);
 
-  cache.remarks =
-    cache.remarks ||
-    document.querySelector(`#billing_extra_${taskKey} textarea`)?.value || "";
+  const fields = cfg?.[method] || {};
 
-  if (!cache.deliveryType) {
-    alert("Please select delivery method");
+  let html = `<div class="delivery-fields">`;
+
+  for (const [fieldKey, field] of Object.entries(fields)) {
+    const requiredMark = field.required ? " *" : "";
+
+    if (field.type === "textarea") {
+      html += `
+        <label>${field.label}${requiredMark}</label>
+        <textarea
+          data-key="${fieldKey}"
+          oninput="BILLING_CACHE['${taskKey}']['${fieldKey}'] = this.value"
+        ></textarea>
+      `;
+    } else {
+      html += `
+        <label>${field.label}${requiredMark}</label>
+        <input
+          type="text"
+          data-key="${fieldKey}"
+          oninput="BILLING_CACHE['${taskKey}']['${fieldKey}'] = this.value"
+        />
+      `;
+    }
+  }
+
+  html += `</div>`;
+  box.innerHTML = html;
+  // 🔒 HARD LOCK if task is no longer pending
+};  
+  
+function getCurrentLocation() {
+  return new Promise((resolve, reject) => {
+    if (!navigator.geolocation) {
+      reject("Geolocation not supported");
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      pos => {
+        resolve({
+          latitude: pos.coords.latitude,
+          longitude: pos.coords.longitude
+        });
+      },
+      err => reject(err.message),
+      {
+        enableHighAccuracy: true,
+        timeout: 15000,
+        maximumAge: 0
+      }
+    );
+  });
+}
+  
+function validateDynamic(taskKey) {
+  // Sync inputs → cache
+  syncDynamicFields(taskKey);
+
+  const data = BILLING_CACHE[taskKey];
+
+  // 1️⃣ Delivery method required
+  if (!data?.deliveryType) {
+    alert("Select delivery method");
     return false;
   }
 
-  if (cache.deliveryType === "D1-Received") {
-    if (!cache.receivedBy || !cache.relationship) {
-      alert("Received by and relationship are required");
+  // 2️⃣ Task must exist
+  const task = JSON.parse(localStorage.getItem("cachedTasks") || "[]")
+    .find(t => t._key === taskKey);
+
+  if (!task) {
+    alert("Task not found. Please refresh.");
+    return false;
+  }
+
+  // 3️⃣ Config MUST exist (offline-safe)
+  const jobCfg = DRIVER_UI_CACHE[task.JOBTYPE];
+  if (!jobCfg) {
+    alert("Delivery configuration not available. Please go online once.");
+    return false;
+  }
+
+  // 4️⃣ Method config must exist
+  const methodCfg = jobCfg[data.deliveryType];
+  if (!methodCfg) {
+    alert("Invalid delivery method. Please reselect.");
+    return false;
+  }
+
+  // 5️⃣ Required fields enforcement
+  for (const [fieldKey, field] of Object.entries(methodCfg)) {
+    if (field.required && !data[fieldKey]) {
+      alert(`${field.label} is required`);
       return false;
     }
   }
 
-  if (
-    ["D2-Put in Mailbox", "D3-Inserted in Gate"].includes(cache.deliveryType)
-    && !cache.gateColor
-  ) {
-    alert("Gate / Mailbox color is required");
-    return false;
+  return true;
+}  
+loadTasks();
+
+async function processOfflineQueue() {
+  const q = getQueue();
+  if (!q.length) return;
+
+  console.log("🔁 Processing offline queue:", q.length);
+
+  for (const item of q) {
+    try {
+      const blob = await fetch(item.image).then(r => r.blob());
+  
+      uploadingMap[item.taskKey] = true;
+      loadTasks();
+  
+      await uploadNow(
+        item.taskKey,
+        blob,
+        item.takenAt,
+        null,
+        item.deliveryData || {}
+      );
+  
+      /* ================= FIX 1 START ================= */
+  
+      // ✅ UPDATE LOCAL TASK CACHE AFTER OFFLINE UPLOAD
+      const cachedTasks =
+        JSON.parse(localStorage.getItem(TASK_CACHE_KEY) || "[]");
+  
+      const idx = cachedTasks.findIndex(t => t._key === item.taskKey);
+      if (idx !== -1) {
+        cachedTasks[idx].status = "COMPLETED";
+        cachedTasks[idx].finalized = true;
+      }
+  
+      localStorage.setItem(
+        TASK_CACHE_KEY,
+        JSON.stringify(cachedTasks)
+      );
+  
+      /* ================= FIX 1 END ================= */
+  
+      // ✅ CLEAR FLAGS
+      delete uploadingMap[item.taskKey];
+      updateRefreshLock();
+      delete processingMap[item.taskKey];
+  
+      loadTasks();
+    } catch (e) {
+      console.error("❌ Offline upload failed", e);
+      return; // STOP if one fails
+    }
   }
 
-  return true;
+  // ✅ CLEAR QUEUE ONLY AFTER SUCCESS
+  setQueue([]);
+  updateRefreshLock();
 }
+
+window.addEventListener("online", async () => {
+  await processOfflineQueue();
+  loadTasks();
+});
+
+let startY = 0;
+
+window.addEventListener(
+  "touchstart",
+  e => {
+    if (e.touches.length === 1) {
+      startY = e.touches[0].clientY;
+    }
+  },
+  { passive: true }
+);
+
+window.addEventListener(
+  "touchmove",
+  e => {
+    const y = e.touches[0].clientY;
+    const pullingDown = y > startY;
+
+    if (pullingDown && window.scrollY === 0 && isBusy()) {
+      e.preventDefault();
+    }
+  },
+  { passive: false }
+);
   
-loadTasks();
 </script>
-
-
 
 <script>
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("./sw.js");
 }
+</script>
+
+<script>
+let deferredPrompt = null;
+
+function isStandalone() {
+  return window.matchMedia("(display-mode: standalone)").matches ||
+         window.navigator.standalone === true;
+}
+
+window.addEventListener("beforeinstallprompt", e => {
+  // already installed → do nothing
+  if (isStandalone()) return;
+
+  e.preventDefault();
+  deferredPrompt = e;
+
+  // prevent duplicates
+  if (document.getElementById("installBtn")) return;
+
+  const btn = document.createElement("button");
+  btn.id = "installBtn";
+  btn.innerText = "📲 Install Driver App";
+  btn.style = `
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: calc(100% - 40px);
+    max-width: 420px;
+    padding: 14px;
+    font-size: 16px;
+    font-weight: bold;
+    border-radius: 10px;
+    border: none;
+    background: #007bff;
+    color: #fff;
+    z-index: 99999;
+  `;
+
+  btn.onclick = async () => {
+    btn.disabled = true;
+    await deferredPrompt.prompt();
+    await deferredPrompt.userChoice;
+    btn.remove();
+    deferredPrompt = null;
+  };
+
+  document.body.appendChild(btn);
+});
+</script>
+
+<script>
+window.addEventListener("appinstalled", () => {
+  const btn = document.getElementById("installBtn");
+  if (btn) btn.remove();
+});
 </script>
 
 </body>
