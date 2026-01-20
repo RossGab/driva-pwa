@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Install Driver App</title>
+
+  <link rel="manifest" href="./manifest.json">
+  <meta name="theme-color" content="#222222">
+
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f4f4f4;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      margin: 0;
+    }
+    .box {
+      background: #fff;
+      padding: 24px;
+      border-radius: 12px;
+      width: 100%;
+      max-width: 420px;
+      text-align: center;
+      box-shadow: 0 8px 30px rgba(0,0,0,.15);
+    }
+    h1 {
+      margin-bottom: 10px;
+    }
+    p {
+      color: #555;
+      font-size: 14px;
+    }
+    button {
+      margin-top: 20px;
+      width: 100%;
+      padding: 14px;
+      font-size: 16px;
+      font-weight: bold;
+      border-radius: 10px;
+      border: none;
+      background: #007bff;
+      color: #fff;
+    }
+    button:disabled {
+      background: #aaa;
+    }
+  </style>
+</head>
+<body>
+
+<div class="box">
+  <h1>Driver App</h1>
+  <p>Install the app to continue</p>
+
+  <button id="installBtn" disabled>
+    Waiting for install…
+  </button>
+</div>
+
+<script>
+let deferredPrompt = null;
+
+window.addEventListener("beforeinstallprompt", e => {
+  e.preventDefault();
+  deferredPrompt = e;
+
+  const btn = document.getElementById("installBtn");
+  btn.disabled = false;
+  btn.innerText = "📲 Install Driver App";
+
+  btn.onclick = async () => {
+    btn.disabled = true;
+    await deferredPrompt.prompt();
+    await deferredPrompt.userChoice;
+  };
+});
+
+window.addEventListener("appinstalled", () => {
+  // Redirect into the app after install
+  window.location.href = "./driver.html";
+});
+
+// If already installed → skip installer
+if (
+  window.matchMedia("(display-mode: standalone)").matches ||
+  window.navigator.standalone === true
+) {
+  window.location.href = "./driver.html";
+}
+</script>
+
+</body>
+</html>
