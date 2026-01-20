@@ -238,6 +238,24 @@ button {
   display:none;
   margin-top:12px;
 }
+.version {
+  font-size: 16px;
+  color: #777;
+  margin-left: 6px;
+}
+
+.admin-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 12px;
+}
+
+.admin-logo {
+  height: 42px;
+  width: auto;
+  object-fit: contain;
+}
 
 #map {
   height:420px;
@@ -248,7 +266,10 @@ button {
 
 <body>
 
-<h2>🧑‍💼 Admin Dashboard V2.4.2</h2>
+<div class="admin-header">
+  <img src="./logo.jpg" class="admin-logo" alt="Company Logo">
+  <h1>Admin Dashboard <span class="version">V2.4.3</span></h1>
+</div>
 
 <!-- ===== DASHBOARD ===== -->
 <div class="dashboard">
