@@ -7,6 +7,7 @@ const APP_SHELL = [
   "./install.html",
   "./driver.html",
   "./manifest.json",
+  "./logo.png",
   "./icon-192.png",
   "./icon-512.png",
   "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js",
