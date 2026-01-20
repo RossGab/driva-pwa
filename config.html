@@ -26,7 +26,7 @@ input, select {
 }
 
 button {
-  margin-top:6px;
+  margin-top:8px;
   padding:8px;
   border:none;
   border-radius:6px;
@@ -45,16 +45,16 @@ button {
 }
 
 .field-box {
-  border-top:1px dashed #ccc;
   margin-top:10px;
-  padding-top:10px;
+  padding:10px;
+  border-top:1px dashed #ccc;
 }
 
-.option-box {
-  border:1px solid #ddd;
-  padding:8px;
+.child-box {
+  margin-left:12px;
   margin-top:8px;
-  border-radius:6px;
+  padding-left:8px;
+  border-left:3px solid #ddd;
 }
 
 .required-row {
@@ -62,21 +62,21 @@ button {
   align-items:center;
   gap:6px;
   font-size:13px;
-  font-weight:bold;
+  margin-top:4px;
 }
 </style>
 </head>
 
 <body>
 
-<h2>⚙ Driver UI Configuration</h2>
+<h2>⚙ Driver UI Configuration v3 (Clean Model)</h2>
 
 <div class="card">
   <label>Job Type</label>
-  <input id="jobTypeInput">
+  <input id="jobTypeInput" placeholder="e.g. NOV1">
 
   <label>Delivery Method</label>
-  <input id="deliveryMethodInput">
+  <input id="deliveryMethodInput" placeholder="e.g. N1-Received">
 
   <button class="secondary" onclick="addDeliveryMethod()">➕ Add Delivery Method</button>
 </div>
@@ -87,7 +87,7 @@ button {
 </div>
 
 <div class="card">
-  <button class="primary" onclick="saveConfig()">💾 Save</button>
+  <button class="primary" onclick="saveConfig()">💾 Save Configuration</button>
 </div>
 
 <script type="module">
@@ -102,25 +102,33 @@ const app = initializeApp({
 const db = getDatabase(app);
 
 /* ================= STATE ================= */
-const STATE = { jobType:"", methods:{} };
+const STATE = {
+  jobType: "",
+  methods: {}
+};
 
 /* ================= ADD DELIVERY METHOD ================= */
 window.addDeliveryMethod = function () {
   const jobType = jobTypeInput.value.trim();
   const method = deliveryMethodInput.value.trim();
 
-  if (!jobType || !method) return alert("Job Type and Method required");
+  if (!jobType || !method) {
+    alert("Job Type and Delivery Method are required");
+    return;
+  }
 
   STATE.jobType = jobType;
-  if (STATE.methods[method]) return alert("Method exists");
 
-  STATE.methods[method] = {};
+  if (!STATE.methods[method]) {
+    STATE.methods[method] = {};
+  }
+
   deliveryMethodInput.value = "";
-  render();
+  renderMethods();
 };
 
 /* ================= RENDER ================= */
-function render() {
+function renderMethods() {
   methodsContainer.innerHTML = "";
 
   Object.entries(STATE.methods).forEach(([method, fields]) => {
@@ -130,143 +138,135 @@ function render() {
     div.innerHTML = `
       <b>${method}</b>
 
-      <input placeholder="Field label">
-      <select>
+      <input class="field-label" placeholder="Field label (e.g. C100-Disconnected)">
+      <select class="field-type">
+        <option value="radio">Radio</option>
         <option value="text">Text</option>
         <option value="textarea">Textarea</option>
-        <option value="radio">Radio</option>
       </select>
-      <button class="secondary">➕ Add Field</button>
 
-      <div class="fields"></div>
-    `;
+      <button class="secondary addField">➕ Add Field</button>
 
-    const labelInput = div.querySelector("input");
-    const typeSelect = div.querySelector("select");
-    const addBtn = div.querySelector("button");
-    const fieldBox = div.querySelector(".fields");
+      <div class="field-list">
+        ${Object.entries(fields).map(([key, f]) => `
+          <div class="field-box">
+            <b>${f.label}</b> (${f.type})
 
-    addBtn.onclick = () => {
-      const label = labelInput.value.trim();
-      if (!label) return alert("Field label required");
+            ${f.type === "radio" ? `
+              <div class="child-box">
+                <b>Fields shown when selected</b>
 
-      const key = label.toLowerCase().replace(/\s+/g,"_");
-
-      fields[key] = {
-        label,
-        type: typeSelect.value,
-        ...(typeSelect.value === "radio" ? { options: [] } : {})
-      };
-
-      render();
-    };
-
-    Object.entries(fields).forEach(([key, field]) => {
-      const f = document.createElement("div");
-      f.className = "field-box";
-
-      f.innerHTML = `
-        <b>${field.label}</b> (${field.type})
-
-        ${field.type === "radio" ? `
-          <div>
-            ${(field.options || []).map((opt, i) => `
-              <div class="option-box">
-                <input
-                  placeholder="Option label"
-                  value="${opt.value || ""}"
-                  onchange="updateOption('${method}','${key}',${i},this.value)">
-
-                ${(opt.extraFields || []).map((ef, j) => `
+                ${Object.entries(f.fields || {}).map(([ck, cf]) => `
                   <div style="margin-top:6px;">
                     <input
-                      placeholder="Extra field label"
-                      value="${ef.label}"
-                      onchange="updateExtraLabel('${method}','${key}',${i},${j},this.value)">
-
-                    <select onchange="updateExtraType('${method}','${key}',${i},${j},this.value)">
-                      <option value="text" ${ef.type==="text"?"selected":""}>Text</option>
-                      <option value="textarea" ${ef.type==="textarea"?"selected":""}>Textarea</option>
-                      <option value="radio" ${ef.type==="radio"?"selected":""}>Radio</option>
+                      placeholder="Child field label"
+                      value="${cf.label}"
+                      onchange="updateChildLabel('${method}','${key}','${ck}',this.value)"
+                    >
+                    <select
+                      onchange="updateChildType('${method}','${key}','${ck}',this.value)">
+                      <option value="text" ${cf.type==="text"?"selected":""}>Text</option>
+                      <option value="textarea" ${cf.type==="textarea"?"selected":""}>Textarea</option>
                     </select>
 
                     <label class="required-row">
                       <input type="checkbox"
-                        ${ef.required?"checked":""}
-                        onchange="updateExtraReq('${method}','${key}',${i},${j},this.checked)">
+                        ${cf.required ? "checked" : ""}
+                        onchange="updateChildRequired('${method}','${key}','${ck}',this.checked)">
                       Required
                     </label>
 
                     <button class="danger"
-                      onclick="removeExtra('${method}','${key}',${i},${j})">❌</button>
+                      onclick="removeChildField('${method}','${key}','${ck}')">
+                      ❌ Remove
+                    </button>
                   </div>
                 `).join("")}
 
                 <button class="secondary"
-                  onclick="addExtra('${method}','${key}',${i})">
-                  ➕ Add extra field
-                </button>
-
-                <button class="danger"
-                  onclick="removeOption('${method}','${key}',${i})">
-                  ❌ Remove option
+                  onclick="addChildField('${method}','${key}')">
+                  ➕ Add Child Field
                 </button>
               </div>
-            `).join("")}
+            ` : ""}
 
-            <button class="secondary"
-              onclick="addOption('${method}','${key}')">
-              ➕ Add Option
+            <button class="danger"
+              onclick="removeField('${method}','${key}')">
+              ❌ Remove Field
             </button>
           </div>
-        ` : ``}
-      `;
+        `).join("")}
+      </div>
+    `;
 
-      fieldBox.appendChild(f);
-    });
+    div.querySelector(".addField").onclick = () => {
+      const label = div.querySelector(".field-label").value.trim();
+      const type = div.querySelector(".field-type").value;
+
+      if (!label) {
+        alert("Field label required");
+        return;
+      }
+
+      const key = label.toLowerCase().replace(/[^a-z0-9]+/g,"_");
+
+      STATE.methods[method][key] = {
+        label,
+        type,
+        ...(type === "radio" ? { fields: {} } : {})
+      };
+
+      renderMethods();
+    };
 
     methodsContainer.appendChild(div);
   });
 }
 
-/* ================= RADIO HELPERS ================= */
-window.addOption = (m,f) => {
-  STATE.methods[m][f].options.push({ value:"", extraFields:[] });
-  render();
+/* ================= CHILD FIELD ================= */
+window.addChildField = (method, fieldKey) => {
+  const f = STATE.methods[method][fieldKey];
+  if (!f.fields) f.fields = {};
+
+  const key = "field_" + Date.now();
+
+  f.fields[key] = {
+    label: "",
+    type: "text",
+    required: false
+  };
+
+  renderMethods();
 };
 
-window.updateOption = (m,f,i,val) =>
-  STATE.methods[m][f].options[i].value = val;
-
-window.addExtra = (m,f,i) => {
-  STATE.methods[m][f].options[i].extraFields.push({
-    label:"", type:"text", required:false
-  });
-  render();
+window.updateChildLabel = (m,f,k,val) => {
+  STATE.methods[m][f].fields[k].label = val;
 };
 
-window.updateExtraLabel = (m,f,i,j,val) =>
-  STATE.methods[m][f].options[i].extraFields[j].label = val;
-
-window.updateExtraType = (m,f,i,j,val) =>
-  STATE.methods[m][f].options[i].extraFields[j].type = val;
-
-window.updateExtraReq = (m,f,i,j,val) =>
-  STATE.methods[m][f].options[i].extraFields[j].required = val;
-
-window.removeExtra = (m,f,i,j) => {
-  STATE.methods[m][f].options[i].extraFields.splice(j,1);
-  render();
+window.updateChildType = (m,f,k,val) => {
+  STATE.methods[m][f].fields[k].type = val;
 };
 
-window.removeOption = (m,f,i) => {
-  STATE.methods[m][f].options.splice(i,1);
-  render();
+window.updateChildRequired = (m,f,k,val) => {
+  STATE.methods[m][f].fields[k].required = val;
+};
+
+window.removeChildField = (m,f,k) => {
+  delete STATE.methods[m][f].fields[k];
+  renderMethods();
+};
+
+window.removeField = (m,f) => {
+  delete STATE.methods[m][f];
+  renderMethods();
 };
 
 /* ================= SAVE ================= */
 window.saveConfig = async function () {
-  if (!STATE.jobType) return alert("Nothing to save");
+  if (!STATE.jobType) {
+    alert("Nothing to save");
+    return;
+  }
 
   await update(
     ref(db, `config/driverUI/jobTypes/${STATE.jobType}`),
@@ -276,7 +276,7 @@ window.saveConfig = async function () {
     }
   );
 
-  alert("✅ Saved successfully");
+  alert("✅ Configuration saved correctly");
 };
 </script>
 
