@@ -82,27 +82,31 @@ let deferredPrompt = null;
 const statusText = document.getElementById("statusText");
 const installBtn = document.getElementById("installBtn");
 
-function isStandalone() {
-  return window.matchMedia("(display-mode: standalone)").matches ||
-         window.navigator.standalone === true;
+function isInstalled() {
+  return (
+    window.matchMedia("(display-mode: standalone)").matches ||
+    window.navigator.standalone === true
+  );
 }
 
-// If already installed → instruct user
-if (isStandalone()) {
-  statusText.innerText = "App already installed. Open it from your app list.";
+// 1️⃣ If opened INSIDE the app
+if (isInstalled()) {
+  statusText.innerText =
+    "✅ App already installed.\n\nOpen it from your app list or home screen.";
   installBtn.style.display = "none";
 }
 
-// Capture install prompt
+// 2️⃣ Capture install prompt (means NOT installed)
 window.addEventListener("beforeinstallprompt", e => {
   e.preventDefault();
   deferredPrompt = e;
 
+  statusText.innerText = "Install the Driver App to continue";
   installBtn.disabled = false;
   installBtn.innerText = "📲 Install Driver App";
 });
 
-// Install button click
+// 3️⃣ Install button
 installBtn.onclick = async () => {
   if (!deferredPrompt) return;
 
@@ -115,13 +119,21 @@ installBtn.onclick = async () => {
   deferredPrompt = null;
 };
 
-// After install → DO NOT REDIRECT
+// 4️⃣ After successful install
 window.addEventListener("appinstalled", () => {
   installBtn.style.display = "none";
   statusText.innerText =
     "✅ App installed!\n\nPlease open **Driver App** from your app list or home screen.";
 });
-</script>
 
+// 5️⃣ Fallback: no prompt after short delay
+setTimeout(() => {
+  if (!deferredPrompt && !isInstalled()) {
+    statusText.innerText =
+      "ℹ️ App may already be installed.\n\nPlease check your app list or home screen.";
+    installBtn.style.display = "none";
+  }
+}, 2000);
+</script>
 </body>
 </html>
