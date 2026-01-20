@@ -139,7 +139,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebas
 import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.4.77-DYNAMIC";
+const VERSION = "Driver v3.4.78-DYNAMIC";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -751,26 +751,30 @@ const filtered = tasks
 }
   
 function updateRemainingCounter(tasks) {
-  const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+  const selectedDate =
+    document.getElementById("dateFilter")?.value;
 
-  const remainingToday = tasks.filter(t => {
+  if (!selectedDate) return;
+
+  const remaining = tasks.filter(t => {
     const status = resolveStatus(t);
 
-    // ✅ only pending
+    // ✅ pending only
     if (status !== "PENDING") return false;
 
-    // ✅ only today
-    if (!t.createdAt || !t.createdAt.startsWith(today)) return false;
+    // ✅ must match selected date
+    if (!t.createdAt || !t.createdAt.startsWith(selectedDate)) {
+      return false;
+    }
 
     return true;
   }).length;
 
   const el = document.getElementById("taskCounter");
   if (el) {
-    el.innerText = `📄 Remaining Tasks Today: ${remainingToday}`;
+    el.innerText = `📄 Remaining Tasks: ${remaining}`;
   }
-}
-  
+}  
 /* ===== RENDER ===== */
 async function render(tasks) {
   taskList.innerHTML = "";
