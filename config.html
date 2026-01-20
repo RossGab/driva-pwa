@@ -56,7 +56,7 @@ button {
 
 <body>
 
-<h2>⚙ Driver UI Configuration2.0.1</h2>
+<h2>⚙ Driver UI ConfigurationV2.0.2</h2>
 
 <div class="card">
   <label>Job Type</label>
@@ -142,11 +142,10 @@ function renderMethods() {
 
     ${(f.options || []).map((opt, idx) => `
       <div style="border:1px solid #ddd;padding:8px;margin-top:8px;border-radius:6px;">
-        <input
-          placeholder="Radio option label"
-          value="${opt.value}"
-          onchange="updateRadioOptionValue('${method}','${key}',${idx},this.value)"
-        >
+          <input
+    placeholder="Option name (e.g. C100-Disconnected)"
+    value="${opt.value}"
+    onchange="updateRadioOptionValue('${method}','${key}',${idx},this.value)">
 
         <div style="margin-left:12px;margin-top:6px;">
           ${(opt.extraFields || []).map((ef, efIdx) => `
@@ -187,7 +186,7 @@ function renderMethods() {
 
     <button class="secondary"
       onclick="addRadioOption('${method}','${key}')">
-      ➕ Add Radio Option
+      ➕ Add Option
     </button>
   </div>
 ` : ""}  
