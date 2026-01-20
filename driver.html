@@ -93,7 +93,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebas
 import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.4.62-DYNAMIC";
+const VERSION = "Driver v3.4.63-DYNAMIC";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -484,9 +484,22 @@ async function loadTasks() {
       const snap = await get(
         query(ref(db, "tasks"), orderByChild("driverId"), equalTo(DRIVER_ID))
       );
-
+    
       const raw = snap.val() || {};
-      tasks = Object.keys(raw).map(k => ({ _key: k, ...raw[k] }));
+      const serverTasks = Object.keys(raw).map(k => ({ _key: k, ...raw[k] }));
+    
+      // 🔒 MERGE with local cache to preserve finalized/offline flags
+      const localTasks =
+        JSON.parse(localStorage.getItem(TASK_CACHE_KEY) || "[]");
+    
+      const merged = serverTasks.map(st => {
+        const local = localTasks.find(lt => lt._key === st._key);
+        return local
+          ? { ...st, ...local } // local flags win
+          : st;
+      });
+    
+      tasks = merged;
       localStorage.setItem(TASK_CACHE_KEY, JSON.stringify(tasks));
     }
 
