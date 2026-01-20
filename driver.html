@@ -93,7 +93,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebas
 import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.4.67-DYNAMIC";
+const VERSION = "Driver v3.4.68-DYNAMIC";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -437,9 +437,13 @@ function updateRefreshLock() {
   
   
 function resolveStatus(task) {
+  // ✅ HARD STOP: COMPLETED ALWAYS MEANS COMPLETED
+  if (task.status === "COMPLETED") return "COMPLETED";
+
   if (processingMap[task._key]) return "PROCESSING";
   if (uploadingMap[task._key]) return "UPLOADING";
   if (task.status === "OFFLINE_PENDING") return "PROCESSING";
+
   return task.status || "PENDING";
 }
 
@@ -499,6 +503,27 @@ async function uploadNow(taskKey, blob, takenAt, _ignoredFilename, deliveryData 
   }
 
   await update(ref(db, `tasks/${taskKey}`), updatePayload);
+
+
+/* ================= FIX #3 START ================= */
+
+// ✅ FORCE CLEAN LOCAL CACHE AFTER ONLINE UPLOAD
+const cachedTasks =
+  JSON.parse(localStorage.getItem(TASK_CACHE_KEY) || "[]");
+
+const idx = cachedTasks.findIndex(t => t._key === taskKey);
+if (idx !== -1) {
+  cachedTasks[idx].status = "COMPLETED";
+  cachedTasks[idx].finalized = true;
+}
+
+localStorage.setItem(
+  TASK_CACHE_KEY,
+  JSON.stringify(cachedTasks)
+);
+
+/* ================= FIX #3 END ================= */
+  
   updateRefreshLock();
 }
 
@@ -529,8 +554,17 @@ async function loadTasks() {
     
       const merged = serverTasks.map(st => {
         const local = localTasks.find(lt => lt._key === st._key);
+      
+        // ✅ SERVER COMPLETED ALWAYS WINS
+        if (st.status === "COMPLETED") {
+          return {
+            ...st,
+            finalized: true
+          };
+        }
+      
         return local
-          ? { ...st, ...local } // local flags win
+          ? { ...st, ...local }
           : st;
       });
     
