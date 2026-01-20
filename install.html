@@ -82,31 +82,54 @@ let deferredPrompt = null;
 const statusText = document.getElementById("statusText");
 const installBtn = document.getElementById("installBtn");
 
-function isInstalled() {
-  return (
-    window.matchMedia("(display-mode: standalone)").matches ||
-    window.navigator.standalone === true
-  );
+function isStandalone() {
+  return window.matchMedia("(display-mode: standalone)").matches ||
+         window.navigator.standalone === true;
 }
 
-// 1️⃣ If opened INSIDE the app
-if (isInstalled()) {
-  statusText.innerText =
-    "✅ App already installed.\n\nOpen it from your app list or home screen.";
+function isIOS() {
+  return /iphone|ipad|ipod/i.test(navigator.userAgent);
+}
+
+function isInAppBrowser() {
+  return /FBAN|FBAV|Instagram|Messenger/i.test(navigator.userAgent);
+}
+
+// ✅ Already installed
+if (isStandalone()) {
+  statusText.innerText = "✅ App already installed. Open it from your app list.";
   installBtn.style.display = "none";
 }
 
-// 2️⃣ Capture install prompt (means NOT installed)
+// 📱 iOS manual install
+else if (isIOS()) {
+  statusText.innerHTML = `
+    📱 To install on iPhone / iPad:<br><br>
+    1️⃣ Open this page in <b>Safari</b><br>
+    2️⃣ Tap <b>Share ⬆️</b><br>
+    3️⃣ Tap <b>Add to Home Screen</b>
+  `;
+  installBtn.style.display = "none";
+}
+
+// 🚫 In-app browsers (Messenger, FB, IG)
+else if (isInAppBrowser()) {
+  statusText.innerHTML = `
+    ⚠️ Installation not available here.<br><br>
+    Please open this link in <b>Chrome</b> to install the app.
+  `;
+  installBtn.style.display = "none";
+}
+
+// ✅ Android Chrome install
 window.addEventListener("beforeinstallprompt", e => {
   e.preventDefault();
   deferredPrompt = e;
 
-  statusText.innerText = "Install the Driver App to continue";
   installBtn.disabled = false;
   installBtn.innerText = "📲 Install Driver App";
 });
 
-// 3️⃣ Install button
 installBtn.onclick = async () => {
   if (!deferredPrompt) return;
 
@@ -119,21 +142,11 @@ installBtn.onclick = async () => {
   deferredPrompt = null;
 };
 
-// 4️⃣ After successful install
 window.addEventListener("appinstalled", () => {
   installBtn.style.display = "none";
   statusText.innerText =
-    "✅ App installed!\n\nPlease open **Driver App** from your app list or home screen.";
+    "✅ App installed! Open it from your home screen.";
 });
-
-// 5️⃣ Fallback: no prompt after short delay
-setTimeout(() => {
-  if (!deferredPrompt && !isInstalled()) {
-    statusText.innerText =
-      "ℹ️ App may already be installed.\n\nPlease check your app list or home screen.";
-    installBtn.style.display = "none";
-  }
-}, 2000);
 </script>
 </body>
 </html>
