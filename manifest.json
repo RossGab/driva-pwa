@@ -2,7 +2,7 @@
   "name": "Driver Task App",
   "short_name": "DriverTasks",
   "start_url": "./driver.html",
-  "scope": "./",
+  "scope": ".",
   "display": "standalone",
   "background_color": "#222222",
   "theme_color": "#222222",
