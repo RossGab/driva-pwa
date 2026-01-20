@@ -93,7 +93,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebas
 import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.4.66-DYNAMIC";
+const VERSION = "Driver v3.4.67-DYNAMIC";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -924,6 +924,63 @@ window.addEventListener(
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("./sw.js");
 }
+</script>
+
+<script>
+let deferredPrompt = null;
+
+function isStandalone() {
+  return window.matchMedia("(display-mode: standalone)").matches ||
+         window.navigator.standalone === true;
+}
+
+window.addEventListener("beforeinstallprompt", e => {
+  // already installed → do nothing
+  if (isStandalone()) return;
+
+  e.preventDefault();
+  deferredPrompt = e;
+
+  // prevent duplicates
+  if (document.getElementById("installBtn")) return;
+
+  const btn = document.createElement("button");
+  btn.id = "installBtn";
+  btn.innerText = "📲 Install Driver App";
+  btn.style = `
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: calc(100% - 40px);
+    max-width: 420px;
+    padding: 14px;
+    font-size: 16px;
+    font-weight: bold;
+    border-radius: 10px;
+    border: none;
+    background: #007bff;
+    color: #fff;
+    z-index: 99999;
+  `;
+
+  btn.onclick = async () => {
+    btn.disabled = true;
+    await deferredPrompt.prompt();
+    await deferredPrompt.userChoice;
+    btn.remove();
+    deferredPrompt = null;
+  };
+
+  document.body.appendChild(btn);
+});
+</script>
+
+<script>
+window.addEventListener("appinstalled", () => {
+  const btn = document.getElementById("installBtn");
+  if (btn) btn.remove();
+});
 </script>
 
 </body>
