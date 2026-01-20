@@ -85,18 +85,15 @@ th, td {
 
 <div class="card">
 
-  <!-- ACTION BUTTONS -->
   <div class="actions">
     <button class="add" onclick="setMode('add')">➕ Add Driver</button>
     <button class="search" onclick="setMode('search')">🔍 Search Driver</button>
     <button class="list" onclick="setMode('list')">📋 View All</button>
   </div>
 
-  <!-- SEARCH -->
   <input id="searchBox" class="hidden"
     placeholder="Search driver (code, name, address, contact, team, vehicle)">
 
-  <!-- DRIVER FORM -->
   <div id="driverForm" class="hidden">
     <input id="driverCode" placeholder="Driver Code">
     <input id="name" placeholder="Driver Name">
@@ -106,13 +103,11 @@ th, td {
     <input id="vehicle" placeholder="Vehicle Details">
   </div>
 
-  <!-- DRIVER LIST -->
   <div id="driverList" class="hidden"></div>
 
-  <!-- ACTION BUTTON -->
   <button id="actionBtn" class="hidden" onclick="handleAction()"></button>
 
-  <button class="back" onclick="location.href='admin.html'">
+  <button class="back" onclick="location.href='admin_withLoading_ok.html'">
     ⬅ Back to Dashboard
   </button>
 
@@ -130,7 +125,6 @@ import {
 } from
   "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
-/* FIREBASE */
 const firebaseConfig = {
   apiKey: "AIzaSyDFW61pnwLvh6HGKWt10zLYNr860fI8vkg",
   authDomain: "driva-pwa.firebaseapp.com",
@@ -144,7 +138,6 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 
-/* ELEMENTS */
 const searchBox = document.getElementById("searchBox");
 const form = document.getElementById("driverForm");
 const listDiv = document.getElementById("driverList");
@@ -159,17 +152,17 @@ const vehicleEl = document.getElementById("vehicle");
 
 let MODE = null;
 
-/* MODE */
 window.setMode = async function (mode) {
   MODE = mode;
   hideAll();
 
   if (mode === "add") {
     showForm(false);
+    clearForm();
+    codeEl.readOnly = false;
     actionBtn.innerText = "Save Driver";
     actionBtn.className = "add";
     actionBtn.classList.remove("hidden");
-    clearForm();
   }
 
   if (mode === "search") {
@@ -186,8 +179,16 @@ window.setMode = async function (mode) {
   }
 };
 
-/* ACTION */
 window.handleAction = async function () {
+
+  if (MODE === "confirm") {
+    setReadOnly(false);
+    actionBtn.innerText = "Update Driver";
+    actionBtn.className = "update";
+    MODE = "update";
+    return;
+  }
+
   if (MODE === "search") {
     const term = searchBox.value.trim().toLowerCase();
     if (!term) return alert("Enter search text");
@@ -195,12 +196,18 @@ window.handleAction = async function () {
     const snap = await get(ref(db, "drivers"));
     const all = snap.val() || {};
 
-    const found = Object.values(all).find(d =>
+    const results = Object.values(all).filter(d =>
       JSON.stringify(d).toLowerCase().includes(term)
     );
 
-    if (!found) return alert("Driver not found");
-    populateForm(found, true);
+    hideAll();
+    listDiv.classList.remove("hidden");
+
+    if (!results.length) {
+      listDiv.innerHTML = "No matching drivers found";
+    } else {
+      renderDriverTable(results);
+    }
     return;
   }
 
@@ -209,21 +216,25 @@ window.handleAction = async function () {
     if (!driverCode) return alert("Driver code required");
 
     const refD = ref(db, `drivers/${driverCode}`);
-    if ((await get(refD)).exists()) return alert("Driver exists");
+    if ((await get(refD)).exists()) return alert("Driver already exists");
 
     await set(refD, buildPayload(true));
     alert("Driver added");
     clearForm();
+    return;
   }
 
   if (MODE === "update") {
-    await update(ref(db, `drivers/${codeEl.value.trim()}`), buildPayload(false));
+    await update(
+      ref(db, `drivers/${codeEl.value.trim()}`),
+      buildPayload(false)
+    );
     alert("Driver updated");
     setReadOnly(true);
+    MODE = "confirm";
   }
 };
 
-/* LIST */
 async function loadDriverList() {
   const snap = await get(ref(db, "drivers"));
   const drivers = Object.values(snap.val() || {});
@@ -231,7 +242,10 @@ async function loadDriverList() {
     listDiv.innerHTML = "No drivers found";
     return;
   }
+  renderDriverTable(drivers);
+}
 
+function renderDriverTable(drivers) {
   listDiv.innerHTML = `
     <table>
       <tr>
@@ -244,7 +258,8 @@ async function loadDriverList() {
           <td>${d.team || "-"}</td>
           <td>${d.contact || "-"}</td>
           <td>
-            <button class="viewBtn" onclick='viewDriver(${JSON.stringify(d)})'>
+            <button class="viewBtn"
+              onclick='viewDriver(${JSON.stringify(d)})'>
               View / Modify
             </button>
           </td>
@@ -258,10 +273,10 @@ window.viewDriver = function (d) {
   populateForm(d, true);
 };
 
-/* HELPERS */
 function populateForm(d, readOnly) {
   hideAll();
   showForm(readOnly);
+
   codeEl.value = d.driverCode;
   nameEl.value = d.name || "";
   addressEl.value = d.address || "";
@@ -269,20 +284,13 @@ function populateForm(d, readOnly) {
   teamEl.value = d.team || "";
   vehicleEl.value = d.vehicle || "";
 
+  codeEl.readOnly = true;
+
   actionBtn.innerText = readOnly ? "✏ Modify Driver" : "Update Driver";
   actionBtn.className = readOnly ? "confirm" : "update";
   actionBtn.classList.remove("hidden");
 
-  if (readOnly) {
-    actionBtn.onclick = () => {
-      setReadOnly(false);
-      actionBtn.innerText = "Update Driver";
-      actionBtn.className = "update";
-      MODE = "update";
-    };
-  } else {
-    MODE = "update";
-  }
+  MODE = readOnly ? "confirm" : "update";
 }
 
 function buildPayload(isNew) {
@@ -299,7 +307,7 @@ function buildPayload(isNew) {
 }
 
 function setReadOnly(state) {
-  [codeEl, nameEl, addressEl, contactEl, teamEl, vehicleEl]
+  [nameEl, addressEl, contactEl, teamEl, vehicleEl]
     .forEach(i => i.readOnly = state);
 }
 
