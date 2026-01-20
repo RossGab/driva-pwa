@@ -4,6 +4,7 @@ const CACHE_NAME = `field-task-app-${CACHE_VERSION}`;
 
 const APP_SHELL = [
   "./",
+  "./install.html",
   "./driver.html",
   "./manifest.json",
   "./icon-192.png",
@@ -35,7 +36,9 @@ self.addEventListener("fetch", event => {
   // IMPORTANT: handle navigation (refresh)
   if (event.request.mode === "navigate") {
     event.respondWith(
-      caches.match("./driver.html").then(res => res || fetch(event.request))
+      fetch(event.request).catch(() =>
+        caches.match(event.request).then(res => res || caches.match("./driver.html"))
+      )
     );
     return;
   }
