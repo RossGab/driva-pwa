@@ -167,7 +167,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebas
 import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.5.7-DYNAMIC";
+const VERSION = "Driver v3.5.8-DYNAMIC";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -192,9 +192,7 @@ const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 const storage = getStorage(app);
 
-const QUEUE_KEY = "offlineQueue";
 const TASK_CACHE_KEY = "cachedTasks";
-const processingMap = {};
 const uploadingMap = {};
 let SEARCH_TERM = "";
 const dateFilter = document.getElementById("dateFilter");
@@ -245,8 +243,8 @@ async function refreshQueueCount() {
 function isBusy() {
   return (
     offlineQueueCount > 0 ||
-    Object.keys(processingMap).length > 0 ||
-    Object.keys(uploadingMap).length > 0
+    Object.keys(uploadingMap).length > 0 ||
+    ACTIVE_CAPTURE_TASK !== null
   );
 }
 
@@ -550,11 +548,14 @@ const toBase64 = b => new Promise(r => {
 });
 
 function cleanupAfterFail() {
-  delete processingMap[CURRENT_TASK];
+  if (CURRENT_TASK && PHOTO_BUFFER[CURRENT_TASK]) {
+    delete PHOTO_BUFFER[CURRENT_TASK];
+  }
   CURRENT_TASK = null;
   ACTIVE_CAPTURE_TASK = null; // 🔓 unlock UI on failure
   updateRefreshLock();
   loadTasks();
+  refreshQueueCount();
 }
 
 /* ===== CAMERA ===== */
@@ -577,9 +578,8 @@ function saveToGallery(blob, filename) {
 
 async function handleCapturedFile(file) {
   if (!file || !CURRENT_TASK) return;
-  if (processingMap[CURRENT_TASK] || uploadingMap[CURRENT_TASK]) return;
+  if (uploadingMap[CURRENT_TASK]) return; // ✅ prevent double fire
 
-  processingMap[CURRENT_TASK] = true;
 
   const cached =
     JSON.parse(localStorage.getItem(TASK_CACHE_KEY) || "[]");
@@ -607,13 +607,16 @@ async function handleCapturedFile(file) {
 
   if (!photoGPS || !photoGPS.latitude) {
     alert("📍 Waiting for GPS lock. Please stay still.");
-    cleanupAfterFail();
+    return;
+  }
+  
+  if (!photoGPS.timestamp || Date.now() - photoGPS.timestamp > 60000) {
+    alert("📍 GPS signal stale. Please wait for refresh.");
     return;
   }
 
   if (photoGPS.accuracy && photoGPS.accuracy > 50) {
     alert("📍 GPS accuracy too low. Please wait.");
-    cleanupAfterFail();
     return;
   }
 
@@ -630,13 +633,11 @@ async function handleCapturedFile(file) {
   const count = PHOTO_BUFFER[CURRENT_TASK].length;
 
   if (count < REQUIRED_PHOTOS) {
-    const taskKey = CURRENT_TASK;
-    delete processingMap[taskKey];
-    CURRENT_TASK = null;
-    updateRefreshLock();
-    loadTasks(); // ✅ show progress immediately
-    return;
-  }
+ 
+  updateRefreshLock();
+  loadTasks(); // just re-render progress
+  return;
+}
 
   // ✅ SAVE ALL PHOTOS TO GALLERY (ONLINE OR OFFLINE)
   PHOTO_BUFFER[CURRENT_TASK].forEach((p, index) => {
@@ -648,8 +649,28 @@ async function handleCapturedFile(file) {
   // EXACTLY 3 → upload once
   const taskKey = CURRENT_TASK;
   uploadingMap[taskKey] = true;
-  delete processingMap[taskKey];
+
+  if (!navigator.onLine) {
+  await addToQueue({
+    taskKey,
+    photos: PHOTO_BUFFER[taskKey].map(p => ({
+      image: p.blob,
+      gps: p.gps,
+      takenAt: p.takenAt
+    })),
+    delivery: BILLING_CACHE[taskKey] || {}
+  });
+
+  alert("📦 Saved offline. Will upload when online.");
+
+  delete PHOTO_BUFFER[taskKey];
+  ACTIVE_CAPTURE_TASK = null;
   CURRENT_TASK = null;
+  updateRefreshLock();
+  loadTasks();
+  refreshQueueCount();
+  return;
+}
 
   try {
     await uploadBatch(taskKey);
@@ -659,8 +680,10 @@ async function handleCapturedFile(file) {
   } finally {
     delete uploadingMap[taskKey];
     ACTIVE_CAPTURE_TASK = null;
+    CURRENT_TASK = null;
     updateRefreshLock();
     loadTasks();
+    refreshQueueCount();
   }
 }
 
@@ -691,7 +714,6 @@ function resolveStatus(task) {
   // ✅ HARD STOP: COMPLETED ALWAYS MEANS COMPLETED
   if (task.status === "COMPLETED") return "COMPLETED";
 
-  if (processingMap[task._key]) return "PROCESSING";
   if (uploadingMap[task._key]) return "UPLOADING";
 
   return task.status || "PENDING";
@@ -953,8 +975,12 @@ async function render(tasks) {
       <div class="small"><b>Job Type:</b> ${t.JOBTYPE || "—"}</div>
       <div class="small"><b>Status:</b> ${status}</div>
     `;
-    if (ACTIVE_CAPTURE_TASK === t._key && status === "PENDING") {
-      const count = PHOTO_BUFFER[t._key]?.length || 1;
+    if (
+        ACTIVE_CAPTURE_TASK === t._key &&
+        status === "PENDING" &&
+        !uploadingMap[t._key]
+      ) {
+      const count = PHOTO_BUFFER[t._key]?.length || 0;
       html += `
         <div class="uploading">
           📸 Capturing photos (${count}/3)
@@ -969,23 +995,22 @@ async function render(tasks) {
         </div>
       `;
     }
+
     
-    if (status === "PENDING") {
-      html += `
-        <div class="small">
-          📸 Photos: ${(PHOTO_BUFFER[t._key]?.length || 0)} / 3
-        </div>
-      `;
-    }    
 
     /* ===== PENDING (EDITABLE ONLINE + OFFLINE) ===== */
-    if (status === "PENDING" && !t.finalized) {
+    if (
+      status === "PENDING" &&
+      !t.finalized &&
+      !uploadingMap[t._key] &&
+      (!ACTIVE_CAPTURE_TASK || ACTIVE_CAPTURE_TASK === t._key)
+    ) {
       html += await renderDynamicDelivery(t);
     
       html += `
         <label class="capture capture-label"
           onclick="return beforeCamera('${t._key}', event)">
-          📸 Take Picture
+          📸 ${ACTIVE_CAPTURE_TASK === t._key ? "Continue Capture" : "Take Picture"}
           <input
             type="file"
             accept="image/*"
@@ -996,22 +1021,7 @@ async function render(tasks) {
         </label>
       `;
     }    
-    /* ===== PROCESSING ===== */
-    if (status === "PROCESSING") {
-      html += `
-        <div class="uploading">
-          ${!navigator.onLine
-            ? "📴 Saved offline — waiting for connection"
-            : "🛠 Processing image…"}
-        </div>
-      `;
-    }
-
-    /* ===== UPLOADING ===== */
-    if (status === "UPLOADING") {
-      html += `<div class="uploading">⏳ Uploading photo…</div>`;
-    }
-
+    
     /* ===== COMPLETED ===== */
     if (status === "COMPLETED") {
       html += `
@@ -1063,7 +1073,7 @@ async function renderDynamicDelivery(t) {
           type="radio"
           name="delivery_${t._key}"
           value="${m}"
-          ${ACTIVE_CAPTURE_TASK && ACTIVE_CAPTURE_TASK === t._key ? "disabled" : ""}
+          ${ACTIVE_CAPTURE_TASK ? "disabled" : ""}
           onchange="showDynamicFields('${t._key}','${t.JOBTYPE}','${m}')">
         ${m}
       </label>`;
@@ -1182,6 +1192,7 @@ function validateDynamic(taskKey) {
   return true;
 }  
 loadTasks();
+refreshQueueCount();
 
 async function processOfflineQueue() {
   // TODO: batch-offline support (next step)
@@ -1190,6 +1201,7 @@ async function processOfflineQueue() {
 window.addEventListener("online", async () => {
   await processOfflineQueue();
   loadTasks();
+  refreshQueueCount();
 });
 
 let startY = 0;
