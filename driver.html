@@ -167,7 +167,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebas
 import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.5.9-DYNAMIC";
+const VERSION = "Driver v3.5.10-DYNAMIC";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -395,15 +395,15 @@ function renderJobTypeFilters(tasks) {
 
   tasks.forEach(t => {
     const status = resolveStatus(t);
-
-    // ❌ only pending
+  
+    // ✅ only pending
     if (status !== "PENDING") return;
-
-    // ❌ must match selected date
-    if (!t.createdAt || !t.createdAt.startsWith(selectedDate)) return;
-
+  
+    // ✅ must match selected date
+    if (normalizeDate(t.createdAt) !== selectedDate) return;
+  
     if (!t.JOBTYPE) return;
-
+  
     jobTypeCounts[t.JOBTYPE] =
       (jobTypeCounts[t.JOBTYPE] || 0) + 1;
   });
@@ -561,7 +561,6 @@ function cleanupAfterFail() {
 }
 
 /* ===== CAMERA ===== */
-window.CURRENT_TASK = null;
 
 function saveToGallery(blob, filename) {
   const url = URL.createObjectURL(blob);
@@ -773,6 +772,25 @@ async function clearQueue() {
   });
 }
 
+function normalizeDate(dateStr) {
+  if (!dateStr) return null;
+
+  // ISO format
+  if (dateStr.includes("T")) {
+    return dateStr.split("T")[0];
+  }
+
+  // DD/MM/YYYY
+  if (dateStr.includes("/")) {
+    const parts = dateStr.split("/");
+    if (parts[0].length === 2) {
+      return `${parts[2]}-${parts[1]}-${parts[0]}`;
+    }
+  }
+
+  return dateStr;
+}
+
 async function uploadBatch(taskKey) {
   const photos = PHOTO_BUFFER[taskKey];
   if (!photos || photos.length !== REQUIRED_PHOTOS) {
@@ -924,9 +942,9 @@ const filtered = tasks
     if (status === "COMPLETED" && t.finalized) return false;
 
     // ❌ Must match selected date
-    if (!t.createdAt || !t.createdAt.startsWith(selectedDate)) {
-      return false;
-    }
+    if (normalizeDate(t.createdAt) !== selectedDate) {
+        return false;
+      }
 
     // ❌ Job type filter
     if (
@@ -972,7 +990,7 @@ function updateRemainingCounter(tasks) {
     if (status !== "PENDING") return false;
 
     // ✅ must match selected date
-    if (!t.createdAt || !t.createdAt.startsWith(selectedDate)) {
+    if (normalizeDate(t.createdAt) !== selectedDate) {
       return false;
     }
 
