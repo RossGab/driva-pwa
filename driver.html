@@ -117,6 +117,11 @@ img { width:100%;margin-top:8px;border-radius:6px; }
 </button>
 
 <div id="appVersion"></div>
+<div id="gpsStatus"
+  style="background:#fff;padding:6px;text-align:center;
+         margin-bottom:6px;border-radius:6px;font-size:13px;">
+  📡 Acquiring GPS…
+</div>
 <div id="taskCounter"
    style="background:#fff;padding:8px;text-align:center;
         margin-bottom:10px;border-radius:6px;font-weight:bold;">
@@ -155,12 +160,13 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebas
 import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.4.86-DYNAMIC";
+const VERSION = "Driver v3.4.87-DYNAMIC";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
 const selectedJobTypes = new Set();
 let jobTypeFilterInitialized = false;
+let LAST_KNOWN_GPS = null;
 
 const firebaseConfig = {
   apiKey: "AIzaSyDFW61pnwLvh6HGKWt10zLYNr860fI8vkg",
@@ -229,9 +235,10 @@ document.getElementById("settingsBtn").onclick = () => {
   location.reload();
 };
 
-appVersion.innerText = `Driver: ${DRIVER_ID} | ${VERSION}`;
-
 let gpsWatchId = null;
+
+appVersion.innerText = `Driver: ${DRIVER_ID} | ${VERSION}`;
+startGPSTracking(DRIVER_ID);
 
 async function loadDriverUI(jobType) {
   // 1️⃣ Memory cache
@@ -428,38 +435,46 @@ window.addEventListener("beforeunload", () => {
 function startGPSTracking(driverId) {
   if (!navigator.geolocation) return;
 
-  let lastSent = { lat: null, lng: null };
+  const gpsStatus = document.getElementById("gpsStatus");
+
+  if (gpsWatchId !== null) {
+    navigator.geolocation.clearWatch(gpsWatchId);
+    gpsWatchId = null;
+  }
 
   gpsWatchId = navigator.geolocation.watchPosition(
     pos => {
-      const lat = pos.coords.latitude;
-      const lng = pos.coords.longitude;
+      LAST_KNOWN_GPS = {
+        latitude: pos.coords.latitude,
+        longitude: pos.coords.longitude,
+        accuracy: pos.coords.accuracy,
+        timestamp: Date.now()
+      };
 
-      // ⛔ Ignore very small movement (≈ 5 meters)
-      if (
-        lastSent.lat !== null &&
-        Math.abs(lat - lastSent.lat) < 0.00005 &&
-        Math.abs(lng - lastSent.lng) < 0.00005
-      ) {
-        return;
+      // ✅ UPDATE UI HERE
+      if (gpsStatus) {
+        gpsStatus.innerText =
+          `📡 GPS locked (±${Math.round(pos.coords.accuracy)}m)`;
       }
 
-      lastSent = { lat, lng };
-
       update(ref(db, `driverStatus/${driverId}`), {
-        latitude: lat,
-        longitude: lng,
+        latitude: pos.coords.latitude,
+        longitude: pos.coords.longitude,
         accuracy: pos.coords.accuracy || null,
         lastSeen: new Date().toISOString()
       });
     },
     err => {
       console.warn("GPS error:", err.message);
+
+      if (gpsStatus) {
+        gpsStatus.innerText = "📡 GPS unavailable";
+      }
     },
     {
       enableHighAccuracy: true,
-      maximumAge: 10000,
-      timeout: 15000
+      maximumAge: 5000,
+      timeout: 20000
     }
   );
 }
@@ -544,43 +559,17 @@ cameraInput.onchange = async e => {
     return;
   }
 
-  let photoGPS = null;
+  const photoGPS = LAST_KNOWN_GPS;
 
-  try {
-    const coords = await new Promise((resolve) => {
-      navigator.geolocation.getCurrentPosition(
-        pos => resolve(pos.coords),
-        () => resolve(null),
-        {
-          enableHighAccuracy: true,
-          timeout: 15000,
-          maximumAge: 0
-        }
-      );
-    });
-  
-    if (coords) {
-      photoGPS = {
-        latitude: coords.latitude,
-        longitude: coords.longitude,
-        accuracy: coords.accuracy
-      };
-    }
-  } catch (e) {
-    console.warn("GPS capture failed:", e);
-  }
-
-  // 🚫 HARD STOP — GPS MUST EXIST AT PHOTO TIME
-  if (!photoGPS || !photoGPS.latitude) {
-    alert("📍 GPS signal not available. Please wait for location lock.");
-  
-    delete processingMap[CURRENT_TASK];
-    CURRENT_TASK = null;
-  
-    updateRefreshLock();
-    loadTasks();
-    return;
-  }
+// 🚫 HARD STOP — GPS MUST EXIST BEFORE PHOTO
+if (!photoGPS || !photoGPS.latitude) {
+  alert("📍 Acquiring GPS signal… please wait a few seconds");
+  delete processingMap[CURRENT_TASK];
+  CURRENT_TASK = null;
+  updateRefreshLock();
+  loadTasks();
+  return;
+}
   
     
   /* ================= OFFLINE ================= */
