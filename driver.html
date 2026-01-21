@@ -160,7 +160,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebas
 import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.5.0-DYNAMIC";
+const VERSION = "Driver v3.5.1-DYNAMIC";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -701,10 +701,27 @@ if (photoGPS.accuracy && photoGPS.accuracy > 50) {
     alert("Upload failed. Please retry.");
   }
 
-  PHOTO_PROGRESS[CURRENT_TASK] = photoIndex;
-  delete uploadingMap[CURRENT_TASK];
-  CURRENT_TASK = null;
-  loadTasks();
+  // ✅ LOCK TASK AFTER FIRST PHOTO
+if (photoIndex === 1) {
+  const cachedTasks =
+    JSON.parse(localStorage.getItem(TASK_CACHE_KEY) || "[]");
+
+  const idx = cachedTasks.findIndex(t => t._key === CURRENT_TASK);
+  if (idx !== -1) {
+    cachedTasks[idx].started = true; // 🔒 lock inputs
+  }
+
+  localStorage.setItem(
+    TASK_CACHE_KEY,
+    JSON.stringify(cachedTasks)
+  );
+}
+
+PHOTO_PROGRESS[CURRENT_TASK] = photoIndex;
+delete uploadingMap[CURRENT_TASK];
+CURRENT_TASK = null;
+
+loadTasks();
 };
 
 function updateRefreshLock() {
@@ -809,6 +826,9 @@ async function uploadNow(
   if (newCount >= REQUIRED_PHOTOS) {
     updatePayload.status = "COMPLETED";
     updatePayload.COMPLETED_AT = new Date().toISOString();
+    if (newCount >= REQUIRED_PHOTOS) {
+      delete PHOTO_PROGRESS[taskKey]; // ✅ ADD THIS
+    }
   } else {
     updatePayload.status = "PENDING";
   }
@@ -896,6 +916,7 @@ async function loadTasks() {
         return {
           ...local,
           ...st,
+          started: local.started || false,
           finalized: local.finalized || st.status === "COMPLETED"
         };
       });
@@ -1033,24 +1054,36 @@ async function render(tasks) {
       <div class="small"><b>Sequence:</b> ${t.SEQUENCE || "—"}</div>
       <div class="small"><b>Job Type:</b> ${t.JOBTYPE || "—"}</div>
       <div class="small"><b>Status:</b> ${status}</div>
+      if (status === "PENDING") {
+        html += `
+          <div class="small">
+            📸 Photos: ${PHOTO_PROGRESS[t._key] || 0} / ${REQUIRED_PHOTOS}
+          </div>
+        `;
+      }
     `;
 
     /* ===== PENDING (EDITABLE ONLINE + OFFLINE) ===== */
     if (status === "PENDING" && !t.finalized) {
-      html += await renderDynamicDelivery(t);
+      if (!t.started) {
+        html += await renderDynamicDelivery(t);
+      }
+    
       html += `
-        <label
-          class="capture capture-label"
-          onclick="return beforeCamera('${t._key}', event)"
-        >
+        <label class="capture capture-label"
+          onclick="return beforeCamera('${t._key}', event)">
           📸 Take Picture
-          <input
-            type="file"
-            accept="image/*"
-            capture="environment"
-            onchange="afterCamera('${t._key}', event)"
-            hidden
-          />
+          <label class="capture capture-label"
+            onclick="return beforeCamera('${t._key}', event)">
+            📸 Take Picture
+            <input
+              type="file"
+              accept="image/*"
+              capture="environment"
+              onchange="afterCamera('${t._key}', event)"
+              hidden
+            />
+          </label>
         </label>
       `;
     }
