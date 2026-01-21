@@ -156,12 +156,13 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebas
 import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.4.85-DYNAMIC";
+const VERSION = "Driver v3.4.86-DYNAMIC";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
 const selectedJobTypes = new Set();
 let jobTypeFilterInitialized = false;
+let LAST_KNOWN_GPS = null;
 
 const firebaseConfig = {
   apiKey: "AIzaSyDFW61pnwLvh6HGKWt10zLYNr860fI8vkg",
@@ -452,22 +453,28 @@ function startGPSTracking(driverId) {
   }
 
   gpsWatchId = navigator.geolocation.watchPosition(
-    pos => {
-      update(ref(db, `driverStatus/${driverId}`), {
-        latitude: pos.coords.latitude,
-        longitude: pos.coords.longitude,
-        lastSeen: new Date().toISOString()
-      });
-    },
-    err => {
-      console.warn("GPS error:", err.message);
-    },
-    {
-      enableHighAccuracy: true,
-      maximumAge: 10000,
-      timeout: 15000
-    }
-  );
+  pos => {
+    LAST_KNOWN_GPS = {
+      latitude: pos.coords.latitude,
+      longitude: pos.coords.longitude
+    };
+
+    update(ref(db, `driverStatus/${driverId}`), {
+      latitude: pos.coords.latitude,
+      longitude: pos.coords.longitude,
+      lastSeen: new Date().toISOString()
+    });
+  },
+  err => {
+    console.warn("GPS error:", err.message);
+  },
+  {
+    enableHighAccuracy: true,
+    maximumAge: 10000,
+    timeout: 15000
+  }
+);
+  
 }
 /* ===== NETWORK ===== */
 function updateNetwork() {
@@ -536,6 +543,9 @@ cameraInput.onchange = async e => {
   updateRefreshLock();
 
   const takenAt = new Date().toISOString();
+  const photoGPS = LAST_KNOWN_GPS
+  ? { ...LAST_KNOWN_GPS }
+  : null;
 
   let blob;
   try {
@@ -561,6 +571,7 @@ const tempFilename =
         taskKey: CURRENT_TASK,
         image: await toBase64(blob),
         takenAt,
+        gps: photoGPS,
         deliveryData: BILLING_CACHE[CURRENT_TASK] || {}
       });
       setQueue(q);
@@ -592,8 +603,9 @@ const tempFilename =
       CURRENT_TASK,
       blob,
       takenAt,
-      null, // filename intentionally ignored
-      BILLING_CACHE[CURRENT_TASK] || {}
+      null,
+      BILLING_CACHE[CURRENT_TASK] || {},
+      photoGPS
     );
   } catch {
     alert("Upload failed. Please retry.");
@@ -624,22 +636,37 @@ function resolveStatus(task) {
   return task.status || "PENDING";
 }
 
-async function uploadNow(taskKey, blob, takenAt, _ignoredFilename, deliveryData = {}) {
+async function uploadNow(
+  taskKey,
+  blob,
+  takenAt,
+  _ignoredFilename,
+  deliveryData = {},
+  photoGPS = null
+) {
   const taskSnap = await get(ref(db, `tasks/${taskKey}`));
   const task = taskSnap.val() || {};
 
   // ===== GET LOCATION =====
-  let coords = {};
-  try {
-    const pos = await new Promise((res, rej) =>
-      navigator.geolocation.getCurrentPosition(
-        p => res(p.coords),
-        () => res(null),
-        { enableHighAccuracy: true, timeout: 10000 }
-      )
-    );
-    if (pos) coords = pos;
-  } catch {}
+  let coords = photoGPS || LAST_KNOWN_GPS;
+
+  if (!coords) {
+    alert("📍 GPS not available at photo time. Please wait for location lock.");
+    throw new Error("GPS_REQUIRED");
+  }
+
+
+
+// 2️⃣ Fallback to last known GPS
+if (!coords && LAST_KNOWN_GPS) {
+  coords = LAST_KNOWN_GPS;
+}
+
+// 3️⃣ HARD BLOCK if still missing
+if (!coords) {
+  alert("📍 GPS location not available. Please wait for location lock.");
+  throw new Error("GPS_REQUIRED");
+}
 
   // ===== BUILD FILENAME =====
   const safe = v => String(v || "")
@@ -674,10 +701,8 @@ async function uploadNow(taskKey, blob, takenAt, _ignoredFilename, deliveryData 
     if (k !== "deliveryType") updatePayload[k] = v;
   }
 
-  if (coords.latitude) {
-    updatePayload.latitude = coords.latitude;
-    updatePayload.longitude = coords.longitude;
-  }
+  updatePayload.latitude = coords.latitude;
+  updatePayload.longitude = coords.longitude;
 
   await update(ref(db, `tasks/${taskKey}`), updatePayload);
 
@@ -1112,12 +1137,13 @@ async function processOfflineQueue() {
       uploadingMap[item.taskKey] = true;
       loadTasks();
   
-      await uploadNow(
+      aawait uploadNow(
         item.taskKey,
         blob,
         item.takenAt,
         null,
-        item.deliveryData || {}
+        item.deliveryData || {},
+        item.gps || null
       );
   
       /* ================= FIX 1 START ================= */
