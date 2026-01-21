@@ -156,7 +156,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebas
 import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.4.83-DYNAMIC";
+const VERSION = "Driver v3.4.84-DYNAMIC";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -222,8 +222,13 @@ document.getElementById("settingsBtn").onclick = () => {
   const current = localStorage.getItem("driverId") || "";
 
   const next = prompt("Enter new Driver ID", current);
-  if (!next) return;
-  if (next === current) return;
+  if (!next || next === current) return;
+
+  // 🛑 STOP OLD GPS
+  if (gpsWatchId !== null) {
+    navigator.geolocation.clearWatch(gpsWatchId);
+    gpsWatchId = null;
+  }
 
   localStorage.setItem("driverId", next);
   alert("Driver ID changed. Reloading…");
@@ -231,6 +236,9 @@ document.getElementById("settingsBtn").onclick = () => {
 };
   
 appVersion.innerText = `Driver: ${DRIVER_ID} | ${VERSION}`;
+
+// ✅ START GPS IMMEDIATELY ON APP LOAD
+startGPSTracking(DRIVER_ID);
 
 let gpsWatchId = null;
 
@@ -429,6 +437,19 @@ window.addEventListener("beforeunload", () => {
 function startGPSTracking(driverId) {
   if (!navigator.geolocation) return;
 
+  // ✅ ENSURE driverStatus NODE EXISTS
+  update(ref(db, `driverStatus/${driverId}`), {
+    latitude: null,
+    longitude: null,
+    lastSeen: null
+  });
+
+  // 🛑 Stop old watcher if any
+  if (gpsWatchId !== null) {
+    navigator.geolocation.clearWatch(gpsWatchId);
+    gpsWatchId = null;
+  }
+
   gpsWatchId = navigator.geolocation.watchPosition(
     pos => {
       update(ref(db, `driverStatus/${driverId}`), {
@@ -447,7 +468,6 @@ function startGPSTracking(driverId) {
     }
   );
 }
-
 /* ===== NETWORK ===== */
 function updateNetwork() {
   offlineBanner.style.display = navigator.onLine ? "none" : "block";
