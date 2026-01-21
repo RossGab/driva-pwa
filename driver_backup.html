@@ -156,6 +156,18 @@ img { width:100%;margin-top:8px;border-radius:6px; }
 <input type="file" id="cameraInput" accept="image/*" capture="environment" hidden>
 
 <script type="module">
+
+/* ================= ENV MODE ================= */
+const DB_MODE = "TEST"; // "TEST" | "PROD"
+
+const TASKS_PATH =
+  DB_MODE === "TEST" ? "tasks_test" : "tasks";
+
+const DRIVER_STATUS_PATH =
+  DB_MODE === "TEST" ? "driverStatus_test" : "driverStatus";
+
+console.log("🔥 DB MODE:", DB_MODE);
+/*===============================================*/
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
@@ -485,7 +497,7 @@ function startGPSTracking(driverId) {
           `📡 GPS locked (±${Math.round(pos.coords.accuracy)}m)`;
       }
 
-      update(ref(db, `driverStatus/${driverId}`), {
+      update(ref(db, `${DRIVER_STATUS_PATH}/${driverId}`), {
         latitude: pos.coords.latitude,
         longitude: pos.coords.longitude,
         accuracy: pos.coords.accuracy || null,
@@ -760,7 +772,7 @@ async function uploadNow(
   deliveryData = {},
   photoGPS
 ) {
-  const taskSnap = await get(ref(db, `tasks/${taskKey}`));
+  const taskSnap = await get(ref(db, `${TASKS_PATH}/${taskKey}`));
   const task = taskSnap.val() || {};
 
   if (!photoGPS || !photoGPS.latitude) {
@@ -784,7 +796,10 @@ async function uploadNow(
   saveToGallery(blob, filename);
 
   // ===== UPLOAD =====
-  const imgRef = sRef(storage, `tasks/${taskKey}/${filename}`);
+  const imgRef = sRef(
+    storage,
+    `${DB_MODE === "TEST" ? "tasks_test" : "tasks"}/${taskKey}/${filename}`
+  );
   await uploadBytes(imgRef, blob);
   const url = await getDownloadURL(imgRef);
 
@@ -825,7 +840,7 @@ async function uploadNow(
     updatePayload.gpsAccuracy = photoGPS.accuracy || null;
   }
 
-  await update(ref(db, `tasks/${taskKey}`), updatePayload);
+  await update(ref(db, `${TASKS_PATH}/${taskKey}`), updatePayload);
 
 
 /* ================= FIX #3 START ================= */
@@ -869,7 +884,11 @@ async function loadTasks() {
 
     if (navigator.onLine) {
       const snap = await get(
-        query(ref(db, "tasks"), orderByChild("driverId"), equalTo(DRIVER_ID))
+        query(
+          ref(db, TASKS_PATH),
+          orderByChild("driverId"),
+          equalTo(DRIVER_ID)
+        )
       );
     
       const raw = snap.val() || {};
