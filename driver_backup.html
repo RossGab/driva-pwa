@@ -160,11 +160,13 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebas
 import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.4.87-DYNAMIC";
+const VERSION = "Driver v3.5.0-DYNAMIC";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
 const selectedJobTypes = new Set();
+const REQUIRED_PHOTOS = 3;
+const PHOTO_PROGRESS = {}; // taskKey -> count
 let jobTypeFilterInitialized = false;
 let LAST_KNOWN_GPS = null;
 
@@ -189,6 +191,26 @@ const uploadingMap = {};
 let SEARCH_TERM = "";
 const dateFilter = document.getElementById("dateFilter");
 
+const DB_NAME = "driverOfflineDB";
+const DB_VERSION = 1;
+const STORE_NAME = "offlineQueue";
+
+function openDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
+
+    req.onupgradeneeded = e => {
+      const db = e.target.result;
+      if (!db.objectStoreNames.contains(STORE_NAME)) {
+        db.createObjectStore(STORE_NAME, { keyPath: "id", autoIncrement: true });
+      }
+    };
+
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
 // ✅ Default to today
 function getLocalDateYYYYMMDD() {
   const d = new Date();
@@ -205,10 +227,16 @@ dateFilter.addEventListener("change", () => {
   loadTasks();
 });
 
+let offlineQueueCount = 0;
+
+async function refreshQueueCount() {
+  const q = await getQueue();
+  offlineQueueCount = q.length;
+}
+
 function isBusy() {
-  const queue = JSON.parse(localStorage.getItem("offlineQueue") || "[]");
   return (
-    queue.length > 0 ||
+    offlineQueueCount > 0 ||
     Object.keys(processingMap).length > 0 ||
     Object.keys(uploadingMap).length > 0
   );
@@ -487,9 +515,6 @@ window.addEventListener("online", updateNetwork);
 window.addEventListener("offline", updateNetwork);
 updateNetwork();
 
-/* ===== QUEUE ===== */
-const getQueue = () => JSON.parse(localStorage.getItem(QUEUE_KEY) || "[]");
-const setQueue = q => localStorage.setItem(QUEUE_KEY, JSON.stringify(q));
 
 /* ===== IMAGE ===== */
 function compressImage(file) {
@@ -515,6 +540,13 @@ const toBase64 = b => new Promise(r => {
   f.readAsDataURL(b);
 });
 
+function cleanupAfterFail() {
+  delete processingMap[CURRENT_TASK];
+  CURRENT_TASK = null;
+  updateRefreshLock();
+  loadTasks();
+}
+
 /* ===== CAMERA ===== */
 window.CURRENT_TASK = null;
 
@@ -536,6 +568,7 @@ window.CURRENT_TASK = null;
 
 cameraInput.onchange = async e => {
   if (!e.target.files[0] || !CURRENT_TASK) return;
+  if (processingMap[CURRENT_TASK] || uploadingMap[CURRENT_TASK]) return;
 
   // continue processing...
 
@@ -559,45 +592,89 @@ cameraInput.onchange = async e => {
     return;
   }
 
-  const photoGPS = LAST_KNOWN_GPS;
+ const photoGPS = LAST_KNOWN_GPS;
 
-// 🚫 HARD STOP — GPS MUST EXIST BEFORE PHOTO
+// 1️⃣ GPS must exist
 if (!photoGPS || !photoGPS.latitude) {
-  alert("📍 Acquiring GPS signal… please wait a few seconds");
-  delete processingMap[CURRENT_TASK];
-  CURRENT_TASK = null;
-  updateRefreshLock();
-  loadTasks();
+  alert("📍 Waiting for GPS lock. Please stay still for a moment.");
+  cleanupAfterFail();
   return;
 }
+
+// 2️⃣ GPS must be fresh (≤ 60 seconds)
+if (Date.now() - photoGPS.timestamp > 60000) {
+  alert("📍 GPS signal is outdated. Waiting for refresh…");
+  cleanupAfterFail();
+  return;
+}
+
+// 3️⃣ (OPTIONAL BUT STRONGLY RECOMMENDED)
+// Accuracy must be reasonable
+if (photoGPS.accuracy && photoGPS.accuracy > 50) {
+  alert("📍 GPS accuracy too low. Please wait for a better lock.");
+  cleanupAfterFail();
+  return;
+}
+
+  // ✅ INIT PHOTO COUNT
+  if (!PHOTO_PROGRESS[CURRENT_TASK]) {
+    PHOTO_PROGRESS[CURRENT_TASK] = 0;
+  }
   
+  // ✅ INCREMENT
+  PHOTO_PROGRESS[CURRENT_TASK]++;
+  const photoIndex = PHOTO_PROGRESS[CURRENT_TASK];
+  
+  // 🚫 BLOCK EXTRA PHOTOS
+  if (photoIndex > REQUIRED_PHOTOS) {
+    alert("📸 All required photos already captured");
+    PHOTO_PROGRESS[CURRENT_TASK] = REQUIRED_PHOTOS;
+    delete processingMap[CURRENT_TASK];
+    CURRENT_TASK = null;
+    loadTasks();
+    return;
+  }
     
   /* ================= OFFLINE ================= */
   if (!navigator.onLine) {
+  
+    const tempFilename =
+      `TEMP_${CURRENT_TASK}_${photoIndex}_${Date.now()}.jpg`;
+    saveToGallery(blob, tempFilename);
+
     
-const tempFilename =
-  `TEMP_${CURRENT_TASK}_${Date.now()}.jpg`;
-  saveToGallery(blob, tempFilename);
-        // save to offline queue
-      const q = getQueue();
-      q.push({
-        taskKey: CURRENT_TASK,
-        image: await toBase64(blob),
-        takenAt,
-        gps: photoGPS,               // ✅ FIX
-        deliveryData: BILLING_CACHE[CURRENT_TASK] || {}
-      });
-      setQueue(q);
-      
-      // 🔒 MARK TASK AS OFFLINE_PENDING LOCALLY
-      const cachedTasks = JSON.parse(localStorage.getItem(TASK_CACHE_KEY) || "[]");
-      const idx = cachedTasks.findIndex(t => t._key === CURRENT_TASK);
-      if (idx !== -1) {
+    await addToQueue({
+      taskKey: CURRENT_TASK,
+      image: await toBase64(blob),
+      takenAt,
+      photoIndex,
+      gps: photoGPS,
+      deliveryData: BILLING_CACHE[CURRENT_TASK] || {}
+    });
+
+    await refreshQueueCount();
+    updateRefreshLock();
+  
+    // 🔒 UPDATE LOCAL TASK CACHE
+    const cachedTasks =
+      JSON.parse(localStorage.getItem(TASK_CACHE_KEY) || "[]");
+  
+    const idx = cachedTasks.findIndex(t => t._key === CURRENT_TASK);
+    if (idx !== -1) {
+      PHOTO_PROGRESS[CURRENT_TASK] = photoIndex;
+  
+      // ✅ COMPLETE ONLY AFTER 3 PHOTOS
+      if (photoIndex >= REQUIRED_PHOTOS) {
         cachedTasks[idx].status = "OFFLINE_PENDING";
-        cachedTasks[idx].finalized = true; 
-        updateRefreshLock();
+        cachedTasks[idx].finalized = true;
       }
-      localStorage.setItem(TASK_CACHE_KEY, JSON.stringify(cachedTasks));
+    }
+  
+    localStorage.setItem(
+      TASK_CACHE_KEY,
+      JSON.stringify(cachedTasks)
+    );
+  
     delete processingMap[CURRENT_TASK];
     CURRENT_TASK = null;
     loadTasks();
@@ -616,14 +693,15 @@ const tempFilename =
       CURRENT_TASK,
       blob,
       takenAt,
-      null,
+      photoIndex, // ✅ PASS THE PHOTO NUMBER
       BILLING_CACHE[CURRENT_TASK] || {},
-      photoGPS                 // ✅ FIX
+      photoGPS
     );
   } catch {
     alert("Upload failed. Please retry.");
   }
 
+  PHOTO_PROGRESS[CURRENT_TASK] = photoIndex;
   delete uploadingMap[CURRENT_TASK];
   CURRENT_TASK = null;
   loadTasks();
@@ -649,11 +727,36 @@ function resolveStatus(task) {
   return task.status || "PENDING";
 }
 
+async function addToQueue(item) {
+  const db = await openDB();
+  const tx = db.transaction(STORE_NAME, "readwrite");
+  tx.objectStore(STORE_NAME).add(item);
+  return new Promise((resolve, reject) => {
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+async function getQueue() {
+  const db = await openDB();
+  const tx = db.transaction(STORE_NAME, "readonly");
+  return tx.objectStore(STORE_NAME).getAll();
+}
+
+async function clearQueue() {
+  const db = await openDB();
+  const tx = db.transaction(STORE_NAME, "readwrite");
+  tx.objectStore(STORE_NAME).clear();
+  return new Promise((resolve, reject) => {
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
 async function uploadNow(
   taskKey,
   blob,
   takenAt,
-  _ignoredFilename,
+  photoIndex, // ✅ RECEIVE PHOTO NUMBER
   deliveryData = {},
   photoGPS
 ) {
@@ -687,16 +790,33 @@ async function uploadNow(
 
   // ===== FLATTEN DATA =====
   const updatePayload = {
-    status: "COMPLETED",
-    imageUrl: url,
-    filename,
-    takenAt,
-    uploadedAt: new Date().toISOString(),
-    deliveryType: deliveryData.deliveryType || ""
-  };
+  [`IMAGE_FILENAME_${photoIndex}`]: filename,
+  [`IMAGE_URL_${photoIndex}`]: url,
+  [`IMAGE_LATITUDE_${photoIndex}`]: photoGPS.latitude,
+  [`IMAGE_LONGITUDE_${photoIndex}`]: photoGPS.longitude,
+  [`IMAGE_GPSACCURACY_${photoIndex}`]: photoGPS.accuracy || null,
+  [`IMAGE_TAKEN_AT_${photoIndex}`]: takenAt,
+
+  uploadedAt: new Date().toISOString(),
+  DELIVERY_TYPE: deliveryData.deliveryType || ""
+};
+
+  // ✅ INCREMENT PHOTO COUNT
+  const newCount = Math.max(task.photoCount || 0, photoIndex);
+  updatePayload.photoCount = newCount;
+  
+  // ✅ COMPLETE ONLY AFTER 3 PHOTOS
+  if (newCount >= REQUIRED_PHOTOS) {
+    updatePayload.status = "COMPLETED";
+    updatePayload.COMPLETED_AT = new Date().toISOString();
+  } else {
+    updatePayload.status = "PENDING";
+  }
 
   for (const [k, v] of Object.entries(deliveryData)) {
-    if (k !== "deliveryType") updatePayload[k] = v;
+    if (k !== "deliveryType" && k !== "DELIVERY_TYPE") {
+      updatePayload[k] = v;
+    }
   }
 
   if (photoGPS && photoGPS.latitude) {
@@ -716,8 +836,12 @@ const cachedTasks =
 
 const idx = cachedTasks.findIndex(t => t._key === taskKey);
 if (idx !== -1) {
-  cachedTasks[idx].status = "COMPLETED";
-  cachedTasks[idx].finalized = true;
+  if (newCount >= REQUIRED_PHOTOS) {
+    cachedTasks[idx].status = "COMPLETED";
+    cachedTasks[idx].finalized = true;
+  } else {
+    cachedTasks[idx].status = "PENDING";
+  }
 }
 
 localStorage.setItem(
@@ -778,6 +902,13 @@ async function loadTasks() {
     
       tasks = merged;
       localStorage.setItem(TASK_CACHE_KEY, JSON.stringify(tasks));
+
+      // ✅ Initialize photo progress per task
+      tasks.forEach(t => {
+        if (!PHOTO_PROGRESS[t._key]) {
+          PHOTO_PROGRESS[t._key] = t.photoCount || 0;
+        }
+      });
     }
 
     await preloadDriverUIConfig(tasks);
@@ -954,7 +1085,11 @@ async function render(tasks) {
           👁 Show / Hide Photo
         </button>
 
-        <img src="${t.imageUrl}" style="display:none">
+        ${[1,2,3].map(i =>
+          t[`IMAGE_URL_${i}`]
+            ? `<img src="${t[`IMAGE_URL_${i}`]}" style="display:none">`
+            : ""
+        ).join("")}
       `;
     }
 
@@ -1126,7 +1261,7 @@ function validateDynamic(taskKey) {
 loadTasks();
 
 async function processOfflineQueue() {
-  const q = getQueue();
+  const q = await getQueue();
   if (!q.length) return;
 
   console.log("🔁 Processing offline queue:", q.length);
@@ -1142,45 +1277,28 @@ async function processOfflineQueue() {
         item.taskKey,
         blob,
         item.takenAt,
-        null,
+        item.photoIndex,
         item.deliveryData || {},
-        item.gps                  // ✅ FIX
+        item.gps
       );
   
-      /* ================= FIX 1 START ================= */
+      // ✅ REMOVE THIS ITEM ONLY
+      const db = await openDB();
+      const tx = db.transaction(STORE_NAME, "readwrite");
+      tx.objectStore(STORE_NAME).delete(item.id);
+      await new Promise(r => tx.oncomplete = r);
   
-      // ✅ UPDATE LOCAL TASK CACHE AFTER OFFLINE UPLOAD
-      const cachedTasks =
-        JSON.parse(localStorage.getItem(TASK_CACHE_KEY) || "[]");
-  
-      const idx = cachedTasks.findIndex(t => t._key === item.taskKey);
-      if (idx !== -1) {
-        cachedTasks[idx].status = "COMPLETED";
-        cachedTasks[idx].finalized = true;
-      }
-  
-      localStorage.setItem(
-        TASK_CACHE_KEY,
-        JSON.stringify(cachedTasks)
-      );
-  
-      /* ================= FIX 1 END ================= */
-  
-      // ✅ CLEAR FLAGS
       delete uploadingMap[item.taskKey];
-      updateRefreshLock();
       delete processingMap[item.taskKey];
   
+      await refreshQueueCount();
+      updateRefreshLock();
       loadTasks();
     } catch (e) {
       console.error("❌ Offline upload failed", e);
-      return; // STOP if one fails
+      return; // STOP safely
     }
   }
-
-  // ✅ CLEAR QUEUE ONLY AFTER SUCCESS
-  setQueue([]);
-  updateRefreshLock();
 }
 
 window.addEventListener("online", async () => {
