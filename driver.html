@@ -167,7 +167,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebas
 import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.5.6-DYNAMIC";
+const VERSION = "Driver v3.5.7-DYNAMIC";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -953,10 +953,19 @@ async function render(tasks) {
       <div class="small"><b>Job Type:</b> ${t.JOBTYPE || "—"}</div>
       <div class="small"><b>Status:</b> ${status}</div>
     `;
-    if (ACTIVE_CAPTURE_TASK) {
+    if (ACTIVE_CAPTURE_TASK === t._key && status === "PENDING") {
+      const count = PHOTO_BUFFER[t._key]?.length || 1;
       html += `
         <div class="uploading">
-          📸 Capturing photos (${PHOTO_BUFFER[t._key]?.length || 1}/3)
+          📸 Capturing photos (${count}/3)
+        </div>
+      `;
+    }
+    
+    if (status === "UPLOADING") {
+      html += `
+        <div class="uploading">
+          ⏳ Uploading photos (3/3)
         </div>
       `;
     }
