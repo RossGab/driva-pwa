@@ -155,7 +155,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebas
 import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.4.84-DYNAMIC-test";
+const VERSION = "Driver v3.4.86-DYNAMIC-test";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -428,11 +428,28 @@ window.addEventListener("beforeunload", () => {
 function startGPSTracking(driverId) {
   if (!navigator.geolocation) return;
 
+  let lastSent = { lat: null, lng: null };
+
   gpsWatchId = navigator.geolocation.watchPosition(
     pos => {
+      const lat = pos.coords.latitude;
+      const lng = pos.coords.longitude;
+
+      // ⛔ Ignore very small movement (≈ 5 meters)
+      if (
+        lastSent.lat !== null &&
+        Math.abs(lat - lastSent.lat) < 0.00005 &&
+        Math.abs(lng - lastSent.lng) < 0.00005
+      ) {
+        return;
+      }
+
+      lastSent = { lat, lng };
+
       update(ref(db, `driverStatus/${driverId}`), {
-        latitude: pos.coords.latitude,
-        longitude: pos.coords.longitude,
+        latitude: lat,
+        longitude: lng,
+        accuracy: pos.coords.accuracy || null,
         lastSeen: new Date().toISOString()
       });
     },
@@ -527,6 +544,45 @@ cameraInput.onchange = async e => {
     return;
   }
 
+  let photoGPS = null;
+
+  try {
+    const coords = await new Promise((resolve) => {
+      navigator.geolocation.getCurrentPosition(
+        pos => resolve(pos.coords),
+        () => resolve(null),
+        {
+          enableHighAccuracy: true,
+          timeout: 15000,
+          maximumAge: 0
+        }
+      );
+    });
+  
+    if (coords) {
+      photoGPS = {
+        latitude: coords.latitude,
+        longitude: coords.longitude,
+        accuracy: coords.accuracy
+      };
+    }
+  } catch (e) {
+    console.warn("GPS capture failed:", e);
+  }
+
+  // 🚫 HARD STOP — GPS MUST EXIST AT PHOTO TIME
+  if (!photoGPS || !photoGPS.latitude) {
+    alert("📍 GPS signal not available. Please wait for location lock.");
+  
+    delete processingMap[CURRENT_TASK];
+    CURRENT_TASK = null;
+  
+    updateRefreshLock();
+    loadTasks();
+    return;
+  }
+  
+    
   /* ================= OFFLINE ================= */
   if (!navigator.onLine) {
     
@@ -539,6 +595,7 @@ const tempFilename =
         taskKey: CURRENT_TASK,
         image: await toBase64(blob),
         takenAt,
+        gps: photoGPS,               // ✅ FIX
         deliveryData: BILLING_CACHE[CURRENT_TASK] || {}
       });
       setQueue(q);
@@ -570,8 +627,9 @@ const tempFilename =
       CURRENT_TASK,
       blob,
       takenAt,
-      null, // filename intentionally ignored
-      BILLING_CACHE[CURRENT_TASK] || {}
+      null,
+      BILLING_CACHE[CURRENT_TASK] || {},
+      photoGPS                 // ✅ FIX
     );
   } catch {
     alert("Upload failed. Please retry.");
@@ -602,22 +660,20 @@ function resolveStatus(task) {
   return task.status || "PENDING";
 }
 
-async function uploadNow(taskKey, blob, takenAt, _ignoredFilename, deliveryData = {}) {
+async function uploadNow(
+  taskKey,
+  blob,
+  takenAt,
+  _ignoredFilename,
+  deliveryData = {},
+  photoGPS
+) {
   const taskSnap = await get(ref(db, `tasks/${taskKey}`));
   const task = taskSnap.val() || {};
 
-  // ===== GET LOCATION =====
-  let coords = {};
-  try {
-    const pos = await new Promise((res, rej) =>
-      navigator.geolocation.getCurrentPosition(
-        p => res(p.coords),
-        () => res(null),
-        { enableHighAccuracy: true, timeout: 10000 }
-      )
-    );
-    if (pos) coords = pos;
-  } catch {}
+  if (!photoGPS || !photoGPS.latitude) {
+    throw new Error("GPS_REQUIRED_AT_PHOTO_TIME");
+  }
 
   // ===== BUILD FILENAME =====
   const safe = v => String(v || "")
@@ -626,9 +682,11 @@ async function uploadNow(taskKey, blob, takenAt, _ignoredFilename, deliveryData 
     .replace(/^_|_$/g, "");
 
   const filename =
-    `${safe(task.CUSTOMERNAME)}_${safe(task.ADDRESS)}_` +
-    `${coords.longitude || "0"}_${coords.latitude || "0"}_` +
-    `${task.driverId}_${new Date().toISOString().replace(/[-:T.Z]/g, "").slice(0,14)}.jpg`;
+  `${safe(task.CUSTOMERNAME)}_${safe(task.ADDRESS)}_` +
+  `${photoGPS.longitude}_${photoGPS.latitude}_` +
+  `${task.driverId}_${new Date().toISOString()
+    .replace(/[-:T.Z]/g, "")
+    .slice(0,14)}.jpg`;
 
   // ✅ SAVE FINAL IMAGE TO LOCAL GALLERY
   saveToGallery(blob, filename);
@@ -652,9 +710,10 @@ async function uploadNow(taskKey, blob, takenAt, _ignoredFilename, deliveryData 
     if (k !== "deliveryType") updatePayload[k] = v;
   }
 
-  if (coords.latitude) {
-    updatePayload.latitude = coords.latitude;
-    updatePayload.longitude = coords.longitude;
+  if (photoGPS && photoGPS.latitude) {
+    updatePayload.latitude = photoGPS.latitude;
+    updatePayload.longitude = photoGPS.longitude;
+    updatePayload.gpsAccuracy = photoGPS.accuracy || null;
   }
 
   await update(ref(db, `tasks/${taskKey}`), updatePayload);
@@ -1095,7 +1154,8 @@ async function processOfflineQueue() {
         blob,
         item.takenAt,
         null,
-        item.deliveryData || {}
+        item.deliveryData || {},
+        item.gps                  // ✅ FIX
       );
   
       /* ================= FIX 1 START ================= */
