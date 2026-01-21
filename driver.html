@@ -167,7 +167,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebas
 import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.5.10-DYNAMIC";
+const VERSION = "Driver v3.5.8-DYNAMIC";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -177,7 +177,6 @@ const PHOTO_BUFFER = {}; // taskKey -> array of photos // taskKey -> count
 let jobTypeFilterInitialized = false;
 let LAST_KNOWN_GPS = null;
 let ACTIVE_CAPTURE_TASK = null;
-let CURRENT_TASK = null;
 
 const firebaseConfig = {
   apiKey: "AIzaSyDFW61pnwLvh6HGKWt10zLYNr860fI8vkg",
@@ -396,15 +395,15 @@ function renderJobTypeFilters(tasks) {
 
   tasks.forEach(t => {
     const status = resolveStatus(t);
-  
-    // ✅ only pending
+
+    // ❌ only pending
     if (status !== "PENDING") return;
-  
-    // ✅ must match selected date
-    if (normalizeDate(t.createdAt) !== selectedDate) return;
-  
+
+    // ❌ must match selected date
+    if (!t.createdAt || !t.createdAt.startsWith(selectedDate)) return;
+
     if (!t.JOBTYPE) return;
-  
+
     jobTypeCounts[t.JOBTYPE] =
       (jobTypeCounts[t.JOBTYPE] || 0) + 1;
   });
@@ -548,8 +547,6 @@ const toBase64 = b => new Promise(r => {
   f.readAsDataURL(b);
 });
 
-
-
 function cleanupAfterFail() {
   if (CURRENT_TASK && PHOTO_BUFFER[CURRENT_TASK]) {
     delete PHOTO_BUFFER[CURRENT_TASK];
@@ -562,6 +559,7 @@ function cleanupAfterFail() {
 }
 
 /* ===== CAMERA ===== */
+window.CURRENT_TASK = null;
 
 function saveToGallery(blob, filename) {
   const url = URL.createObjectURL(blob);
@@ -580,29 +578,16 @@ function saveToGallery(blob, filename) {
 
 async function handleCapturedFile(file) {
   if (!file || !CURRENT_TASK) return;
+  if (uploadingMap[CURRENT_TASK]) return; // ✅ prevent double fire
 
-  // 🚫 HARD STOP: already complete
-  if (PHOTO_BUFFER[CURRENT_TASK]?.length >= REQUIRED_PHOTOS) {
-    return;
-  }
-
-  // 🚫 HARD STOP: uploading
-  if (uploadingMap[CURRENT_TASK]) return;
 
   const cached =
     JSON.parse(localStorage.getItem(TASK_CACHE_KEY) || "[]");
 
   const idx = cached.findIndex(t => t._key === CURRENT_TASK);
   if (idx !== -1) {
-      cached[idx].started = true;
-      cached[idx].status = "PROCESSING";
-      localStorage.setItem(TASK_CACHE_KEY, JSON.stringify(cached));
-          
-    if (navigator.onLine) {
-      update(ref(db, `tasks/${CURRENT_TASK}`), {
-        status: "PROCESSING"
-      });
-    }
+    cached[idx].started = true;
+    localStorage.setItem(TASK_CACHE_KEY, JSON.stringify(cached));
   }
 
   updateRefreshLock();
@@ -663,23 +648,11 @@ async function handleCapturedFile(file) {
 
   // EXACTLY 3 → upload once
   const taskKey = CURRENT_TASK;
-  
   uploadingMap[taskKey] = true;
-  const cached =
-    JSON.parse(localStorage.getItem(TASK_CACHE_KEY) || "[]");
-  
-  const idx = cached.findIndex(t => t._key === taskKey);
-  if (idx !== -1) {
-    cached[idx].status = "UPLOADING";
-    localStorage.setItem(TASK_CACHE_KEY, JSON.stringify(cached));
-  }
-  loadTasks()
 
   if (!navigator.onLine) {
   await addToQueue({
     taskKey,
-    driverId: DRIVER_ID,
-    createdAt: new Date().toISOString(),
     photos: PHOTO_BUFFER[taskKey].map(p => ({
       image: p.blob,
       gps: p.gps,
@@ -691,7 +664,6 @@ async function handleCapturedFile(file) {
   alert("📦 Saved offline. Will upload when online.");
 
   delete PHOTO_BUFFER[taskKey];
-  delete uploadingMap[taskKey];
   ACTIVE_CAPTURE_TASK = null;
   CURRENT_TASK = null;
   updateRefreshLock();
@@ -737,14 +709,14 @@ function updateRefreshLock() {
   }
 }
   
+  
 function resolveStatus(task) {
+  // ✅ HARD STOP: COMPLETED ALWAYS MEANS COMPLETED
   if (task.status === "COMPLETED") return "COMPLETED";
 
   if (uploadingMap[task._key]) return "UPLOADING";
 
-  if (task.status === "PROCESSING") return "PROCESSING";
-
-  return "PENDING";
+  return task.status || "PENDING";
 }
 
 async function addToQueue(item) {
@@ -771,25 +743,6 @@ async function clearQueue() {
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
   });
-}
-
-function normalizeDate(dateStr) {
-  if (!dateStr) return null;
-
-  // ISO format
-  if (dateStr.includes("T")) {
-    return dateStr.split("T")[0];
-  }
-
-  // DD/MM/YYYY
-  if (dateStr.includes("/")) {
-    const parts = dateStr.split("/");
-    if (parts[0].length === 2) {
-      return `${parts[2]}-${parts[1]}-${parts[0]}`;
-    }
-  }
-
-  return dateStr;
 }
 
 async function uploadBatch(taskKey) {
@@ -839,15 +792,6 @@ async function uploadBatch(taskKey) {
   }
 
   await update(ref(db, `tasks/${taskKey}`), updatePayload);
-  const cached =
-    JSON.parse(localStorage.getItem(TASK_CACHE_KEY) || "[]");
-  
-    const idx = cached.findIndex(t => t._key === taskKey);
-    if (idx !== -1) {
-      cached[idx].status = "COMPLETED";
-      cached[idx].finalized = true;
-      localStorage.setItem(TASK_CACHE_KEY, JSON.stringify(cached));
-    }
 
   delete PHOTO_BUFFER[taskKey];
 }
@@ -943,9 +887,9 @@ const filtered = tasks
     if (status === "COMPLETED" && t.finalized) return false;
 
     // ❌ Must match selected date
-    if (normalizeDate(t.createdAt) !== selectedDate) {
-        return false;
-      }
+    if (!t.createdAt || !t.createdAt.startsWith(selectedDate)) {
+      return false;
+    }
 
     // ❌ Job type filter
     if (
@@ -991,7 +935,7 @@ function updateRemainingCounter(tasks) {
     if (status !== "PENDING") return false;
 
     // ✅ must match selected date
-    if (normalizeDate(t.createdAt) !== selectedDate) {
+    if (!t.createdAt || !t.createdAt.startsWith(selectedDate)) {
       return false;
     }
 
@@ -1033,16 +977,16 @@ async function render(tasks) {
     `;
     if (
         ACTIVE_CAPTURE_TASK === t._key &&
-        (status === "PENDING" || status === "PROCESSING") &&
+        status === "PENDING" &&
         !uploadingMap[t._key]
       ) {
-        const count = PHOTO_BUFFER[t._key]?.length || 0;
-        html += `
-          <div class="uploading">
-            📸 Capturing photos (${count}/3)
-          </div>
-        `;
-      } 
+      const count = PHOTO_BUFFER[t._key]?.length || 0;
+      html += `
+        <div class="uploading">
+          📸 Capturing photos (${count}/3)
+        </div>
+      `;
+    }
     
     if (status === "UPLOADING") {
       html += `
@@ -1055,15 +999,12 @@ async function render(tasks) {
     
 
     /* ===== PENDING (EDITABLE ONLINE + OFFLINE) ===== */
-    const photoCount = PHOTO_BUFFER[t._key]?.length || 0;
-
-      if (
-        (status === "PENDING" || status === "PROCESSING") &&
-        !t.finalized &&
-        !uploadingMap[t._key] &&
-        photoCount < REQUIRED_PHOTOS &&
-        (!ACTIVE_CAPTURE_TASK || ACTIVE_CAPTURE_TASK === t._key)
-      ) {
+    if (
+      status === "PENDING" &&
+      !t.finalized &&
+      !uploadingMap[t._key] &&
+      (!ACTIVE_CAPTURE_TASK || ACTIVE_CAPTURE_TASK === t._key)
+    ) {
       html += await renderDynamicDelivery(t);
     
       html += `
@@ -1132,7 +1073,7 @@ async function renderDynamicDelivery(t) {
           type="radio"
           name="delivery_${t._key}"
           value="${m}"
-          ${ACTIVE_CAPTURE_TASK && ACTIVE_CAPTURE_TASK !== t._key ? "disabled" : ""}
+          ${ACTIVE_CAPTURE_TASK ? "disabled" : ""}
           onchange="showDynamicFields('${t._key}','${t.JOBTYPE}','${m}')">
         ${m}
       </label>`;
@@ -1254,50 +1195,7 @@ loadTasks();
 refreshQueueCount();
 
 async function processOfflineQueue() {
-  if (!navigator.onLine) return;
-
-  const dbi = await openDB();
-  const tx = dbi.transaction(STORE_NAME, "readwrite");
-  const store = tx.objectStore(STORE_NAME);
-  const items = await store.getAll();
-
-  for (const item of items) {
-    try {
-      const taskKey = item.taskKey;
-
-      PHOTO_BUFFER[taskKey] = item.photos.map(p => ({
-        blob: p.image,
-        gps: p.gps,
-        takenAt: p.takenAt
-      }));
-
-      BILLING_CACHE[taskKey] = item.delivery || {};
-
-      // mark task as uploading locally
-      const cached =
-        JSON.parse(localStorage.getItem(TASK_CACHE_KEY) || "[]");
-      
-      const idx = cached.findIndex(t => t._key === taskKey);
-      if (idx !== -1) {
-        cached[idx].status = "UPLOADING";
-        localStorage.setItem(TASK_CACHE_KEY, JSON.stringify(cached));
-      }
-      
-      uploadingMap[taskKey] = true;
-
-      await uploadBatch(taskKey);
-
-      // remove item after success
-      store.delete(item.id);
-      delete uploadingMap[taskKey];
-      delete PHOTO_BUFFER[taskKey];
-    } catch (e) {
-      delete uploadingMap[taskKey];
-      delete PHOTO_BUFFER[taskKey];
-      console.error("Offline upload failed, will retry", e);
-      break; // stop processing, retry later
-    }
-  }
+  // TODO: batch-offline support (next step)
 }
   
 window.addEventListener("online", async () => {
