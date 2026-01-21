@@ -160,7 +160,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebas
 import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.5.4-DYNAMIC";
+const VERSION = "Driver v3.5.5-DYNAMIC";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -564,20 +564,16 @@ function saveToGallery(blob, filename) {
   URL.revokeObjectURL(url);
 }
 
-window.CURRENT_TASK = null;
 
-cameraInput.onchange = async e => {
-  if (!e.target.files[0] || !CURRENT_TASK) return;
+async function handleCapturedFile(file) {
+  if (!file || !CURRENT_TASK) return;
   if (processingMap[CURRENT_TASK] || uploadingMap[CURRENT_TASK]) return;
 
-  // continue processing...
-
-  // ===== START PROCESSING =====
   processingMap[CURRENT_TASK] = true;
-  // mark task started locally (UI only)
+
   const cached =
     JSON.parse(localStorage.getItem(TASK_CACHE_KEY) || "[]");
-  
+
   const idx = cached.findIndex(t => t._key === CURRENT_TASK);
   if (idx !== -1) {
     cached[idx].started = true;
@@ -590,28 +586,23 @@ cameraInput.onchange = async e => {
 
   let blob;
   try {
-    blob = await compressImage(e.target.files[0]);
-    
+    blob = await compressImage(file);
   } catch {
     alert("Image processing failed");
-    delete processingMap[CURRENT_TASK];
-    CURRENT_TASK = null;
-    loadTasks();
+    cleanupAfterFail();
     return;
   }
 
- const photoGPS = LAST_KNOWN_GPS;
+  const photoGPS = LAST_KNOWN_GPS;
 
-  // 🚫 No GPS yet → wait (do NOT skip)
   if (!photoGPS || !photoGPS.latitude) {
     alert("📍 Waiting for GPS lock. Please stay still.");
     cleanupAfterFail();
     return;
   }
-  
-  // Accuracy gate
+
   if (photoGPS.accuracy && photoGPS.accuracy > 50) {
-    alert("📍 GPS accuracy too low. Please wait for a better lock.");
+    alert("📍 GPS accuracy too low. Please wait.");
     cleanupAfterFail();
     return;
   }
@@ -619,36 +610,37 @@ cameraInput.onchange = async e => {
   if (!PHOTO_BUFFER[CURRENT_TASK]) {
     PHOTO_BUFFER[CURRENT_TASK] = [];
   }
-  
+
   PHOTO_BUFFER[CURRENT_TASK].push({
     blob,
     gps: photoGPS,
     takenAt
   });
-  
-  const photoCount = PHOTO_BUFFER[CURRENT_TASK].length;
-  
-  if (photoCount > REQUIRED_PHOTOS) {
-    alert("📸 All required photos already captured");
-    PHOTO_BUFFER[CURRENT_TASK].length = REQUIRED_PHOTOS;
-    cleanupAfterFail();
-    return;
-  }
-  
-  if (photoCount < REQUIRED_PHOTOS) {
-    delete processingMap[CURRENT_TASK];
+
+  const count = PHOTO_BUFFER[CURRENT_TASK].length;
+
+  if (count < REQUIRED_PHOTOS) {
+    const taskKey = CURRENT_TASK;
+    delete processingMap[taskKey];
     CURRENT_TASK = null;
     updateRefreshLock();
+    loadTasks(); // ✅ show progress immediately
     return;
   }
 
-  // ✅ EXACTLY 3 PHOTOS → UPLOAD ONCE
+  // ✅ SAVE ALL PHOTOS TO GALLERY (ONLINE OR OFFLINE)
+  PHOTO_BUFFER[CURRENT_TASK].forEach((p, index) => {
+    const filename =
+      `${CURRENT_TASK}_PHOTO_${index + 1}_${Date.now()}.jpg`;
+    saveToGallery(p.blob, filename);
+  });
+
+  // EXACTLY 3 → upload once
   const taskKey = CURRENT_TASK;
-  
   uploadingMap[taskKey] = true;
   delete processingMap[taskKey];
   CURRENT_TASK = null;
-  
+
   try {
     await uploadBatch(taskKey);
   } catch (e) {
@@ -656,11 +648,19 @@ cameraInput.onchange = async e => {
     console.error(e);
   } finally {
     delete uploadingMap[taskKey];
-    updateRefreshLock(); // ✅ REQUIRED
+    updateRefreshLock();
     loadTasks();
   }
+}
+
+window.afterCamera = function (taskKey, e) {
+  if (!e.target.files || !e.target.files[0]) return;
+
+  CURRENT_TASK = taskKey;
+  handleCapturedFile(e.target.files[0]); // ✅ DIRECT + SAFE
+
+  e.target.value = ""; // ✅ RESET INPUT (IMPORTANT)
 };
-  
 
 function updateRefreshLock() {
   if (isBusy()) {
@@ -715,6 +715,10 @@ async function uploadBatch(taskKey) {
 
   const taskSnap = await get(ref(db, `tasks/${taskKey}`));
   const task = taskSnap.val();
+
+  if (!task) {
+    throw new Error("TASK_NOT_FOUND");
+  }
 
   const updatePayload = {
     status: "COMPLETED",
@@ -1008,16 +1012,7 @@ window.beforeCamera = function (taskKey, e) {
   return true; // ✅ ALLOW camera
 };
 
-// ✅ RUNS AFTER PHOTO IS TAKEN
-window.afterCamera = function (taskKey, e) {
-  if (!e.target.files || !e.target.files[0]) return;
 
-  window.CURRENT_TASK = taskKey;
-
-  // forward to existing pipeline
-  cameraInput.files = e.target.files;
-  cameraInput.onchange({ target: e.target });
-};
   
 async function renderDynamicDelivery(t) {
   const methods = await loadDriverUI(t.JOBTYPE);
@@ -1036,19 +1031,6 @@ async function renderDynamicDelivery(t) {
   return html;
 }
 
-window.handleCamera = function (taskKey, e) {
-  // 🔒 VALIDATE FIRST — STILL BEFORE CAMERA
-  if (!validateDynamic(taskKey)) {
-    e.target.value = "";
-    return;
-  }
-
-  window.CURRENT_TASK = taskKey;
-
-  // 🔥 Manually forward to existing handler
-  cameraInput.files = e.target.files;
-  cameraInput.onchange({ target: e.target });
-};
 
 window.showDynamicFields = async function (taskKey, jobType, method) {
   if (!BILLING_CACHE[taskKey]) BILLING_CACHE[taskKey] = {};
