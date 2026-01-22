@@ -269,7 +269,7 @@ button {
 <div class="admin-header" style="justify-content:space-between;">
   <div style="display:flex;align-items:center;gap:14px;">
     <img src="./logo.jpg" class="admin-logo" alt="Company Logo">
-    <h1>Admin Dashboard <span class="version">V2.4.7</span></h1>
+    <h1>Admin Dashboard <span class="version">V2.4.8</span></h1>
   </div>
 
   <!-- 📅 DATE FILTER -->
@@ -305,7 +305,7 @@ button {
 <!-- ===== ACTIONS ===== -->
 <div class="actions">
   <button class="assign" onclick="toggleLiveMap()">🗺 Live Map</button>
-  <button class="assign" onclick="location.href='assign.html'">➕ Upload Task</button>
+  <button class="assign" onclick="location.href='assign.html'">➕ Manage Task</button>
   <button class="openBtn" onclick="showAllOpenTasks()">📂 Open</button>
   <button class="doneBtn" onclick="showCompletedTasks()">✅ Completed</button>
   <button class="assign" onclick="location.href='add-driver.html'">👤 Add Driver</button>
@@ -793,12 +793,11 @@ function renderTaskDetails(t) {
 
       <label>DELIVERY TYPE</label>
       <input data-field="deliveryType" value="${t.deliveryType || ""}" disabled>
-
       <label>LATITUDE</label>
-      <input data-field="latitude" value="${t.latitude || ""}" disabled>
-
+      <input data-field="LATITUDE" value="${t.LATITUDE || ""}" disabled>
+      
       <label>LONGITUDE</label>
-      <input data-field="longitude" value="${t.longitude || ""}" disabled>
+      <input data-field="LONGITUDE" value="${t.LONGITUDE || ""}" disabled>
 
     </div>
   `;
