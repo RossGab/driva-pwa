@@ -160,7 +160,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebas
 import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.4.87-DYNAMIC";
+const VERSION = "Driver v3.4.88-DYNAMIC";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -890,11 +890,28 @@ async function render(tasks) {
     const div = document.createElement("div");
     div.className = `task ${status === "COMPLETED" ? "completed" : ""}`;
 
+    const hasGPS =
+  t.LATITUDE &&
+  t.LONGITUDE &&
+  !isNaN(parseFloat(t.LATITUDE)) &&
+  !isNaN(parseFloat(t.LONGITUDE));
+
+const mapURL = hasGPS
+  ? `https://www.google.com/maps?q=${t.LATITUDE},${t.LONGITUDE}`
+  : null;
+
+const addressHTML = hasGPS
+  ? `<a href="${mapURL}" target="_blank"
+        style="color:#007bff;text-decoration:underline;font-weight:bold;">
+        📍 ${t.ADDRESS || "—"}
+     </a>`
+  : `<div>📍 ${t.ADDRESS || "—"}</div>`;
+
     let html = `
       <b>${t.CUSTOMERNAME || "—"}</b>
-
-      <div class="small">📍 ${t.ADDRESS || "—"}</div>
-
+    
+      <div class="small">${addressHTML}</div>
+    
       <div class="small"><b>Account #:</b> ${t.ACCOUNTNUMBER || "—"}</div>
       <div class="small"><b>MRU:</b> ${t.MRU || "—"}</div>
       <div class="small"><b>Meter #:</b> ${t.METERNUMBER || "—"}</div>
