@@ -81,7 +81,7 @@ select, input[type="date"] {
 
 <body>
 
-<h2>Manage Tasks V4.0.3</h2>
+<h2>Manage Tasks V4.0.4</h2>
 
 <button onclick="location.href='admin.html'" class="small-btn">⬅ Back</button>
 
@@ -403,9 +403,6 @@ window.uploadCSV = async function(btn){
     btn.innerText = "Upload CSV";
   }
 };
-  
-  });
-
   await update(ref(db),updates);
   loadTasks();
 };
