@@ -81,7 +81,7 @@ select, input[type="date"] {
 
 <body>
 
-<h2>Manage Tasks V4.0.4</h2>
+<h2>Manage Tasks V4.0.6</h2>
 
 <button onclick="location.href='admin.html'" class="small-btn">⬅ Back</button>
 
@@ -315,10 +315,9 @@ const REQUIRED_HEADERS = [
 
 window.uploadCSV = async function(btn){
   const file = document.getElementById("csvFile").files[0];
-  const status = document.getElementById("uploadStatus");
 
   if (!file) {
-    alert("Please select a CSV file");
+    alert("❌ Please select a CSV file");
     return;
   }
 
@@ -335,7 +334,7 @@ window.uploadCSV = async function(btn){
       .filter(Boolean);
 
     if (rows.length < 2) {
-      status.innerText = "❌ CSV has no data rows";
+      alert("❌ CSV has no data rows");
       btn.disabled = false;
       btn.innerText = "Upload CSV";
       return;
@@ -344,19 +343,19 @@ window.uploadCSV = async function(btn){
     /* ===== HEADER PARSE ===== */
     const headers = rows.shift().split(",").map(h => h.trim());
 
-    /* ===== VALIDATE ===== */
+    /* ===== VALIDATE HEADERS ===== */
     const missing = REQUIRED_HEADERS.filter(h => !headers.includes(h));
     const extra = headers.filter(h => !REQUIRED_HEADERS.includes(h));
 
     if (missing.length) {
-      status.innerText = "❌ Missing required columns:\n" + missing.join(", ");
+      alert("❌ Missing required columns:\n\n" + missing.join(", "));
       btn.disabled = false;
       btn.innerText = "Upload CSV";
       return;
     }
 
     if (extra.length) {
-      status.innerText = "❌ Extra columns not allowed:\n" + extra.join(", ");
+      alert("❌ Extra columns not allowed:\n\n" + extra.join(", "));
       btn.disabled = false;
       btn.innerText = "Upload CSV";
       return;
@@ -381,9 +380,8 @@ window.uploadCSV = async function(btn){
         ...task,
         driverId: task.AGENTID || "",
         status: "PENDING",
-
-        rowIndex: index + 1,  // Excel order
-        uploadBatch: base,   // Same upload group
+        rowIndex: index + 1,  // Excel row order preserved
+        uploadBatch: base,
         createdAt: now
       };
     });
@@ -391,19 +389,18 @@ window.uploadCSV = async function(btn){
     /* ===== SINGLE ATOMIC WRITE ===== */
     await update(ref(db), updates);
 
-    status.innerText = `✅ Upload complete — ${rows.length} tasks added`;
-    btn.innerText = "✔ Done";
+    alert(`✅ Upload successful!\n\n${rows.length} tasks added.`);
 
+    btn.innerText = "✔ Done";
     loadTasks();
 
   } catch (err) {
     console.error(err);
-    status.innerText = "❌ Upload failed";
+    alert("❌ Upload failed. Check console for details.");
     btn.disabled = false;
     btn.innerText = "Upload CSV";
   }
 };
-
 loadTasks();
 </script>
 </body>
