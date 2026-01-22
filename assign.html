@@ -36,13 +36,14 @@ h2 { text-align:center; }
 table {
   width:100%;
   border-collapse:collapse;
-  font-size:13px;
+  font-size:12px;
 }
 
 th, td {
   border-bottom:1px solid #eee;
-  padding:8px 6px;
+  padding:6px;
   text-align:left;
+  white-space:nowrap;
 }
 
 th {
@@ -65,7 +66,15 @@ tr:hover { background:#f9f9f9; }
 
 .actions {
   display:flex;
-  gap:8px;
+  gap:6px;
+  flex-wrap:wrap;
+}
+
+select, input[type="date"] {
+  padding:8px;
+  border-radius:6px;
+  border:1px solid #ccc;
+  font-size:13px;
 }
 </style>
 </head>
@@ -76,8 +85,6 @@ tr:hover { background:#f9f9f9; }
 
 <button onclick="location.href='admin.html'" class="small-btn">⬅ Back</button>
 
-<hr>
-
 <!-- BULK UPLOAD -->
 <div class="panel">
   <b>📤 Bulk Upload Tasks</b><br>
@@ -86,11 +93,14 @@ tr:hover { background:#f9f9f9; }
   <div id="uploadStatus" style="font-size:13px;margin-top:6px;"></div>
 </div>
 
-<!-- DATE + BULK ACTION -->
+<!-- FILTERS + BULK ACTION -->
 <div class="panel blue">
   <div class="actions">
-    <input type="date" id="taskDate" style="flex:1;padding:8px;">
-    <button id="bulkBtn" disabled onclick="openBulkActions()">Bulk Actions</button>
+    <input type="date" id="filterDate">
+    <select id="filterDriver"><option value="">All Drivers</option></select>
+    <select id="filterJob"><option value="">All Job Types</option></select>
+    <select id="filterBA"><option value="">All BA</option></select>
+    <button id="bulkBtn" disabled onclick="openBulkActions()">Bulk Action</button>
   </div>
 </div>
 
@@ -102,16 +112,15 @@ tr:hover { background:#f9f9f9; }
       <thead>
         <tr>
           <th><input type="checkbox" id="checkAll"></th>
+          <th>Created (PH)</th>
           <th>Customer</th>
           <th>Address</th>
           <th>Driver</th>
-          <th>Job Type</th>
+          <th>JobType</th>
           <th>BA</th>
         </tr>
       </thead>
-      <tbody id="taskTable">
-        <tr><td colspan="6">Select date</td></tr>
-      </tbody>
+      <tbody id="taskTable"></tbody>
     </table>
   </div>
 </div>
@@ -137,157 +146,188 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 
-const taskDate = document.getElementById("taskDate");
-const taskTable = document.getElementById("taskTable");
+const table = document.getElementById("taskTable");
 const bulkBtn = document.getElementById("bulkBtn");
-const checkAll = document.getElementById("checkAll");
 
-taskDate.value = new Date().toISOString().split("T")[0];
-taskDate.onchange = loadTasks;
+const filterDate = document.getElementById("filterDate");
+const filterDriver = document.getElementById("filterDriver");
+const filterJob = document.getElementById("filterJob");
+const filterBA = document.getElementById("filterBA");
+const checkAll = document.getElementById("checkAll");
 
 let TASKS = [];
 
-/* ===== LOAD TASKS ===== */
-async function loadTasks() {
-  const date = taskDate.value;
-  taskTable.innerHTML = `<tr><td colspan="6">Loading...</td></tr>`;
-  bulkBtn.disabled = true;
-  checkAll.checked = false;
+filterDate.value = new Date().toISOString().split("T")[0];
 
-  const snap = await get(ref(db, "tasks"));
-  const raw = snap.val() || {};
+filterDate.onchange =
+filterDriver.onchange =
+filterJob.onchange =
+filterBA.onchange = applyFilters;
 
-  TASKS = Object.keys(raw)
-    .map(k => ({ _key: k, ...raw[k] }))
-    .filter(t =>
-      t.status === "PENDING" &&
-      t.createdAt?.startsWith(date)
-    );
-
-  renderTable();
+/* ===== PH TIME ===== */
+function toPHTime(ts) {
+  return new Date(ts).toLocaleString("en-PH", {
+    timeZone: "Asia/Manila",
+    year:"numeric",
+    month:"2-digit",
+    day:"2-digit",
+    hour:"2-digit",
+    minute:"2-digit",
+    second:"2-digit"
+  });
 }
 
-function renderTable() {
-  taskTable.innerHTML = "";
+/* ===== LOAD TASKS ===== */
+async function loadTasks() {
+  const snap = await get(ref(db,"tasks"));
+  const raw = snap.val() || {};
 
-  if (!TASKS.length) {
-    taskTable.innerHTML = `<tr><td colspan="6">No pending tasks</td></tr>`;
+  TASKS = Object.keys(raw).map(k=>({ _key:k, ...raw[k] }))
+    .filter(t=>t.status==="PENDING");
+
+  buildFilterLists();
+  applyFilters();
+}
+
+function buildFilterLists() {
+  const drivers = new Set();
+  const jobs = new Set();
+  const bas = new Set();
+
+  TASKS.forEach(t=>{
+    if(t.driverId) drivers.add(t.driverId);
+    if(t.JOBTYPE) jobs.add(t.JOBTYPE);
+    if(t.BA) bas.add(t.BA);
+  });
+
+  filterDriver.innerHTML = `<option value="">All Drivers</option>`;
+  filterJob.innerHTML = `<option value="">All Job Types</option>`;
+  filterBA.innerHTML = `<option value="">All BA</option>`;
+
+  drivers.forEach(v=>filterDriver.innerHTML += `<option>${v}</option>`);
+  jobs.forEach(v=>filterJob.innerHTML += `<option>${v}</option>`);
+  bas.forEach(v=>filterBA.innerHTML += `<option>${v}</option>`);
+}
+
+function applyFilters() {
+  let data = [...TASKS];
+
+  if(filterDate.value)
+    data = data.filter(t=>t.createdAt?.startsWith(filterDate.value));
+
+  if(filterDriver.value)
+    data = data.filter(t=>t.driverId===filterDriver.value);
+
+  if(filterJob.value)
+    data = data.filter(t=>t.JOBTYPE===filterJob.value);
+
+  if(filterBA.value)
+    data = data.filter(t=>t.BA===filterBA.value);
+
+  renderTable(data);
+}
+
+/* ===== RENDER ===== */
+function renderTable(data) {
+  table.innerHTML = "";
+  checkAll.checked = false;
+  bulkBtn.disabled = true;
+
+  if(!data.length){
+    table.innerHTML = `<tr><td colspan="7">No matching tasks</td></tr>`;
     return;
   }
 
-  TASKS.forEach(t => {
+  data.forEach(t=>{
     const tr = document.createElement("tr");
-
     tr.innerHTML = `
       <td><input type="checkbox" data-id="${t._key}" onchange="checkSelection()"></td>
-      <td>${t.CUSTOMERNAME || ""}</td>
-      <td>${t.ADDRESS || ""}</td>
-      <td>${t.driverId || "—"}</td>
-      <td>${t.JOBTYPE || ""}</td>
-      <td>${t.BA || ""}</td>
+      <td>${toPHTime(t.createdAt)}</td>
+      <td>${t.CUSTOMERNAME||""}</td>
+      <td>${t.ADDRESS||""}</td>
+      <td>${t.driverId||"—"}</td>
+      <td>${t.JOBTYPE||""}</td>
+      <td>${t.BA||""}</td>
     `;
-
-    taskTable.appendChild(tr);
+    table.appendChild(tr);
   });
 }
 
 /* ===== SELECTION ===== */
 checkAll.onchange = () => {
-  const boxes = taskTable.querySelectorAll("input[type=checkbox]");
-  boxes.forEach(cb => cb.checked = checkAll.checked);
+  document.querySelectorAll("#taskTable input[type=checkbox]")
+    .forEach(cb => cb.checked = checkAll.checked);
   checkSelection();
 };
 
 window.checkSelection = function () {
-  const checked =
-    taskTable.querySelectorAll("input[type=checkbox]:checked");
-
-  bulkBtn.disabled = checked.length === 0;
+  const count =
+    document.querySelectorAll("#taskTable input:checked").length;
+  bulkBtn.disabled = count === 0;
 };
 
 /* ===== BULK ACTION ===== */
 window.openBulkActions = function () {
-  const ids = [...taskTable.querySelectorAll("input[type=checkbox]:checked")]
+  const ids = [...document.querySelectorAll("#taskTable input:checked")]
     .map(cb => cb.dataset.id);
 
-  const action = prompt(
-    `Selected ${ids.length} tasks\n\nType:\nTRANSFER\nor\nDELETE`
-  );
+  const action = prompt("Type: TRANSFER or DELETE");
 
-  if (!action) return;
-
-  if (action.toUpperCase() === "DELETE") {
-    bulkDelete(ids);
-  } else if (action.toUpperCase() === "TRANSFER") {
-    bulkTransfer(ids);
-  }
+  if(action === "DELETE") bulkDelete(ids);
+  else if(action === "TRANSFER") bulkTransfer(ids);
 };
 
 async function bulkDelete(ids) {
-  if (!confirm(`Delete ${ids.length} tasks?`)) return;
-
-  const updates = {};
-  ids.forEach(id => updates[`tasks/${id}`] = null);
-
-  await update(ref(db), updates);
-  alert("✅ Tasks deleted");
+  if(!confirm(`Delete ${ids.length} tasks?`)) return;
+  const updates={};
+  ids.forEach(id=>updates[`tasks/${id}`]=null);
+  await update(ref(db),updates);
   loadTasks();
 }
 
 async function bulkTransfer(ids) {
   const newDriver = prompt("Enter NEW DRIVER ID:");
-  if (!newDriver) return;
+  if(!newDriver) return;
 
-  const updates = {};
-  ids.forEach(id => {
-    updates[`tasks/${id}/driverId`] = newDriver;
-  });
-
-  await update(ref(db), updates);
-  alert("✅ Tasks transferred");
+  const updates={};
+  ids.forEach(id=>updates[`tasks/${id}/driverId`]=newDriver);
+  await update(ref(db),updates);
   loadTasks();
 }
 
-/* ===== BULK UPLOAD (UNCHANGED) ===== */
-window.uploadCSV = async function (btn) {
-  const fileInput = document.getElementById("csvFile");
-  const status = document.getElementById("uploadStatus");
+/* ===== BULK UPLOAD ===== */
+window.uploadCSV = async function(btn){
+  const file = document.getElementById("csvFile").files[0];
+  if(!file) return alert("Select CSV");
 
-  if (!fileInput.files.length) {
-    alert("Please select a CSV file");
-    return;
-  }
-
-  const text = await fileInput.files[0].text();
+  const text = await file.text();
   const rows = text.replace(/\r/g,"").split("\n").filter(Boolean);
-
   const headers = rows.shift().split(",");
+
   const updates = {};
   const base = Date.now();
   const now = new Date().toISOString();
 
-  rows.forEach((row,i)=>{
-    const vals = row.split(",");
-    const obj = {};
-    headers.forEach((h,idx)=>obj[h.trim()] = vals[idx]?.trim() || "");
+  rows.forEach((r,i)=>{
+    const vals = r.split(",");
+    const obj={};
+    headers.forEach((h,idx)=>obj[h.trim()]=vals[idx]?.trim()||"");
 
-    updates[`tasks/TASK_${base}_${i}`] = {
+    updates[`tasks/TASK_${base}_${i}`]={
       ...obj,
-      driverId: obj.AGENTID || "",
-      status: "PENDING",
-      rowIndex: i+1,
-      uploadBatch: base,
+      driverId: obj.AGENTID||"",
+      status:"PENDING",
+      rowIndex:i+1,
+      uploadBatch:base,
       createdAt: now
     };
   });
 
-  await update(ref(db), updates);
-  status.innerText = "✅ Upload Complete";
+  await update(ref(db),updates);
   loadTasks();
 };
 
 loadTasks();
 </script>
-
 </body>
 </html>
