@@ -269,7 +269,7 @@ button {
 <div class="admin-header" style="justify-content:space-between;">
   <div style="display:flex;align-items:center;gap:14px;">
     <img src="./logo.jpg" class="admin-logo" alt="Company Logo">
-    <h1>Admin Dashboard <span class="version">V2.4.11</span></h1>
+    <h1>Admin Dashboard <span class="version">V2.4.12</span></h1>
   </div>
 
   <!-- 📅 DATE FILTER -->
@@ -429,12 +429,13 @@ const firebaseConfig = {
 
 window.DRIVER_UI_CONFIG = {};
 
-function getToday() {
-  const d = new Date();
-  return d.toISOString().split("T")[0];
+function getTodayPH() {
+  return new Date().toLocaleDateString("en-CA", {
+    timeZone: "Asia/Manila"
+  });
 }
 
-let SELECTED_DATE = getToday();
+let SELECTED_DATE = getTodayPH();
 
 const adminDateFilter = document.getElementById("adminDateFilter");
 
