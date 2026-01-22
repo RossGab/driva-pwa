@@ -269,7 +269,7 @@ button {
 <div class="admin-header" style="justify-content:space-between;">
   <div style="display:flex;align-items:center;gap:14px;">
     <img src="./logo.jpg" class="admin-logo" alt="Company Logo">
-    <h1>Admin Dashboard <span class="version">V2.4.10</span></h1>
+    <h1>Admin Dashboard <span class="version">V2.4.11</span></h1>
   </div>
 
   <!-- 📅 DATE FILTER -->
@@ -372,7 +372,12 @@ button {
     ">
       <b style="font-size:13px;">Filter Drivers by BA</b>
       <div id="mapBACheckboxes"
-           style="display:flex;flex-wrap:wrap;gap:10px;margin-top:6px;">
+           style="
+             display:flex;
+             flex-direction:column;
+             gap:6px;
+             margin-top:6px;
+           ">
       </div>
     </div>
 
@@ -488,8 +493,16 @@ function buildLiveMapBAFilters() {
 
   [...allBAs].sort().forEach(ba => {
     const label = document.createElement("label");
-    label.style.cssText =
-      "font-size:12px;display:flex;align-items:center;gap:4px;";
+    label.style.cssText = `
+      font-size:13px;
+      display:flex;
+      align-items:center;
+      gap:6px;
+      padding:4px 6px;
+      border-radius:4px;
+      cursor:pointer;
+      background:#f5f5f5;
+    `;
 
     label.innerHTML = `
       <input type="checkbox" value="${ba}">
