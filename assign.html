@@ -81,7 +81,7 @@ select, input[type="date"] {
 
 <body>
 
-<h2>Manage Tasks V4.0.1</h2>
+<h2>Manage Tasks V4.0.2</h2>
 
 <button onclick="location.href='admin.html'" class="small-btn">⬅ Back</button>
 
@@ -296,7 +296,113 @@ async function bulkTransfer(ids) {
 }
 
 /* ===== BULK UPLOAD ===== */
+const REQUIRED_HEADERS = [
+  "JOBTYPE",
+  "BA",
+  "DMZ",
+  "MRU",
+  "SEQUENCE",
+  "METERNUMBER",
+  "ACCOUNTNUMBER",
+  "CUSTOMERNAME",
+  "ADDRESS",
+  "ZIPCODE",
+  "LATITUDE",
+  "LONGITUDE",
+  "AGENTID",
+  "AGENTNAME"
+];
+
 window.uploadCSV = async function(btn){
+  const file = document.getElementById("csvFile").files[0];
+  const status = document.getElementById("uploadStatus");
+
+  if (!file) {
+    alert("Please select a CSV file");
+    return;
+  }
+
+  btn.disabled = true;
+  btn.innerText = "Uploading…";
+
+  try {
+    const text = await file.text();
+
+    const rows = text
+      .replace(/\r/g, "")
+      .split("\n")
+      .map(r => r.trim())
+      .filter(Boolean);
+
+    if (rows.length < 2) {
+      status.innerText = "❌ CSV has no data rows";
+      btn.disabled = false;
+      btn.innerText = "Upload CSV";
+      return;
+    }
+
+    /* ===== HEADER PARSE ===== */
+    const headers = rows.shift().split(",").map(h => h.trim());
+
+    /* ===== VALIDATE ===== */
+    const missing = REQUIRED_HEADERS.filter(h => !headers.includes(h));
+    const extra = headers.filter(h => !REQUIRED_HEADERS.includes(h));
+
+    if (missing.length) {
+      status.innerText = "❌ Missing required columns:\n" + missing.join(", ");
+      btn.disabled = false;
+      btn.innerText = "Upload CSV";
+      return;
+    }
+
+    if (extra.length) {
+      status.innerText = "❌ Extra columns not allowed:\n" + extra.join(", ");
+      btn.disabled = false;
+      btn.innerText = "Upload CSV";
+      return;
+    }
+
+    /* ===== BUILD UPDATES ===== */
+    const updates = {};
+    const base = Date.now();
+    const now = new Date().toISOString();
+
+    rows.forEach((row, index) => {
+      const values = row.split(",");
+      const task = {};
+
+      headers.forEach((h, i) => {
+        task[h] = values[i]?.trim() || "";
+      });
+
+      const taskId = `TASK_${base}_${index}`;
+
+      updates[`tasks/${taskId}`] = {
+        ...task,
+        driverId: task.AGENTID || "",
+        status: "PENDING",
+
+        rowIndex: index + 1,  // Excel order
+        uploadBatch: base,   // Same upload group
+        createdAt: now
+      };
+    });
+
+    /* ===== SINGLE ATOMIC WRITE ===== */
+    await update(ref(db), updates);
+
+    status.innerText = `✅ Upload complete — ${rows.length} tasks added`;
+    btn.innerText = "✔ Done";
+
+    loadTasks();
+
+  } catch (err) {
+    console.error(err);
+    status.innerText = "❌ Upload failed";
+    btn.disabled = false;
+    btn.innerText = "Upload CSV";
+  }
+};
   const file = document.getElementById("csvFile").files[0];
   if(!file) return alert("Select CSV");
 
