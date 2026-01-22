@@ -81,7 +81,7 @@ select, input[type="date"] {
 
 <body>
 
-<h2>➕ Assign Tasks</h2>
+<h2>Manage Tasks V4.0.0</h2>
 
 <button onclick="location.href='admin.html'" class="small-btn">⬅ Back</button>
 
@@ -242,12 +242,12 @@ function renderTable(data) {
     const tr = document.createElement("tr");
     tr.innerHTML = `
       <td><input type="checkbox" data-id="${t._key}" onchange="checkSelection()"></td>
-      <td>${toPHTime(t.createdAt)}</td>
       <td>${t.CUSTOMERNAME||""}</td>
       <td>${t.ADDRESS||""}</td>
       <td>${t.driverId||"—"}</td>
       <td>${t.JOBTYPE||""}</td>
       <td>${t.BA||""}</td>
+      <td>${toPHTime(t.createdAt)}</td>
     `;
     table.appendChild(tr);
   });
