@@ -81,7 +81,7 @@ select, input[type="date"] {
 
 <body>
 
-<h2>Manage Tasks V4.0.2</h2>
+<h2>Manage Tasks V4.0.3</h2>
 
 <button onclick="location.href='admin.html'" class="small-btn">⬅ Back</button>
 
@@ -403,30 +403,7 @@ window.uploadCSV = async function(btn){
     btn.innerText = "Upload CSV";
   }
 };
-  const file = document.getElementById("csvFile").files[0];
-  if(!file) return alert("Select CSV");
-
-  const text = await file.text();
-  const rows = text.replace(/\r/g,"").split("\n").filter(Boolean);
-  const headers = rows.shift().split(",");
-
-  const updates = {};
-  const base = Date.now();
-  const now = new Date().toISOString();
-
-  rows.forEach((r,i)=>{
-    const vals = r.split(",");
-    const obj={};
-    headers.forEach((h,idx)=>obj[h.trim()]=vals[idx]?.trim()||"");
-
-    updates[`tasks/TASK_${base}_${i}`]={
-      ...obj,
-      driverId: obj.AGENTID||"",
-      status:"PENDING",
-      rowIndex:i+1,
-      uploadBatch:base,
-      createdAt: now
-    };
+  
   });
 
   await update(ref(db),updates);
