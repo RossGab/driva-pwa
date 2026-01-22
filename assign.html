@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Assign Task</title>
+<title>Assign Tasks</title>
 
 <style>
 body {
@@ -14,6 +14,16 @@ body {
 
 h2 { text-align:center; }
 
+.panel {
+  background:#fff;
+  padding:14px;
+  border-radius:10px;
+  box-shadow:0 0 4px rgba(0,0,0,.1);
+  margin-bottom:12px;
+}
+
+.blue { border-left:5px solid #007bff; }
+
 .small-btn {
   background:#444;
   color:#fff;
@@ -23,48 +33,35 @@ h2 { text-align:center; }
   font-size:13px;
 }
 
-.panel {
-  background:#fff;
-  padding:14px;
-  border-radius:10px;
-  box-shadow:0 0 4px rgba(0,0,0,.1);
-  margin-bottom:12px;
-}
-
-.blue {
-  border-left:5px solid #007bff;
-}
-
-.task-row {
-  display:flex;
-  align-items:center;
-  gap:8px;
-  padding:6px 0;
-  border-bottom:1px solid #eee;
+table {
+  width:100%;
+  border-collapse:collapse;
   font-size:13px;
 }
 
-.task-row:last-child {
-  border-bottom:none;
+th, td {
+  border-bottom:1px solid #eee;
+  padding:8px 6px;
+  text-align:left;
 }
 
-.task-row small {
-  color:#666;
+th {
+  background:#f5f5f5;
+  font-weight:bold;
 }
+
+tr:hover { background:#f9f9f9; }
 
 #bulkBtn {
   background:#007bff;
   color:#fff;
   border:none;
   border-radius:6px;
-  padding:10px;
-  width:100%;
+  padding:10px 14px;
   font-weight:bold;
 }
 
-#bulkBtn:disabled {
-  background:#aaa;
-}
+#bulkBtn:disabled { background:#aaa; }
 
 .actions {
   display:flex;
@@ -75,41 +72,55 @@ h2 { text-align:center; }
 
 <body>
 
-<h2>➕ Assign Tasks V4.0.0</h2>
+<h2>➕ Assign Tasks</h2>
 
-<button onclick="location.href='admin.html'" class="small-btn">
-  ⬅ Back
-</button>
+<button onclick="location.href='admin.html'" class="small-btn">⬅ Back</button>
 
 <hr>
 
+<!-- BULK UPLOAD -->
+<div class="panel">
+  <b>📤 Bulk Upload Tasks</b><br>
+  <input type="file" id="csvFile" accept=".csv">
+  <button onclick="uploadCSV(this)" style="margin-top:6px;">Upload CSV</button>
+  <div id="uploadStatus" style="font-size:13px;margin-top:6px;"></div>
+</div>
+
+<!-- DATE + BULK ACTION -->
 <div class="panel blue">
-  <b>📅 Select Date</b>
-  <div style="display:flex;gap:10px;margin-top:6px;">
-    <input type="date" id="taskDate" style="flex:2;padding:6px;border-radius:6px;border:1px solid #ccc;">
+  <div class="actions">
+    <input type="date" id="taskDate" style="flex:1;padding:8px;">
     <button id="bulkBtn" disabled onclick="openBulkActions()">Bulk Actions</button>
   </div>
 </div>
 
+<!-- TASK TABLE -->
 <div class="panel">
   <b>📝 Pending Tasks</b>
-  <div id="taskList" style="margin-top:8px;">Select a date</div>
-</div>
-
-<hr>
-
-<div class="panel">
-  <b>📤 Bulk Upload Tasks</b>
-  <input type="file" id="csvFile" accept=".csv">
-  <button onclick="uploadCSV(this)" style="margin-top:6px;">Upload CSV</button>
-  <div id="uploadStatus" style="font-size:13px;margin-top:6px;"></div>
+  <div style="overflow:auto;margin-top:6px;">
+    <table>
+      <thead>
+        <tr>
+          <th><input type="checkbox" id="checkAll"></th>
+          <th>Customer</th>
+          <th>Address</th>
+          <th>Driver</th>
+          <th>Job Type</th>
+          <th>BA</th>
+        </tr>
+      </thead>
+      <tbody id="taskTable">
+        <tr><td colspan="6">Select date</td></tr>
+      </tbody>
+    </table>
+  </div>
 </div>
 
 <script type="module">
 import { initializeApp } from
   "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 import {
-  getDatabase, ref, get, update, remove
+  getDatabase, ref, get, update
 } from
   "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
@@ -127,67 +138,76 @@ const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 
 const taskDate = document.getElementById("taskDate");
-const taskList = document.getElementById("taskList");
+const taskTable = document.getElementById("taskTable");
 const bulkBtn = document.getElementById("bulkBtn");
+const checkAll = document.getElementById("checkAll");
 
 taskDate.value = new Date().toISOString().split("T")[0];
-taskDate.onchange = loadTasksByDate;
+taskDate.onchange = loadTasks;
 
-let CURRENT_TASKS = [];
+let TASKS = [];
 
 /* ===== LOAD TASKS ===== */
-async function loadTasksByDate() {
+async function loadTasks() {
   const date = taskDate.value;
-  taskList.innerHTML = "Loading...";
+  taskTable.innerHTML = `<tr><td colspan="6">Loading...</td></tr>`;
+  bulkBtn.disabled = true;
+  checkAll.checked = false;
 
   const snap = await get(ref(db, "tasks"));
   const raw = snap.val() || {};
 
-  CURRENT_TASKS = Object.keys(raw)
+  TASKS = Object.keys(raw)
     .map(k => ({ _key: k, ...raw[k] }))
     .filter(t =>
       t.status === "PENDING" &&
       t.createdAt?.startsWith(date)
     );
 
-  renderTaskList();
+  renderTable();
 }
 
-function renderTaskList() {
-  bulkBtn.disabled = true;
-  taskList.innerHTML = "";
+function renderTable() {
+  taskTable.innerHTML = "";
 
-  if (!CURRENT_TASKS.length) {
-    taskList.innerHTML = "No pending tasks";
+  if (!TASKS.length) {
+    taskTable.innerHTML = `<tr><td colspan="6">No pending tasks</td></tr>`;
     return;
   }
 
-  CURRENT_TASKS.forEach(t => {
-    const row = document.createElement("div");
-    row.className = "task-row";
+  TASKS.forEach(t => {
+    const tr = document.createElement("tr");
 
-    row.innerHTML = `
-      <input type="checkbox" data-id="${t._key}" onchange="checkSelection()">
-      <div style="flex:1">
-        <b>${t.CUSTOMERNAME || ""}</b><br>
-        <small>${t.ADDRESS || ""}</small><br>
-        <small>Driver: ${t.driverId || "—"}</small>
-      </div>
+    tr.innerHTML = `
+      <td><input type="checkbox" data-id="${t._key}" onchange="checkSelection()"></td>
+      <td>${t.CUSTOMERNAME || ""}</td>
+      <td>${t.ADDRESS || ""}</td>
+      <td>${t.driverId || "—"}</td>
+      <td>${t.JOBTYPE || ""}</td>
+      <td>${t.BA || ""}</td>
     `;
 
-    taskList.appendChild(row);
+    taskTable.appendChild(tr);
   });
 }
 
+/* ===== SELECTION ===== */
+checkAll.onchange = () => {
+  const boxes = taskTable.querySelectorAll("input[type=checkbox]");
+  boxes.forEach(cb => cb.checked = checkAll.checked);
+  checkSelection();
+};
+
 window.checkSelection = function () {
   const checked =
-    taskList.querySelectorAll("input[type=checkbox]:checked");
+    taskTable.querySelectorAll("input[type=checkbox]:checked");
+
   bulkBtn.disabled = checked.length === 0;
 };
 
 /* ===== BULK ACTION ===== */
 window.openBulkActions = function () {
-  const ids = [...taskList.querySelectorAll("input[type=checkbox]:checked")]
+  const ids = [...taskTable.querySelectorAll("input[type=checkbox]:checked")]
     .map(cb => cb.dataset.id);
 
   const action = prompt(
@@ -211,7 +231,7 @@ async function bulkDelete(ids) {
 
   await update(ref(db), updates);
   alert("✅ Tasks deleted");
-  loadTasksByDate();
+  loadTasks();
 }
 
 async function bulkTransfer(ids) {
@@ -225,10 +245,10 @@ async function bulkTransfer(ids) {
 
   await update(ref(db), updates);
   alert("✅ Tasks transferred");
-  loadTasksByDate();
+  loadTasks();
 }
 
-/* ===== BULK UPLOAD (Your Existing Logic) ===== */
+/* ===== BULK UPLOAD (UNCHANGED) ===== */
 window.uploadCSV = async function (btn) {
   const fileInput = document.getElementById("csvFile");
   const status = document.getElementById("uploadStatus");
@@ -263,10 +283,10 @@ window.uploadCSV = async function (btn) {
 
   await update(ref(db), updates);
   status.innerText = "✅ Upload Complete";
-  loadTasksByDate();
+  loadTasks();
 };
 
-loadTasksByDate();
+loadTasks();
 </script>
 
 </body>
