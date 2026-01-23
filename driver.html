@@ -160,7 +160,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebas
 import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.4.89.3-DYNAMIC";
+const VERSION = "Driver v3.4.89.4-DYNAMIC";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -523,6 +523,20 @@ const toBase64 = b => new Promise(r => {
   f.onloadend = () => r(f.result);
   f.readAsDataURL(b);
 });
+
+window.startCamera = function(taskKey) {
+  if (!validateDynamic(taskKey)) return;
+
+  // lock task
+  CURRENT_TASK = taskKey;
+
+  // reset input fully
+  cameraInput.type = "text";
+  cameraInput.type = "file";
+
+  // open camera
+  cameraInput.click();
+};
 
 /* ===== CAMERA ===== */
 window.CURRENT_TASK = null;
@@ -924,19 +938,12 @@ const addressHTML = hasGPS
       }
       html += await renderDynamicDelivery(t);
       html += `
-        <label
-          class="capture capture-label"
-          onclick="return beforeCamera('${t._key}', event)"
+        <button
+          class="capture"
+          onclick="startCamera('${t._key}')"
         >
           📸 Take Picture
-          <input
-            type="file"
-            accept="image/*"
-            capture="environment"
-            onchange="afterCamera('${t._key}', event)"
-            hidden
-          />
-        </label>
+        </button>
       `;
     }
     
@@ -978,29 +985,6 @@ const addressHTML = hasGPS
     taskList.appendChild(div);
   }
 }
-
-// ✅ RUNS BEFORE CAMERA OPENS
-window.beforeCamera = function (taskKey, e) {
-  if (!validateDynamic(taskKey)) {
-    e.preventDefault(); // 🚫 STOP camera
-    e.stopPropagation();
-    return false;
-  }
-  return true; // ✅ ALLOW camera
-};
-
-// ✅ RUNS AFTER PHOTO IS TAKEN
-window.afterCamera = function (taskKey, e) {
-  if (!e.target.files || !e.target.files[0]) return;
-
-  // 🔒 Prevent accidental double triggers
-  if (CURRENT_TASK && CURRENT_TASK !== taskKey) return;
-
-  CURRENT_TASK = taskKey;
-
-  cameraInput.files = e.target.files;
-  cameraInput.onchange({ target: e.target });
-};
   
 async function renderDynamicDelivery(t) {
   const methods = await loadDriverUI(t.JOBTYPE);
