@@ -160,7 +160,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebas
 import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.4.89.9-DYNAMIC";
+const VERSION = "Driver v3.4.89.10-DYNAMIC";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -538,8 +538,6 @@ window.startPhoto = function(index, taskKey) {
 };
 
 cameraInput.onchange = async e => {
-  cameraInput.value = "";
-  
   const file = e.target.files?.[0];
   if (!file || !CURRENT_TASK || !CURRENT_PHOTO_INDEX) return;
 
@@ -559,17 +557,28 @@ cameraInput.onchange = async e => {
     return;
   }
 
+  const previewURL = URL.createObjectURL(blob);
+
   PHOTO_BUFFER[CURRENT_TASK][CURRENT_PHOTO_INDEX] = {
     blob,
+    previewURL,
     takenAt: new Date().toISOString(),
     gps,
     deliveryData: BILLING_CACHE[CURRENT_TASK] || {}
   };
 
   CURRENT_PHOTO_INDEX = null;
-  loadTasks();
+  CURRENT_TASK = null;   // 🔥 REQUIRED FIX
+  
+  // ✅ reset AFTER capture finishes
+  setTimeout(() => {
+    cameraInput.value = "";
+  }, 150);
+  
+  // ✅ render only UI, do not reload DB
+  renderCachedOnly();
 };
-
+  
 window.submitTask = async function(taskKey) {
   const photos = PHOTO_BUFFER[taskKey];
 
@@ -893,9 +902,11 @@ async function render(tasks) {
   taskList.innerHTML = "";
 
   for (const t of tasks) {
+    const p = PHOTO_BUFFER[t._key] || {};
     if (!BILLING_CACHE[t._key]) {
       BILLING_CACHE[t._key] = {};
     }
+    
     const status = resolveStatus(t);
 
     const div = document.createElement("div");
@@ -979,6 +990,37 @@ const addressHTML = hasGPS
         </button>
       `;
     }
+
+    const previews = [1,2,3].map(i => {
+      if (!p[i]?.previewURL) return "";
+      return `
+        <img src="${p[i].previewURL}"
+          onclick="window.open('${p[i].previewURL}','_blank')"
+          style="
+            width:100%;
+            max-width:100px;
+            height:80px;
+            object-fit:cover;
+            border-radius:6px;
+            border:2px solid #28a745;
+            cursor:pointer;
+          "
+        />
+      `;
+    }).join("");
+    
+    if (previews) {
+      html += `
+        <div style="
+          display:grid;
+          grid-template-columns:repeat(3,1fr);
+          gap:6px;
+          margin-top:8px;
+        ">
+          ${previews}
+        </div>
+      `;
+    }
     
     /* ===== PROCESSING ===== */
     if (status === "PROCESSING") {
@@ -1017,6 +1059,30 @@ const addressHTML = hasGPS
     div.innerHTML = html;
     taskList.appendChild(div);
   }
+}
+
+function renderCachedOnly() {
+  const tasks =
+    JSON.parse(localStorage.getItem(TASK_CACHE_KEY) || "[]");
+
+  const selectedDate = dateFilter.value;
+
+  const filtered = tasks.filter(t => {
+    const status = resolveStatus(t);
+    if (status === "COMPLETED") return false;
+
+    const taskDate = normalizeDatePH(t.createdAt);
+    if (!taskDate || taskDate !== selectedDate) return false;
+
+    if (
+      selectedJobTypes.size > 0 &&
+      !selectedJobTypes.has(t.JOBTYPE)
+    ) return false;
+
+    return true;
+  });
+
+  render(filtered);
 }
   
 async function renderDynamicDelivery(t) {
