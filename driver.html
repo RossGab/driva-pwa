@@ -160,7 +160,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebas
 import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.4.89.1-DYNAMIC";
+const VERSION = "Driver v3.4.89.2-DYNAMIC";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -564,7 +564,7 @@ cameraInput.onchange = async e => {
 
   // 🚫 HARD STOP — GPS REQUIRED
   if (!photoGPS || !photoGPS.latitude) {
-    alert("📍 Acquiring GPS signal… please wait a few seconds");
+    alert("📍 Waiting for GPS signal…");
     return;
   }
 
@@ -577,16 +577,16 @@ cameraInput.onchange = async e => {
 
   const count = PHOTO_BUFFER[taskKey].length;
 
-  // 🔁 CONTINUE CAPTURE FLOW
+  // 🔁 CONTINUE TAKING PHOTOS
   if (count < REQUIRED_PHOTOS) {
     alert(`📸 Photo ${count}/${REQUIRED_PHOTOS} captured.\nTake next photo.`);
-    cameraInput.value = ""; // reset input so same camera opens again
+    cameraInput.value = "";  // important reset
     CURRENT_TASK = taskKey;
     loadTasks();
     return;
   }
 
-  // ✅ FINAL PHOTO → START UPLOAD PIPELINE
+  // ✅ FINAL PHOTO → START BATCH UPLOAD
   processingMap[taskKey] = true;
   loadTasks();
 
@@ -614,7 +614,7 @@ cameraInput.onchange = async e => {
   CURRENT_TASK = null;
   loadTasks();
 };
-
+  
 function updateRefreshLock() {
   if (isBusy()) {
     disablePullToRefresh();
@@ -992,9 +992,11 @@ window.beforeCamera = function (taskKey, e) {
 window.afterCamera = function (taskKey, e) {
   if (!e.target.files || !e.target.files[0]) return;
 
-  window.CURRENT_TASK = taskKey;
+  // 🔒 Prevent accidental double triggers
+  if (CURRENT_TASK && CURRENT_TASK !== taskKey) return;
 
-  // forward to existing pipeline
+  CURRENT_TASK = taskKey;
+
   cameraInput.files = e.target.files;
   cameraInput.onchange({ target: e.target });
 };
@@ -1015,20 +1017,6 @@ async function renderDynamicDelivery(t) {
   html += `</div><div id="dyn_${t._key}"></div>`;
   return html;
 }
-
-window.handleCamera = function (taskKey, e) {
-  // 🔒 VALIDATE FIRST — STILL BEFORE CAMERA
-  if (!validateDynamic(taskKey)) {
-    e.target.value = "";
-    return;
-  }
-
-  window.CURRENT_TASK = taskKey;
-
-  // 🔥 Manually forward to existing handler
-  cameraInput.files = e.target.files;
-  cameraInput.onchange({ target: e.target });
-};
 
 window.showDynamicFields = async function (taskKey, jobType, method) {
   if (!BILLING_CACHE[taskKey]) BILLING_CACHE[taskKey] = {};
