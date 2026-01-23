@@ -160,7 +160,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebas
 import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.4.87-DYNAMIC";
+const VERSION = "Driver v3.4.88.1-DYNAMIC";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -190,20 +190,25 @@ let SEARCH_TERM = "";
 const dateFilter = document.getElementById("dateFilter");
 
 // ✅ Default to today
-function getLocalDateYYYYMMDD() {
-  const d = new Date();
-  const year = d.getFullYear();
-  const month = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
+function getTodayPH() {
+  return new Date().toLocaleDateString("en-CA", {
+    timeZone: "Asia/Manila"
+  });
 }
 
-dateFilter.value = getLocalDateYYYYMMDD();
+dateFilter.value = getTodayPH();
 
 // Re-load when date changes
 dateFilter.addEventListener("change", () => {
   loadTasks();
 });
+
+function normalizeDatePH(dateStr) {
+  if (!dateStr) return null;
+  return new Date(dateStr).toLocaleDateString("en-CA", {
+    timeZone: "Asia/Manila"
+  });
+}
 
 function isBusy() {
   const queue = JSON.parse(localStorage.getItem("offlineQueue") || "[]");
@@ -365,7 +370,8 @@ function renderJobTypeFilters(tasks) {
     if (status !== "PENDING") return;
 
     // ❌ must match selected date
-    if (!t.createdAt || !t.createdAt.startsWith(selectedDate)) return;
+    const taskDate = normalizeDatePH(t.createdAt);
+      if (!taskDate || taskDate !== selectedDate) return;
 
     if (!t.JOBTYPE) return;
 
@@ -817,9 +823,10 @@ const filtered = tasks
     if (status === "COMPLETED") return false;
 
     // ❌ Must match selected date
-    if (!t.createdAt || !t.createdAt.startsWith(selectedDate)) {
-      return false;
-    }
+    const taskDate = normalizeDatePH(t.createdAt);
+      if (!taskDate || taskDate !== selectedDate) {
+        return false;
+      }
 
     // ❌ Job type filter
     if (
@@ -865,9 +872,10 @@ function updateRemainingCounter(tasks) {
     if (status !== "PENDING") return false;
 
     // ✅ must match selected date
-    if (!t.createdAt || !t.createdAt.startsWith(selectedDate)) {
-      return false;
-    }
+    const taskDate = normalizeDatePH(t.createdAt);
+      if (!taskDate || taskDate !== selectedDate) {
+        return false;
+      }
 
     return true;
   }).length;
@@ -890,11 +898,28 @@ async function render(tasks) {
     const div = document.createElement("div");
     div.className = `task ${status === "COMPLETED" ? "completed" : ""}`;
 
+    const hasGPS =
+  t.LATITUDE &&
+  t.LONGITUDE &&
+  !isNaN(parseFloat(t.LATITUDE)) &&
+  !isNaN(parseFloat(t.LONGITUDE));
+
+const mapURL = hasGPS
+  ? `https://www.google.com/maps?q=${t.LATITUDE},${t.LONGITUDE}`
+  : null;
+
+const addressHTML = hasGPS
+  ? `<a href="${mapURL}" target="_blank"
+        style="color:#007bff;text-decoration:underline;font-weight:bold;">
+        📍 ${t.ADDRESS || "—"}
+     </a>`
+  : `<div>📍 ${t.ADDRESS || "—"}</div>`;
+
     let html = `
       <b>${t.CUSTOMERNAME || "—"}</b>
-
-      <div class="small">📍 ${t.ADDRESS || "—"}</div>
-
+    
+      <div class="small">${addressHTML}</div>
+    
       <div class="small"><b>Account #:</b> ${t.ACCOUNTNUMBER || "—"}</div>
       <div class="small"><b>MRU:</b> ${t.MRU || "—"}</div>
       <div class="small"><b>Meter #:</b> ${t.METERNUMBER || "—"}</div>
