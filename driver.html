@@ -160,7 +160,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebas
 import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.4.89.4-DYNAMIC";
+const VERSION = "Driver v3.4.89.5-DYNAMIC";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -557,78 +557,7 @@ function saveToGallery(blob, filename) {
 
 window.CURRENT_TASK = null;
 
-cameraInput.onchange = async e => {
-  if (!e.target.files[0] || !CURRENT_TASK) return;
 
-  const taskKey = CURRENT_TASK;
-
-  if (!PHOTO_BUFFER[taskKey]) PHOTO_BUFFER[taskKey] = [];
-
-  const takenAt = new Date().toISOString();
-  let blob;
-
-  try {
-    blob = await compressImage(e.target.files[0]);
-  } catch {
-    alert("Image processing failed");
-    return;
-  }
-
-  const photoGPS = LAST_KNOWN_GPS;
-
-  // 🚫 HARD STOP — GPS REQUIRED
-  if (!photoGPS || !photoGPS.latitude) {
-    alert("📍 Waiting for GPS signal…");
-    return;
-  }
-
-  PHOTO_BUFFER[taskKey].push({
-    blob,
-    takenAt,
-    gps: photoGPS,
-    deliveryData: BILLING_CACHE[taskKey] || {}
-  });
-
-  const count = PHOTO_BUFFER[taskKey].length;
-
-  // 🔁 CONTINUE TAKING PHOTOS
-  if (count < REQUIRED_PHOTOS) {
-    alert(`📸 Photo ${count}/${REQUIRED_PHOTOS} captured.\nTake next photo.`);
-    cameraInput.type = "text";
-    cameraInput.type = "file";  // important reset
-    CURRENT_TASK = taskKey;
-    loadTasks();
-    return;
-  }
-
-  // ✅ FINAL PHOTO → START BATCH UPLOAD
-  processingMap[taskKey] = true;
-  loadTasks();
-
-  const batch = [...PHOTO_BUFFER[taskKey]];
-  delete PHOTO_BUFFER[taskKey];
-
-  try {
-    for (let i = 0; i < batch.length; i++) {
-      await uploadNow(
-        taskKey,
-        batch[i].blob,
-        batch[i].takenAt,
-        null,
-        batch[i].deliveryData,
-        batch[i].gps,
-        i + 1
-      );
-    }
-  } catch (err) {
-    console.error("Upload error:", err);
-    alert("❌ Upload failed. Photos saved offline.");
-  }
-
-  delete processingMap[taskKey];
-  CURRENT_TASK = null;
-  loadTasks();
-};
   
 function updateRefreshLock() {
   if (isBusy()) {
@@ -938,12 +867,16 @@ const addressHTML = hasGPS
       }
       html += await renderDynamicDelivery(t);
       html += `
-        <button
-          class="capture"
-          onclick="startCamera('${t._key}')"
-        >
-          📸 Take Picture
-        </button>
+        <label class="capture capture-label">
+  📸 Take Picture
+  <input
+    type="file"
+    accept="image/*"
+    capture="environment"
+    onchange="handleCamera(event, '${t._key}')"
+    hidden
+  />
+</label>
       `;
     }
     
@@ -1216,6 +1149,72 @@ function isStandalone() {
   return window.matchMedia("(display-mode: standalone)").matches ||
          window.navigator.standalone === true;
 }
+
+window.handleCamera = async function (e, taskKey) {
+  if (!e.target.files || !e.target.files[0]) return;
+
+  CURRENT_TASK = taskKey;
+
+  if (!PHOTO_BUFFER[taskKey]) PHOTO_BUFFER[taskKey] = [];
+
+  let blob;
+  try {
+    blob = await compressImage(e.target.files[0]);
+  } catch {
+    alert("Image processing failed");
+    return;
+  }
+
+  const photoGPS = LAST_KNOWN_GPS;
+  if (!photoGPS || !photoGPS.latitude) {
+    alert("📍 Waiting for GPS signal...");
+    return;
+  }
+
+  PHOTO_BUFFER[taskKey].push({
+    blob,
+    takenAt: new Date().toISOString(),
+    gps: photoGPS,
+    deliveryData: BILLING_CACHE[taskKey] || {}
+  });
+
+  const count = PHOTO_BUFFER[taskKey].length;
+
+  loadTasks();
+
+  if (count < REQUIRED_PHOTOS) {
+    alert(`📸 Photo ${count}/${REQUIRED_PHOTOS} captured.\nTake next photo.`);
+
+    // 🔁 allow same input to fire again
+    e.target.value = "";
+
+    return;
+  }
+
+  // ✅ FINAL PHOTO → START UPLOAD
+  processingMap[taskKey] = true;
+  loadTasks();
+
+  const batch = [...PHOTO_BUFFER[taskKey]];
+  delete PHOTO_BUFFER[taskKey];
+
+  for (let i = 0; i < batch.length; i++) {
+    await uploadNow(
+      taskKey,
+      batch[i].blob,
+      batch[i].takenAt,
+      null,
+      batch[i].deliveryData,
+      batch[i].gps,
+      i + 1
+    );
+  }
+
+  delete processingMap[taskKey];
+  CURRENT_TASK = null;
+
+  loadTasks();
+};
 
 window.addEventListener("beforeinstallprompt", e => {
   // already installed → do nothing
