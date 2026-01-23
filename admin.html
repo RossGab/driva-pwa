@@ -269,7 +269,7 @@ button {
 <div class="admin-header" style="justify-content:space-between;">
   <div style="display:flex;align-items:center;gap:14px;">
     <img src="./logo.jpg" class="admin-logo" alt="Company Logo">
-    <h1>Admin Dashboard <span class="version">V2.4.14</span></h1>
+    <h1>Admin Dashboard <span class="version">V2.4.15</span></h1>
   </div>
 
   <!-- 📅 DATE FILTER -->
@@ -476,14 +476,13 @@ function reloadAllAdminViews() {
 function normalizeDate(dateStr) {
   if (!dateStr) return null;
 
-  if (dateStr.includes("T")) return dateStr.split("T")[0];
+  const d = new Date(dateStr);
 
-  if (dateStr.includes("/")) {
-    const p = dateStr.split("/");
-    return `${p[2]}-${p[1]}-${p[0]}`;
-  }
+  if (isNaN(d.getTime())) return null;
 
-  return dateStr;
+  return d.toLocaleDateString("en-CA", {
+    timeZone: "Asia/Manila"
+  });
 }
 
 function buildLiveMapBAFilters() {
