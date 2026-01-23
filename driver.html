@@ -160,7 +160,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebas
 import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.4.89.14-DYNAMIC";
+const VERSION = "Driver v3.4.89.15-DYNAMIC";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -559,7 +559,10 @@ cameraInput.onchange = async e => {
 
   const previewURL = URL.createObjectURL(blob);
 
-  PHOTO_BUFFER[CURRENT_TASK][CURRENT_PHOTO_INDEX] = {
+  // 🔒 Lock UI to this task after first photo
+  if (CURRENT_PHOTO_INDEX === 1) {
+    ACTIVE_CAPTURE_TASK = CURRENT_TASK;
+  }
     blob,
     previewURL,
     takenAt: new Date().toISOString(),
@@ -607,6 +610,7 @@ window.submitTask = async function(taskKey) {
 
     delete PHOTO_BUFFER[taskKey];
     delete processingMap[taskKey];
+    ACTIVE_CAPTURE_TASK = null;
 
     loadTasks();
 
@@ -1069,6 +1073,10 @@ function renderCachedOnly() {
     JSON.parse(localStorage.getItem(TASK_CACHE_KEY) || "[]");
 
   const selectedDate = dateFilter.value;
+
+  if (ACTIVE_CAPTURE_TASK) {
+    tasks = tasks.filter(t => t._key === ACTIVE_CAPTURE_TASK);
+  }
 
   const filtered = tasks.filter(t => {
     const status = resolveStatus(t);
