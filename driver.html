@@ -160,7 +160,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebas
 import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.4.89.16-DYNAMIC";
+const VERSION = "Driver v3.4.89.14-DYNAMIC";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -559,7 +559,6 @@ cameraInput.onchange = async e => {
 
   const previewURL = URL.createObjectURL(blob);
 
-  // ✅ SAVE PHOTO PROPERLY
   PHOTO_BUFFER[CURRENT_TASK][CURRENT_PHOTO_INDEX] = {
     blob,
     previewURL,
@@ -568,19 +567,16 @@ cameraInput.onchange = async e => {
     deliveryData: BILLING_CACHE[CURRENT_TASK] || {}
   };
 
-  // 🔒 LOCK UI AFTER FIRST PHOTO
-  if (CURRENT_PHOTO_INDEX === 1) {
-    ACTIVE_CAPTURE_TASK = CURRENT_TASK;
-  }
-
   CURRENT_PHOTO_INDEX = null;
-  CURRENT_TASK = null;
-
+  CURRENT_TASK = null;   // 🔥 REQUIRED FIX
+  
+  // ✅ reset AFTER capture finishes
   setTimeout(() => {
     cameraInput.value = "";
   }, 150);
-
-  renderCachedOnly();   // 👈 DO NOT call loadTasks()
+  
+  // ✅ render only UI, do not reload DB
+  loadTasks();
 };
   
 window.submitTask = async function(taskKey) {
@@ -611,7 +607,6 @@ window.submitTask = async function(taskKey) {
 
     delete PHOTO_BUFFER[taskKey];
     delete processingMap[taskKey];
-    ACTIVE_CAPTURE_TASK = null;
 
     loadTasks();
 
@@ -1074,10 +1069,6 @@ function renderCachedOnly() {
     JSON.parse(localStorage.getItem(TASK_CACHE_KEY) || "[]");
 
   const selectedDate = dateFilter.value;
-
-  if (ACTIVE_CAPTURE_TASK) {
-    tasks = tasks.filter(t => t._key === ACTIVE_CAPTURE_TASK);
-  }
 
   const filtered = tasks.filter(t => {
     const status = resolveStatus(t);
