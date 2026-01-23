@@ -160,7 +160,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebas
 import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.4.89.14.2.2-DYNAMIC";
+const VERSION = "Driver v3.4.89.14.2.3-DYNAMIC";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -559,13 +559,17 @@ cameraInput.onchange = async e => {
 
   const previewURL = URL.createObjectURL(blob);
 
-  PHOTO_BUFFER[CURRENT_TASK][CURRENT_PHOTO_INDEX] = {
-    blob,
-    previewURL,
-    takenAt: new Date().toISOString(),
-    gps,
-    deliveryData: BILLING_CACHE[CURRENT_TASK] || {}
-  };
+  if (!PHOTO_LOCK[CURRENT_TASK]) PHOTO_LOCK[CURRENT_TASK] = {};
+    
+    PHOTO_BUFFER[CURRENT_TASK][CURRENT_PHOTO_INDEX] = {
+      blob,
+      previewURL,
+      takenAt: new Date().toISOString(),
+      gps,
+      deliveryData: BILLING_CACHE[CURRENT_TASK] || {}
+    };
+    
+    PHOTO_LOCK[CURRENT_TASK][CURRENT_PHOTO_INDEX] = true;
 
   // 🔒 Lock UI to this task after first photo
   if (CURRENT_PHOTO_INDEX === 1) {
@@ -585,7 +589,7 @@ cameraInput.onchange = async e => {
 };
   
 window.submitTask = async function(taskKey) {
-  const photos = PHOTO_BUFFER[taskKey];
+  const photos = PHOTO_LOCK[taskKey];
 
   if (!photos || !photos[1] || !photos[2] || !photos[3]) {
     alert("Please take all 3 photos.");
@@ -911,7 +915,7 @@ async function render(tasks) {
   taskList.innerHTML = "";
 
   for (const t of tasks) {
-    const p = PHOTO_BUFFER[t._key] || {};
+    const p = PHOTO_LOCK[t._key] || {};
     if (!BILLING_CACHE[t._key]) {
       BILLING_CACHE[t._key] = {};
     }
@@ -954,7 +958,7 @@ const addressHTML = hasGPS
 
     /* ===== PENDING (EDITABLE ONLINE + OFFLINE) ===== */
     if ((status === "PENDING" || status === "CAPTURING" || status === "READY") && !t.finalized) {
-      const p = PHOTO_BUFFER[t._key] || {};
+      const p = PHOTO_LOCK[t._key] || {};
       const count = Object.keys(p).length;
     
       if (count > 0 && count < REQUIRED_PHOTOS) {
