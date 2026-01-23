@@ -81,7 +81,7 @@ select, input[type="date"] {
 
 <body>
 
-<h2>Manage Tasks V4.0.6</h2>
+<h2>Manage Tasks V4.0.7</h2>
 
 <button onclick="location.href='admin.html'" class="small-btn">⬅ Back</button>
 
@@ -157,12 +157,29 @@ const checkAll = document.getElementById("checkAll");
 
 let TASKS = [];
 
-filterDate.value = new Date().toISOString().split("T")[0];
+filterDate.value = getTodayPH();
 
 filterDate.onchange =
 filterDriver.onchange =
 filterJob.onchange =
 filterBA.onchange = applyFilters;
+
+function getTodayPH() {
+  return new Date().toLocaleDateString("en-CA", {
+    timeZone: "Asia/Manila"
+  });
+}
+
+function normalizeDate(dateStr) {
+  if (!dateStr) return null;
+
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return null;
+
+  return d.toLocaleDateString("en-CA", {
+    timeZone: "Asia/Manila"
+  });
+}
 
 /* ===== PH TIME ===== */
 function toPHTime(ts) {
@@ -189,6 +206,8 @@ async function loadTasks() {
   applyFilters();
 }
 
+
+
 function buildFilterLists() {
   const drivers = new Set();
   const jobs = new Set();
@@ -212,8 +231,10 @@ function buildFilterLists() {
 function applyFilters() {
   let data = [...TASKS];
 
-  if(filterDate.value)
-    data = data.filter(t=>t.createdAt?.startsWith(filterDate.value));
+  if (filterDate.value)
+  data = data.filter(t =>
+    normalizeDate(t.createdAt) === filterDate.value
+  );
 
   if(filterDriver.value)
     data = data.filter(t=>t.driverId===filterDriver.value);
@@ -364,7 +385,9 @@ window.uploadCSV = async function(btn){
     /* ===== BUILD UPDATES ===== */
     const updates = {};
     const base = Date.now();
-    const now = new Date().toISOString();
+    const now = new Date().toLocaleString("sv-SE", {
+      timeZone: "Asia/Manila"
+    }).replace(" ", "T");
 
     rows.forEach((row, index) => {
       const values = row.split(",");
