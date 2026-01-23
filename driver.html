@@ -160,7 +160,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebas
 import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.4.89-DYNAMIC";
+const VERSION = "Driver v3.4.89.1-DYNAMIC";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -562,8 +562,9 @@ cameraInput.onchange = async e => {
 
   const photoGPS = LAST_KNOWN_GPS;
 
+  // 🚫 HARD STOP — GPS REQUIRED
   if (!photoGPS || !photoGPS.latitude) {
-    alert("📍 Acquiring GPS signal… please wait");
+    alert("📍 Acquiring GPS signal… please wait a few seconds");
     return;
   }
 
@@ -576,15 +577,16 @@ cameraInput.onchange = async e => {
 
   const count = PHOTO_BUFFER[taskKey].length;
 
-  // 🔁 CONTINUE CAPTURE
+  // 🔁 CONTINUE CAPTURE FLOW
   if (count < REQUIRED_PHOTOS) {
     alert(`📸 Photo ${count}/${REQUIRED_PHOTOS} captured.\nTake next photo.`);
+    cameraInput.value = ""; // reset input so same camera opens again
     CURRENT_TASK = taskKey;
-    cameraInput.value = "";
+    loadTasks();
     return;
   }
 
-  // ✅ FINAL PHOTO REACHED — START UPLOAD
+  // ✅ FINAL PHOTO → START UPLOAD PIPELINE
   processingMap[taskKey] = true;
   loadTasks();
 
@@ -603,69 +605,12 @@ cameraInput.onchange = async e => {
         i + 1
       );
     }
-  } catch (e) {
-    alert("Upload failed. Photos saved offline.");
+  } catch (err) {
+    console.error("Upload error:", err);
+    alert("❌ Upload failed. Photos saved offline.");
   }
 
   delete processingMap[taskKey];
-  CURRENT_TASK = null;
-  loadTasks();
-};
-  
-    
-  /* ================= OFFLINE ================= */
-  if (!navigator.onLine) {
-    
-const tempFilename =
-  `TEMP_${CURRENT_TASK}_${Date.now()}.jpg`;
-  saveToGallery(blob, tempFilename);
-        // save to offline queue
-      const q = getQueue();
-      q.push({
-        taskKey: CURRENT_TASK,
-        image: await toBase64(blob),
-        takenAt,
-        gps: photoGPS,               // ✅ FIX
-        deliveryData: BILLING_CACHE[CURRENT_TASK] || {}
-      });
-      setQueue(q);
-      
-      // 🔒 MARK TASK AS OFFLINE_PENDING LOCALLY
-      const cachedTasks = JSON.parse(localStorage.getItem(TASK_CACHE_KEY) || "[]");
-      const idx = cachedTasks.findIndex(t => t._key === CURRENT_TASK);
-      if (idx !== -1) {
-        cachedTasks[idx].status = "OFFLINE_PENDING";
-        cachedTasks[idx].finalized = true; 
-        updateRefreshLock();
-      }
-      localStorage.setItem(TASK_CACHE_KEY, JSON.stringify(cachedTasks));
-    delete processingMap[CURRENT_TASK];
-    CURRENT_TASK = null;
-    loadTasks();
-    return;
-  }
-
-  /* ================= ONLINE ================= */
-  uploadingMap[CURRENT_TASK] = true;
-  delete processingMap[CURRENT_TASK];
-  loadTasks();
-  updateRefreshLock();
-
-  try {
-    // 🔥 DO NOT PASS FILENAME ANYMORE
-    await uploadNow(
-      CURRENT_TASK,
-      blob,
-      takenAt,
-      null,
-      BILLING_CACHE[CURRENT_TASK] || {},
-      photoGPS                 // ✅ FIX
-    );
-  } catch {
-    alert("Upload failed. Please retry.");
-  }
-
-  delete uploadingMap[CURRENT_TASK];
   CURRENT_TASK = null;
   loadTasks();
 };
