@@ -160,11 +160,14 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebas
 import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.4.88.1-DYNAMIC";
+const VERSION = "Driver v3.4.89-DYNAMIC";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
 const selectedJobTypes = new Set();
+const PHOTO_BUFFER = {};
+const REQUIRED_PHOTOS = 3;
+let ACTIVE_CAPTURE_TASK = null;
 let jobTypeFilterInitialized = false;
 let LAST_KNOWN_GPS = null;
 
@@ -543,39 +546,71 @@ window.CURRENT_TASK = null;
 cameraInput.onchange = async e => {
   if (!e.target.files[0] || !CURRENT_TASK) return;
 
-  // continue processing...
+  const taskKey = CURRENT_TASK;
 
-  // ===== START PROCESSING =====
-  processingMap[CURRENT_TASK] = true;
-  loadTasks();
-
-  updateRefreshLock();
+  if (!PHOTO_BUFFER[taskKey]) PHOTO_BUFFER[taskKey] = [];
 
   const takenAt = new Date().toISOString();
-
   let blob;
+
   try {
     blob = await compressImage(e.target.files[0]);
-    
   } catch {
     alert("Image processing failed");
-    delete processingMap[CURRENT_TASK];
-    CURRENT_TASK = null;
-    loadTasks();
     return;
   }
 
   const photoGPS = LAST_KNOWN_GPS;
 
-// 🚫 HARD STOP — GPS MUST EXIST BEFORE PHOTO
-if (!photoGPS || !photoGPS.latitude) {
-  alert("📍 Acquiring GPS signal… please wait a few seconds");
-  delete processingMap[CURRENT_TASK];
-  CURRENT_TASK = null;
-  updateRefreshLock();
+  if (!photoGPS || !photoGPS.latitude) {
+    alert("📍 Acquiring GPS signal… please wait");
+    return;
+  }
+
+  PHOTO_BUFFER[taskKey].push({
+    blob,
+    takenAt,
+    gps: photoGPS,
+    deliveryData: BILLING_CACHE[taskKey] || {}
+  });
+
+  const count = PHOTO_BUFFER[taskKey].length;
+
+  // 🔁 CONTINUE CAPTURE
+  if (count < REQUIRED_PHOTOS) {
+    alert(`📸 Photo ${count}/${REQUIRED_PHOTOS} captured.\nTake next photo.`);
+    CURRENT_TASK = taskKey;
+    cameraInput.value = "";
+    return;
+  }
+
+  // ✅ FINAL PHOTO REACHED — START UPLOAD
+  processingMap[taskKey] = true;
   loadTasks();
-  return;
-}
+
+  const batch = [...PHOTO_BUFFER[taskKey]];
+  delete PHOTO_BUFFER[taskKey];
+
+  try {
+    for (let i = 0; i < batch.length; i++) {
+      await uploadNow(
+        taskKey,
+        batch[i].blob,
+        batch[i].takenAt,
+        null,
+        batch[i].deliveryData,
+        batch[i].gps,
+        i + 1
+      );
+    }
+  } catch (e) {
+    alert("Upload failed. Photos saved offline.");
+  }
+
+  delete processingMap[taskKey];
+  CURRENT_TASK = null;
+  loadTasks();
+};
   
     
   /* ================= OFFLINE ================= */
@@ -647,6 +682,7 @@ function updateRefreshLock() {
 function resolveStatus(task) {
   // ✅ HARD STOP: COMPLETED ALWAYS MEANS COMPLETED
   if (task.status === "COMPLETED") return "COMPLETED";
+  if (PHOTO_BUFFER[task._key]) return "PROCESSING";
 
   if (processingMap[task._key]) return "PROCESSING";
   if (uploadingMap[task._key]) return "UPLOADING";
@@ -661,7 +697,8 @@ async function uploadNow(
   takenAt,
   _ignoredFilename,
   deliveryData = {},
-  photoGPS
+  photoGPS,
+  photoIndex
 ) {
   const taskSnap = await get(ref(db, `tasks/${taskKey}`));
   const task = taskSnap.val() || {};
@@ -678,6 +715,7 @@ async function uploadNow(
 
   const filename =
   `${safe(task.CUSTOMERNAME)}_${safe(task.ADDRESS)}_` +
+  `P${photoIndex}_` +
   `${photoGPS.longitude}_${photoGPS.latitude}_` +
   `${task.driverId}_${new Date().toISOString()
     .replace(/[-:T.Z]/g, "")
@@ -693,7 +731,7 @@ async function uploadNow(
 
   // ===== FLATTEN DATA =====
   const updatePayload = {
-    status: "COMPLETED",
+    ...(photoIndex === REQUIRED_PHOTOS ? { status: "COMPLETED" } : {}),
     imageUrl: url,
     filename,
     takenAt,
@@ -931,6 +969,13 @@ const addressHTML = hasGPS
 
     /* ===== PENDING (EDITABLE ONLINE + OFFLINE) ===== */
     if (status === "PENDING" && !t.finalized) {
+      if (PHOTO_BUFFER[t._key]) {
+        html += `
+          <div class="uploading">
+            📸 Capturing photos (${PHOTO_BUFFER[t._key].length}/${REQUIRED_PHOTOS})
+          </div>
+        `;
+      }
       html += await renderDynamicDelivery(t);
       html += `
         <label
