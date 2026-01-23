@@ -160,7 +160,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebas
 import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.4.89.14.5-DYNAMIC";
+const VERSION = "Driver v3.4.89.14.2-DYNAMIC";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -1008,59 +1008,31 @@ const addressHTML = hasGPS
       }
     
       /* ===== PHOTO BUTTONS ===== */
-
-const disable1 = Boolean(p[1]);
-const disable2 = !p[1] || Boolean(p[2]);
-const disable3 = !p[2] || Boolean(p[3]);
-const disableSubmit = !p[1] || !p[2] || !p[3];
-
-html += `
-  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-top:8px;">
-    <button
-      ${disable1 ? "disabled" : ""}
-      onclick="startPhoto(1,'${t._key}')"
-      style="
-        background:${p[1] ? '#28a745' : '#007bff'};
-        color:white;
-        opacity:${disable1 ? 0.6 : 1};
-      ">
-      📸 Photo 1
-    </button>
-
-    <button
-      ${disable2 ? "disabled" : ""}
-      onclick="startPhoto(2,'${t._key}')"
-      style="
-        background:${p[2] ? '#28a745' : '#007bff'};
-        color:white;
-        opacity:${disable2 ? 0.6 : 1};
-      ">
-      📸 Photo 2
-    </button>
-
-    <button
-      ${disable3 ? "disabled" : ""}
-      onclick="startPhoto(3,'${t._key}')"
-      style="
-        background:${p[3] ? '#28a745' : '#007bff'};
-        color:white;
-        opacity:${disable3 ? 0.6 : 1};
-      ">
-      📸 Photo 3
-    </button>
-  </div>
-
-  <button
-    ${disableSubmit ? "disabled" : ""}
-    onclick="submitTask('${t._key}')"
-    style="
-      background:#2c3e50;
-      color:white;
-      opacity:${disableSubmit ? 0.6 : 1};
-    ">
-    ✅ Submit Task
-  </button>
-`;
+      html += `
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-top:8px;">
+          <button onclick="startPhoto(1,'${t._key}')" 
+            style="background:${p[1] ? '#28a745' : '#007bff'};color:white;">
+            📸 Photo 1
+          </button>
+    
+          <button onclick="startPhoto(2,'${t._key}')" 
+            style="background:${p[2] ? '#28a745' : '#007bff'};color:white;">
+            📸 Photo 2
+          </button>
+    
+          <button onclick="startPhoto(3,'${t._key}')" 
+            style="background:${p[3] ? '#28a745' : '#007bff'};color:white;">
+            📸 Photo 3
+          </button>
+        </div>
+    
+        <button onclick="submitTask('${t._key}')" 
+          style="background:#2c3e50;color:white;">
+          ✅ Submit Task
+        </button>
+      `;
+    }
+    
     
     /* ===== PROCESSING ===== */
     if (status === "PROCESSING") {
