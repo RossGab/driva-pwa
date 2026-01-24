@@ -81,7 +81,7 @@ select, input[type="date"] {
 
 <body>
 
-<h2>Manage Tasks V4.0.7</h2>
+<h2>Manage Tasks V4.0.8</h2>
 
 <button onclick="location.href='admin.html'" class="small-btn">⬅ Back</button>
 
@@ -100,6 +100,7 @@ select, input[type="date"] {
     <select id="filterDriver"><option value="">All Drivers</option></select>
     <select id="filterJob"><option value="">All Job Types</option></select>
     <select id="filterBA"><option value="">All BA</option></select>
+    <select id="filterDMZ"><option value="">All DMZ</option></select>
     <button id="bulkBtn" disabled onclick="openBulkActions()">Bulk Action</button>
   </div>
 </div>
@@ -153,16 +154,18 @@ const filterDate = document.getElementById("filterDate");
 const filterDriver = document.getElementById("filterDriver");
 const filterJob = document.getElementById("filterJob");
 const filterBA = document.getElementById("filterBA");
+const filterDMZ = document.getElementById("filterDMZ");
 const checkAll = document.getElementById("checkAll");
 
 let TASKS = [];
 
 filterDate.value = getTodayPH();
-
+  
 filterDate.onchange =
 filterDriver.onchange =
 filterJob.onchange =
-filterBA.onchange = applyFilters;
+filterBA.onchange =
+filterDMZ.onchange = applyFilters;
 
 function getTodayPH() {
   return new Date().toLocaleDateString("en-CA", {
@@ -177,7 +180,7 @@ function normalizeDate(dateStr) {
   if (isNaN(d.getTime())) return null;
 
   return d.toLocaleDateString("en-CA", {
-    timeZone: "Asia/Manila"
+    timeZone: "Asia/Manila"f
   });
 }
 
@@ -212,20 +215,24 @@ function buildFilterLists() {
   const drivers = new Set();
   const jobs = new Set();
   const bas = new Set();
+  const dmzs = new Set();
 
   TASKS.forEach(t=>{
     if(t.driverId) drivers.add(t.driverId);
     if(t.JOBTYPE) jobs.add(t.JOBTYPE);
     if(t.BA) bas.add(t.BA);
+    if(t.DMZ) dmzs.add(t.DMZ);
   });
 
   filterDriver.innerHTML = `<option value="">All Drivers</option>`;
   filterJob.innerHTML = `<option value="">All Job Types</option>`;
   filterBA.innerHTML = `<option value="">All BA</option>`;
+  filterDMZ.innerHTML = `<option value="">All DMZ</option>`;
 
   drivers.forEach(v=>filterDriver.innerHTML += `<option>${v}</option>`);
   jobs.forEach(v=>filterJob.innerHTML += `<option>${v}</option>`);
   bas.forEach(v=>filterBA.innerHTML += `<option>${v}</option>`);
+  dmzs.forEach(v=>filterDMZ.innerHTML += `<option>${v}</option>`);
 }
 
 function applyFilters() {
@@ -244,6 +251,10 @@ function applyFilters() {
 
   if(filterBA.value)
     data = data.filter(t=>t.BA===filterBA.value);
+  
+  if(filterDMZ.value)
+    data = data.filter(t=>t.DMZ===filterDMZ.value);
+  
 
   renderTable(data);
 }
