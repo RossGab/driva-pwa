@@ -160,7 +160,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebas
 import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.4.89.15.6-DYNAMIC";
+const VERSION = "Driver v3.4.89.15.7-DYNAMIC";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -631,14 +631,19 @@ window.submitTask = async function(taskKey) {
     let cachedTasks =
       JSON.parse(localStorage.getItem(TASK_CACHE_KEY) || "[]");
 
-    cachedTasks = cachedTasks.filter(t => t._key !== taskKey);
+    const idx = cachedTasks.findIndex(t => t._key === taskKey);
 
-    cachedTasks.push({
-      ...(cachedTasks.find(t => t._key === taskKey) || {}),
-      _key: taskKey,
-      status: "OFFLINE_PENDING",
-      finalized: false
-    });
+    if (idx !== -1) {
+      cachedTasks[idx].status = "OFFLINE_PENDING";
+      cachedTasks[idx].finalized = false;
+    } else {
+      // Safety fallback (should never happen)
+      cachedTasks.push({
+        _key: taskKey,
+        status: "OFFLINE_PENDING",
+        finalized: false
+      });
+    }
 
     localStorage.setItem(
       TASK_CACHE_KEY,
