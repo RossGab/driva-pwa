@@ -160,13 +160,14 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebas
 import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.4.89.15.0-DYNAMIC";
+const VERSION = "Driver v3.4.89.14.4-DYNAMIC";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
 const selectedJobTypes = new Set();
 const PHOTO_BUFFER = {};
 const REQUIRED_PHOTOS = 3;
+const submitLock = {};
 let ACTIVE_CAPTURE_TASK = null;
 let jobTypeFilterInitialized = false;
 let LAST_KNOWN_GPS = null;
@@ -583,14 +584,74 @@ cameraInput.onchange = async e => {
   // ✅ render only UI, do not reload DB
   loadTasks();
 };
-  
-window.submitTask = async function(taskKey) {
+  window.submitTask = async function(taskKey) {
+
+  if (submitLock[taskKey]) return;
+  submitLock[taskKey] = true;
+
   const photos = PHOTO_BUFFER[taskKey];
 
   if (!photos || !photos[1] || !photos[2] || !photos[3]) {
     alert("Please take all 3 photos.");
+    submitLock[taskKey] = false;
     return;
   }
+
+  // ==============================
+  // ✅ OFFLINE MODE HANDLING
+  // ==============================
+  if (!navigator.onLine) {
+
+    let cachedTasks =
+      JSON.parse(localStorage.getItem(TASK_CACHE_KEY) || "[]");
+
+    // 🔒 HARD REMOVE ANY OLD COPIES
+    cachedTasks = cachedTasks.filter(t => t._key !== taskKey);
+
+    cachedTasks.push({
+      _key: taskKey,
+      status: "OFFLINE_PENDING",
+      finalized: false
+    });
+
+    processingMap[taskKey] = true;
+
+    localStorage.setItem(
+      TASK_CACHE_KEY,
+      JSON.stringify(cachedTasks)
+    );
+
+    // 🔁 STORE QUEUE
+    let q = getQueue().filter(
+      x => x.taskKey !== taskKey
+    );
+
+    for (let i = 1; i <= 3; i++) {
+      const p = photos[i];
+
+      q.push({
+        taskKey,
+        photoIndex: i,
+        image: p.previewURL,
+        takenAt: p.takenAt,
+        deliveryData: p.deliveryData,
+        gps: p.gps
+      });
+    }
+
+    setQueue(q);
+
+    delete PHOTO_BUFFER[taskKey];
+    ACTIVE_CAPTURE_TASK = null;
+
+    loadTasks();
+    submitLock[taskKey] = false;
+    return;
+  }
+
+  // ==============================
+  // ✅ ONLINE MODE (CURRENT FLOW)
+  // ==============================
 
   processingMap[taskKey] = true;
   loadTasks();
@@ -620,6 +681,8 @@ window.submitTask = async function(taskKey) {
     console.error(e);
     alert("❌ Upload failed.");
   }
+
+  delete submitLock[taskKey];
 };
 
 
@@ -765,8 +828,12 @@ async function preloadDriverUIConfig(tasks) {
 /* ===== LOAD TASKS ===== */
 async function loadTasks() {
   try {
-    let tasks = JSON.parse(localStorage.getItem(TASK_CACHE_KEY) || "[]");
+    let tasks = dedupeTasks(
+      JSON.parse(localStorage.getItem(TASK_CACHE_KEY) || "[]")
+    );
 
+    localStorage.setItem(TASK_CACHE_KEY, JSON.stringify(tasks));
+        
     if (navigator.onLine) {
       const snap = await get(
         query(ref(db, "tasks"), orderByChild("driverId"), equalTo(DRIVER_ID))
@@ -1210,6 +1277,34 @@ function getCurrentLocation() {
     );
   });
 }
+
+function dedupeTasks(tasks) {
+  const map = new Map();
+
+  const rank = {
+    PENDING: 1,
+    OFFLINE_PENDING: 2,
+    PROCESSING: 3,
+    UPLOADING: 4,
+    COMPLETED: 5
+  };
+
+  for (const t of tasks) {
+    if (!t || !t._key) continue;
+
+    const prev = map.get(t._key);
+    if (!prev) {
+      map.set(t._key, t);
+    } else {
+      const r1 = rank[prev.status] || 0;
+      const r2 = rank[t.status] || 0;
+
+      if (r2 >= r1) map.set(t._key, t);
+    }
+  }
+
+  return [...map.values()];
+}
   
 function validateDynamic(taskKey) {
   // Sync inputs → cache
@@ -1259,6 +1354,20 @@ function validateDynamic(taskKey) {
 loadTasks();
 
 async function processOfflineQueue() {
+
+  const unique = {};
+  const cleanQueue = [];
+
+  for (const item of getQueue()) {
+    const key = item.taskKey + "_" + item.photoIndex;
+    if (!unique[key]) {
+      unique[key] = true;
+      cleanQueue.push(item);
+    }
+  }
+
+  setQueue(cleanQueue);
+
   const q = getQueue();
   if (!q.length) return;
 
@@ -1267,53 +1376,38 @@ async function processOfflineQueue() {
   for (const item of q) {
     try {
       const blob = await fetch(item.image).then(r => r.blob());
-  
+
       uploadingMap[item.taskKey] = true;
       loadTasks();
-  
+
       await uploadNow(
         item.taskKey,
         blob,
         item.takenAt,
         null,
         item.deliveryData || {},
-        item.gps                  // ✅ FIX
+        item.gps,
+        item.photoIndex
       );
-  
-      /* ================= FIX 1 START ================= */
-  
-      // ✅ UPDATE LOCAL TASK CACHE AFTER OFFLINE UPLOAD
-      const cachedTasks =
-        JSON.parse(localStorage.getItem(TASK_CACHE_KEY) || "[]");
-  
-      const idx = cachedTasks.findIndex(t => t._key === item.taskKey);
-      if (idx !== -1) {
-        cachedTasks[idx].status = "COMPLETED";
-        cachedTasks[idx].finalized = true;
-      }
-  
-      localStorage.setItem(
-        TASK_CACHE_KEY,
-        JSON.stringify(cachedTasks)
+
+      let q2 = getQueue();
+      q2 = q2.filter(q =>
+        !(q.taskKey === item.taskKey && q.photoIndex === item.photoIndex)
       );
-  
-      /* ================= FIX 1 END ================= */
-  
-      // ✅ CLEAR FLAGS
+      setQueue(q2);
+
       delete uploadingMap[item.taskKey];
-      updateRefreshLock();
       delete processingMap[item.taskKey];
-  
+
       loadTasks();
+
     } catch (e) {
       console.error("❌ Offline upload failed", e);
-      return; // STOP if one fails
+      return;
     }
   }
 
-  // ✅ CLEAR QUEUE ONLY AFTER SUCCESS
   setQueue([]);
-  updateRefreshLock();
 }
 
 window.addEventListener("online", async () => {
