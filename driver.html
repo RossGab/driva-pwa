@@ -160,7 +160,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebas
 import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.4.89.15.DYNAMIC";
+const VERSION = "Driver v3.4.89.15.1-DYNAMIC";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -712,11 +712,15 @@ async function uploadNow(
   // ===== FLATTEN DATA =====
   const updatePayload = {
     ...(photoIndex === REQUIRED_PHOTOS ? { status: "COMPLETED" } : {}),
-    imageUrl: url,
-    filename,
-    takenAt,
     uploadedAt: new Date().toISOString(),
     deliveryType: deliveryData.deliveryType || ""
+  };
+  
+  updatePayload[`photos/${photoIndex}`] = {
+    url,
+    filename,
+    takenAt,
+    gps: photoGPS || null
   };
 
   for (const [k, v] of Object.entries(deliveryData)) {
