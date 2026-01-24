@@ -81,7 +81,7 @@ select, input[type="date"] {
 
 <body>
 
-<h2>Manage Tasks V4.0.8.1</h2>
+<h2>Manage Tasks V4.0.8.2</h2>
 
 <button onclick="location.href='admin.html'" class="small-btn">⬅ Back</button>
 
@@ -101,6 +101,7 @@ select, input[type="date"] {
     <select id="filterJob"><option value="">All Job Types</option></select>
     <select id="filterBA"><option value="">All BA</option></select>
     <select id="filterDMZ"><option value="">All DMZ</option></select>
+    <select id="filterMRU"><option value="">All MRU</option></select>
     <button id="bulkBtn" disabled onclick="openBulkActions()">Bulk Action</button>
   </div>
 </div>
@@ -155,6 +156,7 @@ const filterDriver = document.getElementById("filterDriver");
 const filterJob = document.getElementById("filterJob");
 const filterBA = document.getElementById("filterBA");
 const filterDMZ = document.getElementById("filterDMZ");
+const filterMRU = document.getElementById("filterMRU");
 const checkAll = document.getElementById("checkAll");
 
 let TASKS = [];
@@ -165,7 +167,8 @@ filterDate.onchange =
 filterDriver.onchange =
 filterJob.onchange =
 filterBA.onchange =
-filterDMZ.onchange = applyFilters;
+filterDMZ.onchange =
+filterMRU.onchange = applyFilters;
 
 function getTodayPH() {
   return new Date().toLocaleDateString("en-CA", {
@@ -216,23 +219,27 @@ function buildFilterLists() {
   const jobs = new Set();
   const bas = new Set();
   const dmzs = new Set();
+  const mrus = new Set();
 
   TASKS.forEach(t=>{
     if(t.driverId) drivers.add(t.driverId);
     if(t.JOBTYPE) jobs.add(t.JOBTYPE);
     if(t.BA) bas.add(t.BA);
     if(t.DMZ) dmzs.add(t.DMZ);
+    if(t.MRU) mrus.add(t.MRU);
   });
 
   filterDriver.innerHTML = `<option value="">All Drivers</option>`;
   filterJob.innerHTML = `<option value="">All Job Types</option>`;
   filterBA.innerHTML = `<option value="">All BA</option>`;
   filterDMZ.innerHTML = `<option value="">All DMZ</option>`;
+  filterMRU.innerHTML = `<option value="">All MRU</option>`;
 
   drivers.forEach(v=>filterDriver.innerHTML += `<option>${v}</option>`);
   jobs.forEach(v=>filterJob.innerHTML += `<option>${v}</option>`);
   bas.forEach(v=>filterBA.innerHTML += `<option>${v}</option>`);
   dmzs.forEach(v=>filterDMZ.innerHTML += `<option>${v}</option>`);
+  mrus.forEach(v=>filterMRU.innerHTML += `<option>${v}</option>`);
 }
 
 function applyFilters() {
@@ -254,6 +261,9 @@ function applyFilters() {
   
   if(filterDMZ.value)
     data = data.filter(t=>t.DMZ===filterDMZ.value);
+
+  if(filterMRU.value)
+    data = data.filter(t => t.MRU === filterMRU.value);
   
 
   renderTable(data);
