@@ -81,7 +81,7 @@ select, input[type="date"] {
 
 <body>
 
-<h2>Manage Tasks V4.0.8.4</h2>
+<h2>Manage Tasks V4.0.8.5</h2>
 
 <button onclick="location.href='admin.html'" class="small-btn">⬅ Back</button>
 
@@ -127,6 +127,8 @@ select, input[type="date"] {
     </table>
   </div>
 </div>
+
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
 
 <script type="module">
 import { initializeApp } from
@@ -374,76 +376,66 @@ window.uploadCSV = async function(btn){
   btn.innerText = "Uploading…";
 
   try {
-    const text = await file.text();
+    Papa.parse(file, {
+      header: true,
+      skipEmptyLines: true,
+      complete: async function(results) {
 
-    const rows = text
-      .replace(/\r/g, "")
-      .split("\n")
-      .map(r => r.trim())
-      .filter(Boolean);
+        const rows = results.data;
 
-    if (rows.length < 2) {
-      alert("❌ CSV has no data rows");
-      btn.disabled = false;
-      btn.innerText = "Upload CSV";
-      return;
-    }
+        if (!rows.length) {
+          alert("❌ CSV has no data rows");
+          btn.disabled = false;
+          btn.innerText = "Upload CSV";
+          return;
+        }
 
-    /* ===== HEADER PARSE ===== */
-    const headers = rows.shift().split(",").map(h => h.trim());
+        /* ===== VALIDATE HEADERS ===== */
+        const headers = Object.keys(rows[0] || {});
+        const missing = REQUIRED_HEADERS.filter(h => !headers.includes(h));
+        const extra = headers.filter(h => !REQUIRED_HEADERS.includes(h));
 
-    /* ===== VALIDATE HEADERS ===== */
-    const missing = REQUIRED_HEADERS.filter(h => !headers.includes(h));
-    const extra = headers.filter(h => !REQUIRED_HEADERS.includes(h));
+        if (missing.length) {
+          alert("❌ Missing required columns:\n\n" + missing.join(", "));
+          btn.disabled = false;
+          btn.innerText = "Upload CSV";
+          return;
+        }
 
-    if (missing.length) {
-      alert("❌ Missing required columns:\n\n" + missing.join(", "));
-      btn.disabled = false;
-      btn.innerText = "Upload CSV";
-      return;
-    }
+        if (extra.length) {
+          alert("❌ Extra columns not allowed:\n\n" + extra.join(", "));
+          btn.disabled = false;
+          btn.innerText = "Upload CSV";
+          return;
+        }
 
-    if (extra.length) {
-      alert("❌ Extra columns not allowed:\n\n" + extra.join(", "));
-      btn.disabled = false;
-      btn.innerText = "Upload CSV";
-      return;
-    }
+        /* ===== BUILD UPDATES ===== */
+        const updates = {};
+        const base = Date.now();
+        const now = new Date().toLocaleString("sv-SE", {
+          timeZone: "Asia/Manila"
+        }).replace(" ", "T");
 
-    /* ===== BUILD UPDATES ===== */
-    const updates = {};
-    const base = Date.now();
-    const now = new Date().toLocaleString("sv-SE", {
-      timeZone: "Asia/Manila"
-    }).replace(" ", "T");
+        rows.forEach((task, index) => {
+          const taskId = `TASK_${base}_${index}`;
 
-    rows.forEach((row, index) => {
-      const values = row.split(",");
-      const task = {};
+          updates[`tasks/${taskId}`] = {
+            ...task,
+            driverId: task.AGENTID || "",
+            status: "PENDING",
+            rowIndex: index + 1,
+            uploadBatch: base,
+            createdAt: now
+          };
+        });
 
-      headers.forEach((h, i) => {
-        task[h] = values[i]?.trim() || "";
-      });
+        await update(ref(db), updates);
 
-      const taskId = `TASK_${base}_${index}`;
-
-      updates[`tasks/${taskId}`] = {
-        ...task,
-        driverId: task.AGENTID || "",
-        status: "PENDING",
-        rowIndex: index + 1,  // Excel row order preserved
-        uploadBatch: base,
-        createdAt: now
-      };
+        alert(`✅ Upload successful!\n\n${rows.length} tasks added.`);
+        btn.innerText = "✔ Done";
+        loadTasks();
+      }
     });
-
-    /* ===== SINGLE ATOMIC WRITE ===== */
-    await update(ref(db), updates);
-
-    alert(`✅ Upload successful!\n\n${rows.length} tasks added.`);
-
-    btn.innerText = "✔ Done";
-    loadTasks();
 
   } catch (err) {
     console.error(err);
