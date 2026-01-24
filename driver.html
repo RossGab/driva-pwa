@@ -160,7 +160,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebas
 import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.4.89.14.6-DYNAMIC";
+const VERSION = "Driver v3.4.89.14.7-DYNAMIC";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -696,11 +696,6 @@ cameraInput.onchange = async e => {
   }
 
   delete submitLock[taskKey];
-
-  if (btn) {
-    btn.disabled = false;
-    btn.innerText = "✅ Submit Task";
-  }
 };
 
 
