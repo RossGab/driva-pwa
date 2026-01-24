@@ -1053,7 +1053,10 @@ const addressHTML = hasGPS
         `;
       }
     
-      html += await renderDynamicDelivery(t);
+      // 🔒 Hide delivery options after Photo 1 is taken
+      if (ACTIVE_CAPTURE_TASK !== t._key) {
+        html += await renderDynamicDelivery(t);
+      }
     
       /* ===== PREVIEW THUMBNAILS (MOVE ABOVE BUTTONS) ===== */
       const previews = [1,2,3].map(i => {
