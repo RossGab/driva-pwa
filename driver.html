@@ -160,12 +160,13 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebas
 import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.4.89.15.4-DYNAMIC";
+const VERSION = "Driver v3.4.89.15.5-DYNAMIC";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
 const selectedJobTypes = new Set();
 const PHOTO_BUFFER = {};
+const submitLock = {};
 const REQUIRED_PHOTOS = 3;
 let ACTIVE_CAPTURE_TASK = null;
 let jobTypeFilterInitialized = false;
@@ -585,6 +586,11 @@ cameraInput.onchange = async e => {
 };
   
 window.submitTask = async function(taskKey) {
+
+  // 🔒 HARD LOCK — PREVENT DOUBLE SUBMIT
+  if (submitLock[taskKey]) return;
+  submitLock[taskKey] = true;
+  
   const photos = PHOTO_BUFFER[taskKey];
 
   if (!photos || !photos[1] || !photos[2] || !photos[3]) {
@@ -637,6 +643,9 @@ window.submitTask = async function(taskKey) {
     ACTIVE_CAPTURE_TASK = null;
 
     alert("📴 Saved offline. Will upload automatically when online.");
+
+    submitLock[taskKey] = false;
+    
     loadTasks();
     return;
   }
@@ -660,12 +669,15 @@ window.submitTask = async function(taskKey) {
     delete PHOTO_BUFFER[taskKey];
     delete processingMap[taskKey];
     ACTIVE_CAPTURE_TASK = null;
-
+    
+    submitLock[taskKey] = false;
+    
     loadTasks();
 
   } catch (e) {
     console.error(e);
     alert("❌ Upload failed.");
+    submitLock[taskKey] = false;
   }
 };
 
