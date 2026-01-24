@@ -160,7 +160,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebas
 import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.4.89.15.7-DYNAMIC";
+const VERSION = "Driver v3.4.89.15.8-DYNAMIC";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -192,6 +192,35 @@ const processingMap = {};
 const uploadingMap = {};
 let SEARCH_TERM = "";
 const dateFilter = document.getElementById("dateFilter");
+
+function dedupeTasks(tasks) {
+  const map = new Map();
+
+  for (const t of tasks) {
+    if (!t || !t._key) continue;
+
+    const prev = map.get(t._key);
+
+    if (!prev) {
+      map.set(t._key, t);
+    } else {
+      const rank = {
+        PENDING: 1,
+        OFFLINE_PENDING: 2,
+        PROCESSING: 3,
+        UPLOADING: 4,
+        COMPLETED: 5
+      };
+
+      const r1 = rank[prev.status] || 0;
+      const r2 = rank[t.status] || 0;
+
+      if (r2 >= r1) map.set(t._key, t);
+    }
+  }
+
+  return [...map.values()];
+}
 
 // ✅ Default to today
 function getTodayPH() {
@@ -630,21 +659,16 @@ window.submitTask = async function(taskKey) {
 
     let cachedTasks =
       JSON.parse(localStorage.getItem(TASK_CACHE_KEY) || "[]");
-
-    const idx = cachedTasks.findIndex(t => t._key === taskKey);
-
-    if (idx !== -1) {
-      cachedTasks[idx].status = "OFFLINE_PENDING";
-      cachedTasks[idx].finalized = false;
-    } else {
-      // Safety fallback (should never happen)
-      cachedTasks.push({
-        _key: taskKey,
-        status: "OFFLINE_PENDING",
-        finalized: false
-      });
-    }
-
+    
+    // 🔒 HARD BLOCK DUPLICATE INSERT
+    cachedTasks = cachedTasks.filter(t => t._key !== taskKey);
+    
+    cachedTasks.push({
+      _key: taskKey,
+      status: "OFFLINE_PENDING",
+      finalized: false
+    });
+    
     localStorage.setItem(
       TASK_CACHE_KEY,
       JSON.stringify(cachedTasks)
@@ -846,6 +870,10 @@ async function preloadDriverUIConfig(tasks) {
 async function loadTasks() {
   try {
     let tasks = JSON.parse(localStorage.getItem(TASK_CACHE_KEY) || "[]");
+    
+    // 🔥 HARD DEDUPE FIX — REMOVE ALL DUPLICATES ALWAYS
+    tasks = dedupeTasks(tasks);
+    localStorage.setItem(TASK_CACHE_KEY, JSON.stringify(tasks));
 
     if (navigator.onLine) {
       const snap = await get(
@@ -1380,17 +1408,27 @@ async function processOfflineQueue() {
         item.gps,                  // ✅ FIX
         item.photoIndex
       );
-  
+
+      // 🔒 HARD DELETE PROCESSED QUEUE ITEM
+      let q2 = getQueue();
+      q2 = q2.filter(q =>
+        !(q.taskKey === item.taskKey && q.photoIndex === item.photoIndex)
+      );
+      setQueue(q2);
+      
       /* ================= FIX 1 START ================= */
   
       // ✅ UPDATE LOCAL TASK CACHE AFTER OFFLINE UPLOAD
       const cachedTasks =
         JSON.parse(localStorage.getItem(TASK_CACHE_KEY) || "[]");
   
-      const idx = cachedTasks.findIndex(t => t._key === item.taskKey);
-      if (idx !== -1) {
-        cachedTasks[idx].status = "COMPLETED";
-        cachedTasks[idx].finalized = true;
+      // ✅ Only finalize after LAST photo
+      if (item.photoIndex === 3) {
+        const idx = cachedTasks.findIndex(t => t._key === item.taskKey);
+        if (idx !== -1) {
+          cachedTasks[idx].status = "COMPLETED";
+          cachedTasks[idx].finalized = true;
+        }
       }
   
       localStorage.setItem(
