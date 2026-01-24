@@ -1,5 +1,4 @@
-
-const CACHE_VERSION = "v3";
+const CACHE_VERSION = "v4";
 const CACHE_NAME = `field-task-app-${CACHE_VERSION}`;
 
 const APP_SHELL = [
@@ -9,10 +8,7 @@ const APP_SHELL = [
   "./manifest.json",
   "./logo.jpg",
   "./icon-192.png",
-  "./icon-512.png",
-  "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js",
-  "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js",
-  "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js"
+  "./icon-512.png"
 ];
 
 self.addEventListener("install", event => {
@@ -34,19 +30,20 @@ self.addEventListener("activate", event => {
 });
 
 self.addEventListener("fetch", event => {
-  // IMPORTANT: handle navigation (refresh)
-  if (event.request.mode === "navigate") {
+  const { request } = event;
+
+  // ✅ PAGE NAVIGATION: always fallback to driver.html
+  if (request.mode === "navigate") {
     event.respondWith(
-      fetch(event.request).catch(() =>
-        caches.match(event.request).then(res => res || caches.match("./driver.html"))
-      )
+      fetch(request).catch(() => caches.match("./driver.html"))
     );
     return;
   }
 
+  // ✅ ASSET FETCH: cache-first
   event.respondWith(
-    caches.match(event.request).then(
-      cached => cached || fetch(event.request)
+    caches.match(request).then(
+      cached => cached || fetch(request)
     )
   );
 });
