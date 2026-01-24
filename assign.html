@@ -81,7 +81,7 @@ select, input[type="date"] {
 
 <body>
 
-<h2>Manage Tasks V4.0.8.3</h2>
+<h2>Manage Tasks V4.0.8.4</h2>
 
 <button onclick="location.href='admin.html'" class="small-btn">⬅ Back</button>
 
@@ -249,11 +249,6 @@ function buildFilterLists() {
 
 function applyFilters() {
   let data = [...TASKS];
-
-  if (filterDate.value)
-  data = data.filter(t =>
-    normalizeDate(t.createdAt) === filterDate.value
-  );
 
   if (filterDateFrom.value || filterDateTo.value) {
     const from = filterDateFrom.value || "0000-00-00";
