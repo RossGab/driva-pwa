@@ -160,7 +160,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebas
 import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.4.89.15.5-DYNAMIC";
+const VERSION = "Driver v3.4.89.15.6-DYNAMIC";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -587,23 +587,31 @@ cameraInput.onchange = async e => {
   
 window.submitTask = async function(taskKey) {
 
-  // 🔒 HARD LOCK — PREVENT DOUBLE SUBMIT
-  if (submitLock[taskKey]) return;
+  // 🔒 ABSOLUTE LOCK — NO SECOND CALL POSSIBLE
+  if (submitLock[taskKey] === true) {
+    console.warn("Duplicate submit blocked:", taskKey);
+    return;
+  }
   submitLock[taskKey] = true;
-  
+
   const photos = PHOTO_BUFFER[taskKey];
 
   if (!photos || !photos[1] || !photos[2] || !photos[3]) {
     alert("Please take all 3 photos.");
+    submitLock[taskKey] = false;
     return;
   }
 
+  // 🔒 UI HARD DISABLE
   processingMap[taskKey] = true;
   loadTasks();
 
-  // 📴 OFFLINE MODE → QUEUE EVERYTHING
+  /* ========== OFFLINE MODE ========== */
   if (!navigator.onLine) {
-    const queue = getQueue();
+    let queue = getQueue();
+
+    // 🔥 REMOVE EXISTING QUEUE ENTRIES FOR THIS TASK
+    queue = queue.filter(q => q.taskKey !== taskKey);
 
     for (let i = 1; i <= 3; i++) {
       const p = photos[i];
@@ -620,19 +628,18 @@ window.submitTask = async function(taskKey) {
 
     setQueue(queue);
 
-    // 🔒 mark task as offline pending
     let cachedTasks =
       JSON.parse(localStorage.getItem(TASK_CACHE_KEY) || "[]");
-    
-    // 🔥 ENSURE NO DUPLICATES
+
     cachedTasks = cachedTasks.filter(t => t._key !== taskKey);
-    
+
     cachedTasks.push({
       ...(cachedTasks.find(t => t._key === taskKey) || {}),
       _key: taskKey,
-      status: "OFFLINE_PENDING"
+      status: "OFFLINE_PENDING",
+      finalized: false
     });
-    
+
     localStorage.setItem(
       TASK_CACHE_KEY,
       JSON.stringify(cachedTasks)
@@ -643,14 +650,12 @@ window.submitTask = async function(taskKey) {
     ACTIVE_CAPTURE_TASK = null;
 
     alert("📴 Saved offline. Will upload automatically when online.");
-
-    submitLock[taskKey] = false;
-    
     loadTasks();
+
     return;
   }
 
-  // 🌐 ONLINE MODE → NORMAL UPLOAD
+  /* ========== ONLINE MODE ========== */
   try {
     for (let i = 1; i <= 3; i++) {
       const p = photos[i];
@@ -669,18 +674,15 @@ window.submitTask = async function(taskKey) {
     delete PHOTO_BUFFER[taskKey];
     delete processingMap[taskKey];
     ACTIVE_CAPTURE_TASK = null;
-    
-    submitLock[taskKey] = false;
-    
+
     loadTasks();
 
   } catch (e) {
-    console.error(e);
-    alert("❌ Upload failed.");
+    console.error("Upload failed:", e);
+    alert("❌ Upload failed. Please retry.");
     submitLock[taskKey] = false;
   }
 };
-
 
 /* ===== CAMERA ===== */
 
@@ -739,6 +741,16 @@ async function uploadNow(
   photoGPS,
   photoIndex
 ) {
+
+  // 🔒 FINAL DUPLICATE BLOCK — STOP DOUBLE UPLOADS
+  const local = JSON.parse(localStorage.getItem(TASK_CACHE_KEY) || "[]");
+  const t = local.find(x => x._key === taskKey);
+
+  if (t?.finalized === true) {
+    console.warn("Blocked duplicate upload:", taskKey);
+    return;
+  }
+  
   const taskSnap = await get(ref(db, `tasks/${taskKey}`));
   const task = taskSnap.val() || {};
 
@@ -1329,6 +1341,19 @@ function validateDynamic(taskKey) {
 loadTasks();
 
 async function processOfflineQueue() {
+    const unique = {};
+  const cleanQueue = [];
+  
+  for (const item of getQueue()) {
+    const key = item.taskKey + "_" + item.photoIndex;
+    if (!unique[key]) {
+      unique[key] = true;
+      cleanQueue.push(item);
+    }
+  }
+  
+  setQueue(cleanQueue);
+  
   const q = getQueue();
   if (!q.length) return;
 
