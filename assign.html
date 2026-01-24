@@ -81,7 +81,7 @@ select, input[type="date"] {
 
 <body>
 
-<h2>Manage Tasks V4.0.8.2</h2>
+<h2>Manage Tasks V4.0.8.3</h2>
 
 <button onclick="location.href='admin.html'" class="small-btn">⬅ Back</button>
 
@@ -96,7 +96,8 @@ select, input[type="date"] {
 <!-- FILTERS + BULK ACTION -->
 <div class="panel blue">
   <div class="actions">
-    <input type="date" id="filterDate">
+    <input type="date" id="filterDateFrom">
+    <input type="date" id="filterDateTo">
     <select id="filterDriver"><option value="">All Drivers</option></select>
     <select id="filterJob"><option value="">All Job Types</option></select>
     <select id="filterBA"><option value="">All BA</option></select>
@@ -151,7 +152,8 @@ const db = getDatabase(app);
 const table = document.getElementById("taskTable");
 const bulkBtn = document.getElementById("bulkBtn");
 
-const filterDate = document.getElementById("filterDate");
+const filterDateFrom = document.getElementById("filterDateFrom");
+const filterDateTo = document.getElementById("filterDateTo");
 const filterDriver = document.getElementById("filterDriver");
 const filterJob = document.getElementById("filterJob");
 const filterBA = document.getElementById("filterBA");
@@ -161,9 +163,12 @@ const checkAll = document.getElementById("checkAll");
 
 let TASKS = [];
 
-filterDate.value = getTodayPH();
+const today = getTodayPH();
+filterDateFrom.value = today;
+filterDateTo.value = today;
   
-filterDate.onchange =
+filterDateFrom.onchange =
+filterDateTo.onchange =
 filterDriver.onchange =
 filterJob.onchange =
 filterBA.onchange =
@@ -250,8 +255,15 @@ function applyFilters() {
     normalizeDate(t.createdAt) === filterDate.value
   );
 
-  if(filterDriver.value)
-    data = data.filter(t=>t.driverId===filterDriver.value);
+  if (filterDateFrom.value || filterDateTo.value) {
+    const from = filterDateFrom.value || "0000-00-00";
+    const to   = filterDateTo.value   || "9999-99-99";
+  
+    data = data.filter(t => {
+      const d = normalizeDate(t.createdAt);
+      return d && d >= from && d <= to;
+    });
+  }
 
   if(filterJob.value)
     data = data.filter(t=>t.JOBTYPE===filterJob.value);
