@@ -2,9 +2,9 @@ const CACHE_VERSION = "v4";
 const CACHE_NAME = `field-task-app-${CACHE_VERSION}`;
 
 const APP_SHELL = [
+  "./driver.html",
   "./",
   "./install.html",
-  "./driver.html",
   "./manifest.json",
   "./logo.jpg",
   "./icon-192.png",
@@ -35,7 +35,13 @@ self.addEventListener("fetch", event => {
   // ✅ PAGE NAVIGATION: always fallback to driver.html
   if (request.mode === "navigate") {
     event.respondWith(
-      fetch(request).catch(() => caches.match("./driver.html"))
+      fetch(request).catch(async () => {
+        const cached = await caches.match("./driver.html");
+        return cached || new Response(
+          "<h1>Offline</h1><p>Please reconnect once.</p>",
+          { headers: { "Content-Type": "text/html" } }
+        );
+      })
     );
     return;
   }
