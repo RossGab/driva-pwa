@@ -160,7 +160,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebas
 import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.4.89.14.7-DYNAMIC";
+const VERSION = "Driver v3.4.89.14.5-DYNAMIC";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -587,13 +587,7 @@ cameraInput.onchange = async e => {
   window.submitTask = async function(taskKey) {
 
   if (submitLock[taskKey]) return;
-    submitLock[taskKey] = true;
-    
-    const btn = document.getElementById(`submit_${taskKey}`);
-    if (btn) {
-      btn.disabled = true;
-      btn.innerText = "⏳ Uploading...";
-    }
+  submitLock[taskKey] = true;
 
   const photos = PHOTO_BUFFER[taskKey];
 
@@ -652,11 +646,6 @@ cameraInput.onchange = async e => {
 
     loadTasks();
     submitLock[taskKey] = false;
-    const btn = document.getElementById(`submit_${taskKey}`);
-      if (btn) {
-        btn.disabled = false;
-        btn.innerText = "✅ Submit Task";
-      }
     return;
   }
 
@@ -691,21 +680,9 @@ cameraInput.onchange = async e => {
   } catch (e) {
     console.error(e);
     alert("❌ Upload failed.");
-  
-    const btn = document.getElementById(`submit_${taskKey}`);
-    if (btn) {
-      btn.disabled = false;
-      btn.innerText = "✅ Submit Task";
-    }
   }
 
   delete submitLock[taskKey];
-
-  const btn = document.getElementById(`submit_${taskKey}`);
-  if (btn) {
-    btn.disabled = false;
-    btn.innerText = "✅ Submit Task";
-  }
 };
 
 
@@ -797,10 +774,7 @@ async function uploadNow(
 
   // ===== FLATTEN DATA =====
   const updatePayload = {
-    ...(photoIndex === REQUIRED_PHOTOS ? {
-      status: "COMPLETED",
-      completedAt: new Date().toISOString()
-    } : {}),
+    ...(photoIndex === REQUIRED_PHOTOS ? { status: "COMPLETED" } : {}),
     [`photo${photoIndex}Url`]: url,
     [`photo${photoIndex}Filename`]: filename,
     [`photo${photoIndex}TakenAt`]: takenAt,
@@ -1144,7 +1118,6 @@ const addressHTML = hasGPS
         </div>
       
         <button
-          id="submit_${t._key}"
           ${disableSubmit ? "disabled" : ""}
           onclick="submitTask('${t._key}')"
           style="
@@ -1381,11 +1354,6 @@ function validateDynamic(taskKey) {
 loadTasks();
 
 async function processOfflineQueue() {
-  if (processOfflineQueue.running) {
-    console.log("⏳ Queue already running — skipping duplicate trigger");
-    return;
-  }
-  processOfflineQueue.running = true;
 
   const unique = {};
   const cleanQueue = [];
@@ -1401,10 +1369,7 @@ async function processOfflineQueue() {
   setQueue(cleanQueue);
 
   const q = getQueue();
-    if (!q.length) {
-      processOfflineQueue.running = false;
-      return;
-    }
+  if (!q.length) return;
 
   console.log("🔁 Processing offline queue:", q.length);
 
@@ -1436,14 +1401,13 @@ async function processOfflineQueue() {
 
       loadTasks();
 
-    }catch (e) {
-      console.error("❌ Offline upload failed — will retry", e);
-      continue;   // 🔥 DO NOT STOP THE LOOP
+    } catch (e) {
+      console.error("❌ Offline upload failed", e);
+      return;
     }
   }
 
   setQueue([]);
-  processOfflineQueue.running = false;
 }
 
 window.addEventListener("online", async () => {
