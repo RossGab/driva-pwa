@@ -160,7 +160,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebas
 import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.4.89.15.1-DYNAMIC";
+const VERSION = "Driver v3.4.89.15.2-DYNAMIC";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -1486,30 +1486,42 @@ window.handleDeliveryMethod = async function(taskKey, jobType, method) {
   if (!box) return;
   box.innerHTML = "";
 
-  // SIMPLE MODE (current RTP / AD / NOD)
-  const isSimple = Object.values(block).every(v => v?.type && !v.fields);
+  // 🔹 Separate DIRECT fields and RADIO fields
+  const directFields = {};
+  const radioFields = {};
 
-  if (isSimple) {
-    box.innerHTML = renderDirectFields(taskKey, block);
-    return;
+  for (const [key, val] of Object.entries(block)) {
+    if (val?.type === "radio") {
+      radioFields[key] = val;
+    } else {
+      directFields[key] = val;
+    }
   }
 
-  // RADIO MODE (BOV + future complex configs)
-  let html = `<div class="radio-group"><b>Result</b>`;
+  let html = "";
 
-  for (const key of Object.keys(block)) {
-    const opt = block[key];
-    if (opt.type !== "radio") continue;
-
-    html += `
-      <label>
-        <input type="radio" name="sub_${taskKey}" value="${key}"
-          onchange="renderSubFields('${taskKey}','${jobType}','${method}','${key}')">
-        ${opt.label}
-      </label>`;
+  // ✅ Always render DIRECT fields first
+  if (Object.keys(directFields).length) {
+    html += renderDirectFields(taskKey, directFields);
   }
 
-  html += `</div><div id="sub_${taskKey}"></div>`;
+  // ✅ Render RADIO fields if present
+  if (Object.keys(radioFields).length) {
+    html += `<div class="radio-group"><b>Result</b>`;
+
+    for (const key of Object.keys(radioFields)) {
+      const opt = radioFields[key];
+      html += `
+        <label>
+          <input type="radio" name="sub_${taskKey}" value="${key}"
+            onchange="renderSubFields('${taskKey}','${jobType}','${method}','${key}')">
+          ${opt.label}
+        </label>`;
+    }
+
+    html += `</div><div id="sub_${taskKey}"></div>`;
+  }
+
   box.innerHTML = html;
 };
 
