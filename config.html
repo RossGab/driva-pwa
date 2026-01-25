@@ -270,14 +270,47 @@ window.toggleRequired = (m,f,v) => STATE.methods[m][f].required = v;
 window.removeField = (m,f) => { delete STATE.methods[m][f]; renderMethods(); };
 
 window.addChild = (m,f) => {
-  const k = "opt_" + Date.now();
-  STATE.methods[m][f].fields[k] = { label:"", type:"text", required:false };
+  const k = "tmp_" + Date.now();   // temporary key until label is typed
+
+  STATE.methods[m][f].fields[k] = {
+    label: "",
+    type: "text",
+    required: false
+  };
+
   renderMethods();
 };
 
 window.removeChild = (m,f,k) => { delete STATE.methods[m][f].fields[k]; renderMethods(); };
 
-window.updateChildLabel = (m,f,k,v) => STATE.methods[m][f].fields[k].label = v;
+window.updateChildLabel = (m,f,k,v) => {
+  if (!v) return;
+
+  const newKey = v
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_|_$/g, "");
+
+  const fields = STATE.methods[m][f].fields;
+
+  // If already converted, just update label
+  if (k === newKey) {
+    fields[k].label = v;
+    return;
+  }
+
+  // Prevent overwrite
+  if (fields[newKey]) {
+    alert("This option already exists.");
+    return;
+  }
+
+  // Move data to new key
+  fields[newKey] = { ...fields[k], label: v };
+  delete fields[k];
+
+  renderMethods();
+};
 window.updateChildType = (m,f,k,v) => STATE.methods[m][f].fields[k].type = v;
 window.updateChildRequired = (m,f,k,v) => STATE.methods[m][f].fields[k].required = v;
 
