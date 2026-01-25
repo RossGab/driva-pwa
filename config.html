@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Driver UI Configuration</title>
+<title>Driver UI Configuration Builder</title>
 
 <style>
 body { font-family: Arial, sans-serif; background:#f3f3f3; padding:12px; }
@@ -69,11 +69,11 @@ button {
 
 <body>
 
-<h2>⚙ Driver UI Configuration v3 (Clean Model)</h2>
+<h2>⚙ Driver UI Dynamic Configuration Builder</h2>
 
 <div class="card">
   <label>Job Type</label>
-  <input id="jobTypeInput" placeholder="e.g. NOV1">
+  <input id="jobTypeInput" placeholder="e.g. BOV">
 
   <label>Delivery Method</label>
   <input id="deliveryMethodInput" placeholder="e.g. N1-Received">
@@ -94,20 +94,17 @@ button {
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 import { getDatabase, ref, update } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
-/* ================= FIREBASE ================= */
 const app = initializeApp({
   apiKey: "AIzaSyDFW61pnwLvh6HGKWt10zLYNr860fI8vkg",
   databaseURL: "https://driva-pwa-default-rtdb.firebaseio.com"
 });
 const db = getDatabase(app);
 
-/* ================= STATE ================= */
 const STATE = {
   jobType: "",
   methods: {}
 };
 
-/* ================= ADD DELIVERY METHOD ================= */
 window.addDeliveryMethod = function () {
   const jobType = jobTypeInput.value.trim();
   const method = deliveryMethodInput.value.trim();
@@ -127,14 +124,6 @@ window.addDeliveryMethod = function () {
   renderMethods();
 };
 
-window.removeDeliveryMethod = function (method) {
-  if (!confirm(`Remove delivery method "${method}"?`)) return;
-
-  delete STATE.methods[method];
-  renderMethods();
-};
-
-/* ================= RENDER ================= */
 function renderMethods() {
   methodsContainer.innerHTML = "";
 
@@ -144,100 +133,41 @@ function renderMethods() {
 
     div.innerHTML = `
       <b>${method}</b>
-      <button class="danger"
-        style="float:right"
-        onclick="removeDeliveryMethod('${method}')">
-        ❌ Remove Method
-      </button>
+      <button class="danger" style="float:right" onclick="removeDeliveryMethod('${method}')">❌</button>
 
-      <input class="field-label" placeholder="Field label (e.g. C100-Disconnected)">
+      <input class="field-label" placeholder="Field label (e.g. Received by, C100-Disconnected)">
       <select class="field-type">
-        <option value="radio">Radio</option>
         <option value="text">Text</option>
         <option value="textarea">Textarea</option>
+        <option value="radio">Radio Button</option>
       </select>
 
       <button class="secondary addField">➕ Add Field</button>
 
-      <div class="field-list">
-        ${Object.entries(fields).map(([key, f]) => `
-          <div class="field-box">
-            <b>${f.label}</b> (${f.type})
-
-            <label class="required-row">
-              <input type="checkbox"
-                ${f.required ? "checked" : ""}
-                onchange="updateFieldRequired('${method}','${key}',this.checked)">
-              Required
-            </label>
-
-            ${f.type === "radio" ? `
-              <div class="child-box">
-                <b>Fields shown when selected</b>
-
-                ${Object.entries(f.fields || {}).map(([ck, cf]) => `
-                  <div style="margin-top:6px;">
-                    <input
-                      placeholder="Child field label"
-                      value="${cf.label}"
-                      onchange="updateChildLabel('${method}','${key}','${ck}',this.value)"
-                    >
-                    <select
-                      onchange="updateChildType('${method}','${key}','${ck}',this.value)">
-                      <option value="text" ${cf.type==="text"?"selected":""}>Text</option>
-                      <option value="textarea" ${cf.type==="textarea"?"selected":""}>Textarea</option>
-                    </select>
-
-                    <label class="required-row">
-                      <input type="checkbox"
-                        ${cf.required ? "checked" : ""}
-                        onchange="updateChildRequired('${method}','${key}','${ck}',this.checked)">
-                      Required
-                    </label>
-
-                    <button class="danger"
-                      onclick="removeChildField('${method}','${key}','${ck}')">
-                      ❌ Remove
-                    </button>
-                  </div>
-                `).join("")}
-
-                <button class="secondary"
-                  onclick="addChildField('${method}','${key}')">
-                  ➕ Add Child Field
-                </button>
-              </div>
-            ` : ""}
-
-            <button class="danger"
-              onclick="removeField('${method}','${key}')">
-              ❌ Remove Field
-            </button>
-          </div>
-        `).join("")}
-      </div>
+      <div class="field-list"></div>
     `;
+
+    const list = div.querySelector(".field-list");
+
+    Object.entries(fields).forEach(([key, f]) => {
+      list.innerHTML += renderField(method, key, f);
+    });
 
     div.querySelector(".addField").onclick = () => {
       const label = div.querySelector(".field-label").value.trim();
       const type = div.querySelector(".field-type").value;
-    
-      if (!label) {
-        alert("Field label required");
-        return;
-      }
-    
-      const key = label
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, "_");
-    
+
+      if (!label) return alert("Field label required");
+
+      const key = label.toLowerCase().replace(/[^a-z0-9]+/g,"_");
+
       STATE.methods[method][key] = {
         label,
         type,
-        required: false, // ✅ REQUIRED FOR ALL FIELD TYPES
-        ...(type === "radio" ? { fields: {} } : {})
+        required:false,
+        ...(type==="radio"?{fields:{}}:{})
       };
-    
+
       renderMethods();
     };
 
@@ -245,54 +175,79 @@ function renderMethods() {
   });
 }
 
-window.updateFieldRequired = (method, fieldKey, value) => {
-  STATE.methods[method][fieldKey].required = value;
-};
+function renderField(method, key, f) {
+  return `
+    <div class="field-box">
+      <b>${f.label}</b> (${f.type})
 
-/* ================= CHILD FIELD ================= */
-window.addChildField = (method, fieldKey) => {
-  const f = STATE.methods[method][fieldKey];
-  if (!f.fields) f.fields = {};
+      <label class="required-row">
+        <input type="checkbox" ${f.required?"checked":""}
+          onchange="toggleRequired('${method}','${key}',this.checked)">
+        Required
+      </label>
 
-  const key = "field_" + Date.now();
+      ${f.type==="radio" ? renderRadioChildren(method,key,f) : ""}
 
-  f.fields[key] = {
-    label: "",
-    type: "text",
-    required: false
-  };
+      <button class="danger" onclick="removeField('${method}','${key}')">❌ Remove</button>
+    </div>
+  `;
+}
 
+function renderRadioChildren(method,key,f) {
+  return `
+    <div class="child-box">
+      <b>Radio Options</b>
+
+      ${Object.entries(f.fields || {}).map(([ck,cf])=>`
+        <div style="margin-top:6px">
+          <input placeholder="Option label" value="${cf.label}"
+            onchange="updateChildLabel('${method}','${key}','${ck}',this.value)">
+          <select onchange="updateChildType('${method}','${key}','${ck}',this.value)">
+            <option value="text" ${cf.type==="text"?"selected":""}>Text</option>
+            <option value="textarea" ${cf.type==="textarea"?"selected":""}>Textarea</option>
+          </select>
+
+          <label class="required-row">
+            <input type="checkbox" ${cf.required?"checked":""}
+              onchange="updateChildRequired('${method}','${key}','${ck}',this.checked)">
+            Required
+          </label>
+
+          <button class="danger"
+            onclick="removeChild('${method}','${key}','${ck}')">❌</button>
+        </div>
+      `).join("")}
+
+      <button class="secondary"
+        onclick="addChild('${method}','${key}')">➕ Add Radio Option</button>
+    </div>
+  `;
+}
+
+/* ---------- Actions ---------- */
+
+window.removeDeliveryMethod = m => { delete STATE.methods[m]; renderMethods(); };
+
+window.toggleRequired = (m,f,v) => STATE.methods[m][f].required = v;
+
+window.removeField = (m,f) => { delete STATE.methods[m][f]; renderMethods(); };
+
+window.addChild = (m,f) => {
+  const k = "opt_" + Date.now();
+  STATE.methods[m][f].fields[k] = { label:"", type:"text", required:false };
   renderMethods();
 };
 
-window.updateChildLabel = (m,f,k,val) => {
-  STATE.methods[m][f].fields[k].label = val;
-};
+window.removeChild = (m,f,k) => { delete STATE.methods[m][f].fields[k]; renderMethods(); };
 
-window.updateChildType = (m,f,k,val) => {
-  STATE.methods[m][f].fields[k].type = val;
-};
+window.updateChildLabel = (m,f,k,v) => STATE.methods[m][f].fields[k].label = v;
+window.updateChildType = (m,f,k,v) => STATE.methods[m][f].fields[k].type = v;
+window.updateChildRequired = (m,f,k,v) => STATE.methods[m][f].fields[k].required = v;
 
-window.updateChildRequired = (m,f,k,val) => {
-  STATE.methods[m][f].fields[k].required = val;
-};
+/* ---------- SAVE ---------- */
 
-window.removeChildField = (m,f,k) => {
-  delete STATE.methods[m][f].fields[k];
-  renderMethods();
-};
-
-window.removeField = (m,f) => {
-  delete STATE.methods[m][f];
-  renderMethods();
-};
-
-/* ================= SAVE ================= */
-window.saveConfig = async function () {
-  if (!STATE.jobType) {
-    alert("Nothing to save");
-    return;
-  }
+window.saveConfig = async function() {
+  if (!STATE.jobType) return alert("Nothing to save");
 
   await update(
     ref(db, `config/driverUI/jobTypes/${STATE.jobType}`),
@@ -302,7 +257,7 @@ window.saveConfig = async function () {
     }
   );
 
-  alert("✅ Configuration saved correctly");
+  alert("✅ Configuration saved");
 };
 </script>
 
