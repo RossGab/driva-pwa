@@ -269,7 +269,7 @@ button {
 <div class="admin-header" style="justify-content:space-between;">
   <div style="display:flex;align-items:center;gap:14px;">
     <img src="./logo.jpg" class="admin-logo" alt="Company Logo">
-    <h1>Admin Dashboard <span class="version">V2.4.15.1</span></h1>
+    <h1>Admin Dashboard <span class="version">V2.4.16.1</span></h1>
   </div>
 
   <!-- 📅 DATE FILTER -->
@@ -750,7 +750,12 @@ function renderDynamicCompletedFields(t) {
       <b>DELIVERY DETAILS</b>
   `;
 
+  // ============================
+  // DIRECT FIELDS
+  // ============================
   for (const [key, field] of Object.entries(cfg)) {
+    if (field.type === "radio") continue;
+
     const value = t[key] || "";
 
     if (field.type === "textarea") {
@@ -766,9 +771,48 @@ function renderDynamicCompletedFields(t) {
     }
   }
 
+  // ============================
+  // RADIO RESULT
+  // ============================
+  const radioFields = Object.entries(cfg)
+    .filter(([_, v]) => v.type === "radio");
+
+  if (radioFields.length) {
+    const [radioKey, radioCfg] = radioFields[0];
+    const selected = t.result;
+
+    if (selected && radioCfg.fields?.[selected]) {
+      const selectedCfg = radioCfg.fields[selected];
+
+      html += `
+        <label class="full">${radioCfg.label || "Result"}</label>
+        <input class="full" value="${selectedCfg.label}" disabled>
+      `;
+
+      // ============================
+      // RADIO CHILD FIELDS
+      // ============================
+      for (const [ck, cf] of Object.entries(selectedCfg.fields || {})) {
+        const val = t[ck] || "";
+
+        if (cf.type === "textarea") {
+          html += `
+            <label class="full">${cf.label}</label>
+            <textarea class="full" disabled>${val}</textarea>
+          `;
+        } else {
+          html += `
+            <label class="full">${cf.label}</label>
+            <input class="full" value="${val}" disabled>
+          `;
+        }
+      }
+    }
+  }
+
   html += `</div>`;
   return html;
-}  
+}
   
 function renderTaskDetails(t) {
   return `
