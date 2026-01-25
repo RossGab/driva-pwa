@@ -6,7 +6,7 @@
 
 <title>Driver Tasks</title>
 
-<link rel="manifest" href="./manifest-test.json">
+<link rel="manifest" href="./manifest.json">
 <meta name="theme-color" content="#222222">
 
 <style>
@@ -156,29 +156,19 @@ img { width:100%;margin-top:8px;border-radius:6px; }
 <input type="file" id="cameraInput" accept="image/*" capture="environment" hidden>
 
 <script type="module">
-
-/* ================= ENV MODE ================= */
-const DB_MODE = "TEST"; // "TEST" | "PROD"
-
-const TASKS_PATH =
-  DB_MODE === "TEST" ? "tasks_test" : "tasks";
-
-const DRIVER_STATUS_PATH =
-  DB_MODE === "TEST" ? "driverStatus_test" : "driverStatus";
-
-console.log("🔥 DB MODE:", DB_MODE);
-/*===============================================*/
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.5.0-DYNAMIC";
+const VERSION = "Driver v3.4.89.14.7-DYNAMIC";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
 const selectedJobTypes = new Set();
+const PHOTO_BUFFER = {};
 const REQUIRED_PHOTOS = 3;
-const PHOTO_PROGRESS = {}; // taskKey -> count
+const submitLock = {};
+let ACTIVE_CAPTURE_TASK = null;
 let jobTypeFilterInitialized = false;
 let LAST_KNOWN_GPS = null;
 
@@ -203,52 +193,31 @@ const uploadingMap = {};
 let SEARCH_TERM = "";
 const dateFilter = document.getElementById("dateFilter");
 
-const DB_NAME = "driverOfflineDB";
-const DB_VERSION = 1;
-const STORE_NAME = "offlineQueue";
-
-function openDB() {
-  return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, DB_VERSION);
-
-    req.onupgradeneeded = e => {
-      const db = e.target.result;
-      if (!db.objectStoreNames.contains(STORE_NAME)) {
-        db.createObjectStore(STORE_NAME, { keyPath: "id", autoIncrement: true });
-      }
-    };
-
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
+// ✅ Default to today
+function getTodayPH() {
+  return new Date().toLocaleDateString("en-CA", {
+    timeZone: "Asia/Manila"
   });
 }
 
-// ✅ Default to today
-function getLocalDateYYYYMMDD() {
-  const d = new Date();
-  const year = d.getFullYear();
-  const month = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
-dateFilter.value = getLocalDateYYYYMMDD();
+dateFilter.value = getTodayPH();
 
 // Re-load when date changes
 dateFilter.addEventListener("change", () => {
   loadTasks();
 });
 
-let offlineQueueCount = 0;
-
-async function refreshQueueCount() {
-  const q = await getQueue();
-  offlineQueueCount = q.length;
+function normalizeDatePH(dateStr) {
+  if (!dateStr) return null;
+  return new Date(dateStr).toLocaleDateString("en-CA", {
+    timeZone: "Asia/Manila"
+  });
 }
 
 function isBusy() {
+  const queue = JSON.parse(localStorage.getItem("offlineQueue") || "[]");
   return (
-    offlineQueueCount > 0 ||
+    queue.length > 0 ||
     Object.keys(processingMap).length > 0 ||
     Object.keys(uploadingMap).length > 0
   );
@@ -405,7 +374,8 @@ function renderJobTypeFilters(tasks) {
     if (status !== "PENDING") return;
 
     // ❌ must match selected date
-    if (!t.createdAt || !t.createdAt.startsWith(selectedDate)) return;
+    const taskDate = normalizeDatePH(t.createdAt);
+      if (!taskDate || taskDate !== selectedDate) return;
 
     if (!t.JOBTYPE) return;
 
@@ -497,7 +467,7 @@ function startGPSTracking(driverId) {
           `📡 GPS locked (±${Math.round(pos.coords.accuracy)}m)`;
       }
 
-      update(ref(db, `${DRIVER_STATUS_PATH}/${driverId}`), {
+      update(ref(db, `driverStatus/${driverId}`), {
         latitude: pos.coords.latitude,
         longitude: pos.coords.longitude,
         accuracy: pos.coords.accuracy || null,
@@ -527,6 +497,9 @@ window.addEventListener("online", updateNetwork);
 window.addEventListener("offline", updateNetwork);
 updateNetwork();
 
+/* ===== QUEUE ===== */
+const getQueue = () => JSON.parse(localStorage.getItem(QUEUE_KEY) || "[]");
+const setQueue = q => localStorage.setItem(QUEUE_KEY, JSON.stringify(q));
 
 /* ===== IMAGE ===== */
 function compressImage(file) {
@@ -552,15 +525,181 @@ const toBase64 = b => new Promise(r => {
   f.readAsDataURL(b);
 });
 
-function cleanupAfterFail() {
-  delete processingMap[CURRENT_TASK];
-  CURRENT_TASK = null;
-  updateRefreshLock();
+  let CURRENT_TASK = null;
+let CURRENT_PHOTO_INDEX = null;
+
+window.startPhoto = function(index, taskKey) {
+  if (!validateDynamic(taskKey)) return;
+
+  CURRENT_TASK = taskKey;
+  CURRENT_PHOTO_INDEX = index;
+
+  cameraInput.value = "";
+  cameraInput.click();
+};
+
+cameraInput.onchange = async e => {
+  const file = e.target.files?.[0];
+  if (!file || !CURRENT_TASK || !CURRENT_PHOTO_INDEX) return;
+
+  if (!PHOTO_BUFFER[CURRENT_TASK]) PHOTO_BUFFER[CURRENT_TASK] = {};
+
+  let blob;
+  try {
+    blob = await compressImage(file);
+  } catch {
+    alert("Image processing failed");
+    return;
+  }
+
+  const gps = LAST_KNOWN_GPS;
+  if (!gps || !gps.latitude) {
+    alert("📍 Waiting for GPS signal...");
+    return;
+  }
+
+  const previewURL = URL.createObjectURL(blob);
+
+  PHOTO_BUFFER[CURRENT_TASK][CURRENT_PHOTO_INDEX] = {
+    blob,
+    previewURL,
+    takenAt: new Date().toISOString(),
+    gps,
+    deliveryData: BILLING_CACHE[CURRENT_TASK] || {}
+  };
+
+  // 🔒 Lock UI to this task after first photo
+  if (CURRENT_PHOTO_INDEX === 1) {
+    ACTIVE_CAPTURE_TASK = CURRENT_TASK;
+  }
+
+  CURRENT_PHOTO_INDEX = null;
+  CURRENT_TASK = null;   // 🔥 REQUIRED FIX
+  
+  // ✅ reset AFTER capture finishes
+  setTimeout(() => {
+    cameraInput.value = "";
+  }, 150);
+  
+  // ✅ render only UI, do not reload DB
   loadTasks();
-}
+};
+  window.submitTask = async function(taskKey) {
+
+  if (submitLock[taskKey]) return;
+  submitLock[taskKey] = true;
+
+  const btn = document.querySelector(
+    `button[onclick="submitTask('${taskKey}')"]`
+  );
+
+  if (btn) {
+    btn.disabled = true;
+    btn.innerText = "⏳ Uploading...";
+  }
+
+  const photos = PHOTO_BUFFER[taskKey];
+
+  if (!photos || !photos[1] || !photos[2] || !photos[3]) {
+    alert("Please take all 3 photos.");
+    submitLock[taskKey] = false;
+    return;
+  }
+
+  // ==============================
+  // ✅ OFFLINE MODE HANDLING
+  // ==============================
+  if (!navigator.onLine) {
+
+    let cachedTasks =
+      JSON.parse(localStorage.getItem(TASK_CACHE_KEY) || "[]");
+
+    // 🔒 HARD REMOVE ANY OLD COPIES
+    cachedTasks = cachedTasks.filter(t => t._key !== taskKey);
+
+    cachedTasks.push({
+      _key: taskKey,
+      status: "OFFLINE_PENDING",
+      finalized: false
+    });
+
+    processingMap[taskKey] = true;
+
+    localStorage.setItem(
+      TASK_CACHE_KEY,
+      JSON.stringify(cachedTasks)
+    );
+
+    // 🔁 STORE QUEUE
+    let q = getQueue().filter(
+      x => x.taskKey !== taskKey
+    );
+
+    for (let i = 1; i <= 3; i++) {
+      const p = photos[i];
+
+      q.push({
+        taskKey,
+        photoIndex: i,
+        image: p.previewURL,
+        takenAt: p.takenAt,
+        deliveryData: p.deliveryData,
+        gps: p.gps
+      });
+    }
+
+    setQueue(q);
+
+    delete PHOTO_BUFFER[taskKey];
+    ACTIVE_CAPTURE_TASK = null;
+
+    loadTasks();
+    submitLock[taskKey] = false;
+    if (btn) {
+      btn.disabled = false;
+      btn.innerText = "✅ Submit Task";
+    }
+    return;
+  }
+
+  // ==============================
+  // ✅ ONLINE MODE (CURRENT FLOW)
+  // ==============================
+
+  processingMap[taskKey] = true;
+  loadTasks();
+
+  try {
+    for (let i = 1; i <= 3; i++) {
+      const p = photos[i];
+
+      await uploadNow(
+        taskKey,
+        p.blob,
+        p.takenAt,
+        null,
+        p.deliveryData,
+        p.gps,
+        i
+      );
+    }
+
+    delete PHOTO_BUFFER[taskKey];
+    delete processingMap[taskKey];
+    ACTIVE_CAPTURE_TASK = null;
+
+    loadTasks();
+
+  } catch (e) {
+    console.error(e);
+    alert("❌ Upload failed.");
+  }
+
+  delete submitLock[taskKey];
+};
+
 
 /* ===== CAMERA ===== */
-window.CURRENT_TASK = null;
 
 function saveToGallery(blob, filename) {
   const url = URL.createObjectURL(blob);
@@ -578,147 +717,8 @@ function saveToGallery(blob, filename) {
 
 window.CURRENT_TASK = null;
 
-cameraInput.onchange = async e => {
-  if (!e.target.files[0] || !CURRENT_TASK) return;
-  if (processingMap[CURRENT_TASK] || uploadingMap[CURRENT_TASK]) return;
 
-  // continue processing...
-
-  // ===== START PROCESSING =====
-  processingMap[CURRENT_TASK] = true;
-  loadTasks();
-
-  updateRefreshLock();
-
-  const takenAt = new Date().toISOString();
-
-  let blob;
-  try {
-    blob = await compressImage(e.target.files[0]);
-    
-  } catch {
-    alert("Image processing failed");
-    delete processingMap[CURRENT_TASK];
-    CURRENT_TASK = null;
-    loadTasks();
-    return;
-  }
-
- const photoGPS = LAST_KNOWN_GPS;
-
-// 1️⃣ GPS must exist
-if (!photoGPS || !photoGPS.latitude) {
-  alert("📍 Waiting for GPS lock. Please stay still for a moment.");
-  cleanupAfterFail();
-  return;
-}
-
-// 2️⃣ GPS must be fresh (≤ 60 seconds)
-if (Date.now() - photoGPS.timestamp > 60000) {
-  alert("📍 GPS signal is outdated. Waiting for refresh…");
-  cleanupAfterFail();
-  return;
-}
-
-// 3️⃣ (OPTIONAL BUT STRONGLY RECOMMENDED)
-// Accuracy must be reasonable
-if (photoGPS.accuracy && photoGPS.accuracy > 50) {
-  alert("📍 GPS accuracy too low. Please wait for a better lock.");
-  cleanupAfterFail();
-  return;
-}
-
-  // ✅ INIT PHOTO COUNT
-  if (!PHOTO_PROGRESS[CURRENT_TASK]) {
-    PHOTO_PROGRESS[CURRENT_TASK] = 0;
-  }
   
-  // ✅ INCREMENT
-  PHOTO_PROGRESS[CURRENT_TASK]++;
-  const photoIndex = PHOTO_PROGRESS[CURRENT_TASK];
-  
-  // 🚫 BLOCK EXTRA PHOTOS
-  if (photoIndex > REQUIRED_PHOTOS) {
-    alert("📸 All required photos already captured");
-    PHOTO_PROGRESS[CURRENT_TASK] = REQUIRED_PHOTOS;
-    delete processingMap[CURRENT_TASK];
-    CURRENT_TASK = null;
-    loadTasks();
-    return;
-  }
-    
-  /* ================= OFFLINE ================= */
-  if (!navigator.onLine) {
-  
-    const tempFilename =
-      `TEMP_${CURRENT_TASK}_${photoIndex}_${Date.now()}.jpg`;
-    saveToGallery(blob, tempFilename);
-
-    
-    await addToQueue({
-      taskKey: CURRENT_TASK,
-      image: await toBase64(blob),
-      takenAt,
-      photoIndex,
-      gps: photoGPS,
-      deliveryData: BILLING_CACHE[CURRENT_TASK] || {}
-    });
-
-    await refreshQueueCount();
-    updateRefreshLock();
-  
-    // 🔒 UPDATE LOCAL TASK CACHE
-    const cachedTasks =
-      JSON.parse(localStorage.getItem(TASK_CACHE_KEY) || "[]");
-  
-    const idx = cachedTasks.findIndex(t => t._key === CURRENT_TASK);
-    if (idx !== -1) {
-      PHOTO_PROGRESS[CURRENT_TASK] = photoIndex;
-  
-      // ✅ COMPLETE ONLY AFTER 3 PHOTOS
-      if (photoIndex >= REQUIRED_PHOTOS) {
-        cachedTasks[idx].status = "OFFLINE_PENDING";
-        cachedTasks[idx].finalized = true;
-      }
-    }
-  
-    localStorage.setItem(
-      TASK_CACHE_KEY,
-      JSON.stringify(cachedTasks)
-    );
-  
-    delete processingMap[CURRENT_TASK];
-    CURRENT_TASK = null;
-    loadTasks();
-    return;
-  }
-
-  /* ================= ONLINE ================= */
-  uploadingMap[CURRENT_TASK] = true;
-  delete processingMap[CURRENT_TASK];
-  loadTasks();
-  updateRefreshLock();
-
-  try {
-    // 🔥 DO NOT PASS FILENAME ANYMORE
-    await uploadNow(
-      CURRENT_TASK,
-      blob,
-      takenAt,
-      photoIndex, // ✅ PASS THE PHOTO NUMBER
-      BILLING_CACHE[CURRENT_TASK] || {},
-      photoGPS
-    );
-  } catch {
-    alert("Upload failed. Please retry.");
-  }
-
-  PHOTO_PROGRESS[CURRENT_TASK] = photoIndex;
-  delete uploadingMap[CURRENT_TASK];
-  CURRENT_TASK = null;
-  loadTasks();
-};
-
 function updateRefreshLock() {
   if (isBusy()) {
     disablePullToRefresh();
@@ -729,8 +729,16 @@ function updateRefreshLock() {
   
   
 function resolveStatus(task) {
-  // ✅ HARD STOP: COMPLETED ALWAYS MEANS COMPLETED
   if (task.status === "COMPLETED") return "COMPLETED";
+
+  const p = PHOTO_BUFFER[task._key];
+
+  if (p) {
+    const count = Object.keys(p).length;
+
+    if (count < REQUIRED_PHOTOS) return "CAPTURING";
+    if (count === REQUIRED_PHOTOS) return "READY";
+  }
 
   if (processingMap[task._key]) return "PROCESSING";
   if (uploadingMap[task._key]) return "UPLOADING";
@@ -739,40 +747,16 @@ function resolveStatus(task) {
   return task.status || "PENDING";
 }
 
-async function addToQueue(item) {
-  const db = await openDB();
-  const tx = db.transaction(STORE_NAME, "readwrite");
-  tx.objectStore(STORE_NAME).add(item);
-  return new Promise((resolve, reject) => {
-    tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error);
-  });
-}
-
-async function getQueue() {
-  const db = await openDB();
-  const tx = db.transaction(STORE_NAME, "readonly");
-  return tx.objectStore(STORE_NAME).getAll();
-}
-
-async function clearQueue() {
-  const db = await openDB();
-  const tx = db.transaction(STORE_NAME, "readwrite");
-  tx.objectStore(STORE_NAME).clear();
-  return new Promise((resolve, reject) => {
-    tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error);
-  });
-}
 async function uploadNow(
   taskKey,
   blob,
   takenAt,
-  photoIndex, // ✅ RECEIVE PHOTO NUMBER
+  _ignoredFilename,
   deliveryData = {},
-  photoGPS
+  photoGPS,
+  photoIndex
 ) {
-  const taskSnap = await get(ref(db, `${TASKS_PATH}/${taskKey}`));
+  const taskSnap = await get(ref(db, `tasks/${taskKey}`));
   const task = taskSnap.val() || {};
 
   if (!photoGPS || !photoGPS.latitude) {
@@ -787,6 +771,7 @@ async function uploadNow(
 
   const filename =
   `${safe(task.CUSTOMERNAME)}_${safe(task.ADDRESS)}_` +
+  `P${photoIndex}_` +
   `${photoGPS.longitude}_${photoGPS.latitude}_` +
   `${task.driverId}_${new Date().toISOString()
     .replace(/[-:T.Z]/g, "")
@@ -796,42 +781,22 @@ async function uploadNow(
   saveToGallery(blob, filename);
 
   // ===== UPLOAD =====
-  const imgRef = sRef(
-    storage,
-    `${DB_MODE === "TEST" ? "tasks_test" : "tasks"}/${taskKey}/${filename}`
-  );
+  const imgRef = sRef(storage, `tasks/${taskKey}/${filename}`);
   await uploadBytes(imgRef, blob);
   const url = await getDownloadURL(imgRef);
 
   // ===== FLATTEN DATA =====
   const updatePayload = {
-  [`IMAGE_FILENAME_${photoIndex}`]: filename,
-  [`IMAGE_URL_${photoIndex}`]: url,
-  [`IMAGE_LATITUDE_${photoIndex}`]: photoGPS.latitude,
-  [`IMAGE_LONGITUDE_${photoIndex}`]: photoGPS.longitude,
-  [`IMAGE_GPSACCURACY_${photoIndex}`]: photoGPS.accuracy || null,
-  [`IMAGE_TAKEN_AT_${photoIndex}`]: takenAt,
-
-  uploadedAt: new Date().toISOString(),
-  DELIVERY_TYPE: deliveryData.deliveryType || ""
-};
-
-  // ✅ INCREMENT PHOTO COUNT
-  const newCount = Math.max(task.photoCount || 0, photoIndex);
-  updatePayload.photoCount = newCount;
-  
-  // ✅ COMPLETE ONLY AFTER 3 PHOTOS
-  if (newCount >= REQUIRED_PHOTOS) {
-    updatePayload.status = "COMPLETED";
-    updatePayload.COMPLETED_AT = new Date().toISOString();
-  } else {
-    updatePayload.status = "PENDING";
-  }
+    ...(photoIndex === REQUIRED_PHOTOS ? { status: "COMPLETED" } : {}),
+    [`photo${photoIndex}Url`]: url,
+    [`photo${photoIndex}Filename`]: filename,
+    [`photo${photoIndex}TakenAt`]: takenAt,
+    uploadedAt: new Date().toISOString(),
+    deliveryType: deliveryData.deliveryType || ""
+  };
 
   for (const [k, v] of Object.entries(deliveryData)) {
-    if (k !== "deliveryType" && k !== "DELIVERY_TYPE") {
-      updatePayload[k] = v;
-    }
+    if (k !== "deliveryType") updatePayload[k] = v;
   }
 
   if (photoGPS && photoGPS.latitude) {
@@ -840,7 +805,7 @@ async function uploadNow(
     updatePayload.gpsAccuracy = photoGPS.accuracy || null;
   }
 
-  await update(ref(db, `${TASKS_PATH}/${taskKey}`), updatePayload);
+  await update(ref(db, `tasks/${taskKey}`), updatePayload);
 
 
 /* ================= FIX #3 START ================= */
@@ -851,12 +816,8 @@ const cachedTasks =
 
 const idx = cachedTasks.findIndex(t => t._key === taskKey);
 if (idx !== -1) {
-  if (newCount >= REQUIRED_PHOTOS) {
-    cachedTasks[idx].status = "COMPLETED";
-    cachedTasks[idx].finalized = true;
-  } else {
-    cachedTasks[idx].status = "PENDING";
-  }
+  cachedTasks[idx].status = "COMPLETED";
+  cachedTasks[idx].finalized = true;
 }
 
 localStorage.setItem(
@@ -880,15 +841,15 @@ async function preloadDriverUIConfig(tasks) {
 /* ===== LOAD TASKS ===== */
 async function loadTasks() {
   try {
-    let tasks = JSON.parse(localStorage.getItem(TASK_CACHE_KEY) || "[]");
+    let tasks = dedupeTasks(
+      JSON.parse(localStorage.getItem(TASK_CACHE_KEY) || "[]")
+    );
 
+    localStorage.setItem(TASK_CACHE_KEY, JSON.stringify(tasks));
+        
     if (navigator.onLine) {
       const snap = await get(
-        query(
-          ref(db, TASKS_PATH),
-          orderByChild("driverId"),
-          equalTo(DRIVER_ID)
-        )
+        query(ref(db, "tasks"), orderByChild("driverId"), equalTo(DRIVER_ID))
       );
     
       const raw = snap.val() || {};
@@ -921,13 +882,6 @@ async function loadTasks() {
     
       tasks = merged;
       localStorage.setItem(TASK_CACHE_KEY, JSON.stringify(tasks));
-
-      // ✅ Initialize photo progress per task
-      tasks.forEach(t => {
-        if (!PHOTO_PROGRESS[t._key]) {
-          PHOTO_PROGRESS[t._key] = t.photoCount || 0;
-        }
-      });
     }
 
     await preloadDriverUIConfig(tasks);
@@ -958,7 +912,10 @@ async function loadTasks() {
     updateRemainingCounter(tasks);
     renderJobTypeFilters(tasks);
     const selectedDate = dateFilter.value; // YYYY-MM-DD
-
+// 🔒 HIDE OTHER TASKS WHILE CAPTURING
+if (ACTIVE_CAPTURE_TASK) {
+  tasks = tasks.filter(t => t._key === ACTIVE_CAPTURE_TASK);
+}
 const filtered = tasks
   .filter(t => {
     const status = resolveStatus(t);
@@ -967,9 +924,10 @@ const filtered = tasks
     if (status === "COMPLETED") return false;
 
     // ❌ Must match selected date
-    if (!t.createdAt || !t.createdAt.startsWith(selectedDate)) {
-      return false;
-    }
+    const taskDate = normalizeDatePH(t.createdAt);
+      if (!taskDate || taskDate !== selectedDate) {
+        return false;
+      }
 
     // ❌ Job type filter
     if (
@@ -1015,9 +973,10 @@ function updateRemainingCounter(tasks) {
     if (status !== "PENDING") return false;
 
     // ✅ must match selected date
-    if (!t.createdAt || !t.createdAt.startsWith(selectedDate)) {
-      return false;
-    }
+    const taskDate = normalizeDatePH(t.createdAt);
+      if (!taskDate || taskDate !== selectedDate) {
+        return false;
+      }
 
     return true;
   }).length;
@@ -1032,19 +991,38 @@ async function render(tasks) {
   taskList.innerHTML = "";
 
   for (const t of tasks) {
+    const p = PHOTO_BUFFER[t._key] || {};
     if (!BILLING_CACHE[t._key]) {
       BILLING_CACHE[t._key] = {};
     }
+    
     const status = resolveStatus(t);
 
     const div = document.createElement("div");
     div.className = `task ${status === "COMPLETED" ? "completed" : ""}`;
 
+    const hasGPS =
+  t.LATITUDE &&
+  t.LONGITUDE &&
+  !isNaN(parseFloat(t.LATITUDE)) &&
+  !isNaN(parseFloat(t.LONGITUDE));
+
+const mapURL = hasGPS
+  ? `https://www.google.com/maps?q=${t.LATITUDE},${t.LONGITUDE}`
+  : null;
+
+const addressHTML = hasGPS
+  ? `<a href="${mapURL}" target="_blank"
+        style="color:#007bff;text-decoration:underline;font-weight:bold;">
+        📍 ${t.ADDRESS || "—"}
+     </a>`
+  : `<div>📍 ${t.ADDRESS || "—"}</div>`;
+
     let html = `
       <b>${t.CUSTOMERNAME || "—"}</b>
-
-      <div class="small">📍 ${t.ADDRESS || "—"}</div>
-
+    
+      <div class="small">${addressHTML}</div>
+    
       <div class="small"><b>Account #:</b> ${t.ACCOUNTNUMBER || "—"}</div>
       <div class="small"><b>MRU:</b> ${t.MRU || "—"}</div>
       <div class="small"><b>Meter #:</b> ${t.METERNUMBER || "—"}</div>
@@ -1055,24 +1033,119 @@ async function render(tasks) {
     `;
 
     /* ===== PENDING (EDITABLE ONLINE + OFFLINE) ===== */
-    if (status === "PENDING" && !t.finalized) {
-      html += await renderDynamicDelivery(t);
-      html += `
-        <label
-          class="capture capture-label"
-          onclick="return beforeCamera('${t._key}', event)"
-        >
-          📸 Take Picture
-          <input
-            type="file"
-            accept="image/*"
-            capture="environment"
-            onchange="afterCamera('${t._key}', event)"
-            hidden
+    if ((status === "PENDING" || status === "CAPTURING" || status === "READY") && !t.finalized) {
+      const p = PHOTO_BUFFER[t._key] || {};
+      const count = Object.keys(p).length;
+    
+      if (count > 0 && count < REQUIRED_PHOTOS) {
+        html += `
+          <div class="uploading">
+            📸 Photos: ${count} / ${REQUIRED_PHOTOS} — continue taking photos
+          </div>
+        `;
+      }
+    
+      if (count === REQUIRED_PHOTOS) {
+        html += `
+          <div class="uploading" style="color:green;">
+            ✅ All photos taken — press SUBMIT
+          </div>
+        `;
+      }
+    
+      // 🔒 Hide delivery options after Photo 1 is taken
+      if (ACTIVE_CAPTURE_TASK !== t._key) {
+        html += await renderDynamicDelivery(t);
+      }
+    
+      /* ===== PREVIEW THUMBNAILS (MOVE ABOVE BUTTONS) ===== */
+      const previews = [1,2,3].map(i => {
+        if (!p[i]?.previewURL) return "";
+        return `
+          <img src="${p[i].previewURL}"
+            onclick="window.open('${p[i].previewURL}','_blank')"
+            style="
+              width:100%;
+              max-width:100px;
+              height:80px;
+              object-fit:cover;
+              border-radius:6px;
+              border:2px solid #28a745;
+              cursor:pointer;
+            "
           />
-        </label>
+        `;
+      }).join("");
+    
+      if (previews) {
+        html += `
+          <div style="
+            display:grid;
+            grid-template-columns:repeat(3,1fr);
+            gap:6px;
+            margin-top:8px;
+          ">
+            ${previews}
+          </div>
+        `;
+      }
+    
+      /* ===== PHOTO BUTTONS ===== */
+
+      const disable1 = !!p[1];
+      const disable2 = !p[1] || !!p[2];
+      const disable3 = !p[2] || !!p[3];
+      const disableSubmit = !p[1] || !p[2] || !p[3];
+      
+      html += `
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-top:8px;">
+          <button
+            ${disable1 ? "disabled" : ""}
+            onclick="startPhoto(1,'${t._key}')"
+            style="
+              background:${p[1] ? '#28a745' : '#007bff'};
+              color:white;
+              opacity:${disable1 ? 0.5 : 1};
+            ">
+            📸 Photo 1
+          </button>
+      
+          <button
+            ${disable2 ? "disabled" : ""}
+            onclick="startPhoto(2,'${t._key}')"
+            style="
+              background:${p[2] ? '#28a745' : '#007bff'};
+              color:white;
+              opacity:${disable2 ? 0.5 : 1};
+            ">
+            📸 Photo 2
+          </button>
+      
+          <button
+            ${disable3 ? "disabled" : ""}
+            onclick="startPhoto(3,'${t._key}')"
+            style="
+              background:${p[3] ? '#28a745' : '#007bff'};
+              color:white;
+              opacity:${disable3 ? 0.5 : 1};
+            ">
+            📸 Photo 3
+          </button>
+        </div>
+      
+        <button
+          ${disableSubmit ? "disabled" : ""}
+          onclick="submitTask('${t._key}')"
+          style="
+            background:#2c3e50;
+            color:white;
+            opacity:${disableSubmit ? 0.5 : 1};
+          ">
+          ✅ Submit Task
+        </button>
       `;
     }
+    
     
     /* ===== PROCESSING ===== */
     if (status === "PROCESSING") {
@@ -1104,11 +1177,7 @@ async function render(tasks) {
           👁 Show / Hide Photo
         </button>
 
-        ${[1,2,3].map(i =>
-          t[`IMAGE_URL_${i}`]
-            ? `<img src="${t[`IMAGE_URL_${i}`]}" style="display:none">`
-            : ""
-        ).join("")}
+        <img src="${t.imageUrl}" style="display:none">
       `;
     }
 
@@ -1117,26 +1186,33 @@ async function render(tasks) {
   }
 }
 
-// ✅ RUNS BEFORE CAMERA OPENS
-window.beforeCamera = function (taskKey, e) {
-  if (!validateDynamic(taskKey)) {
-    e.preventDefault(); // 🚫 STOP camera
-    e.stopPropagation();
-    return false;
+function renderCachedOnly() {
+  const tasks =
+    JSON.parse(localStorage.getItem(TASK_CACHE_KEY) || "[]");
+
+  if (ACTIVE_CAPTURE_TASK) {
+    tasks = tasks.filter(t => t._key === ACTIVE_CAPTURE_TASK);
   }
-  return true; // ✅ ALLOW camera
-};
+  
+  const selectedDate = dateFilter.value;
 
-// ✅ RUNS AFTER PHOTO IS TAKEN
-window.afterCamera = function (taskKey, e) {
-  if (!e.target.files || !e.target.files[0]) return;
+  const filtered = tasks.filter(t => {
+    const status = resolveStatus(t);
+    if (status === "COMPLETED") return false;
 
-  window.CURRENT_TASK = taskKey;
+    const taskDate = normalizeDatePH(t.createdAt);
+    if (!taskDate || taskDate !== selectedDate) return false;
 
-  // forward to existing pipeline
-  cameraInput.files = e.target.files;
-  cameraInput.onchange({ target: e.target });
-};
+    if (
+      selectedJobTypes.size > 0 &&
+      !selectedJobTypes.has(t.JOBTYPE)
+    ) return false;
+
+    return true;
+  });
+
+  render(filtered);
+}
   
 async function renderDynamicDelivery(t) {
   const methods = await loadDriverUI(t.JOBTYPE);
@@ -1154,20 +1230,6 @@ async function renderDynamicDelivery(t) {
   html += `</div><div id="dyn_${t._key}"></div>`;
   return html;
 }
-
-window.handleCamera = function (taskKey, e) {
-  // 🔒 VALIDATE FIRST — STILL BEFORE CAMERA
-  if (!validateDynamic(taskKey)) {
-    e.target.value = "";
-    return;
-  }
-
-  window.CURRENT_TASK = taskKey;
-
-  // 🔥 Manually forward to existing handler
-  cameraInput.files = e.target.files;
-  cameraInput.onchange({ target: e.target });
-};
 
 window.showDynamicFields = async function (taskKey, jobType, method) {
   if (!BILLING_CACHE[taskKey]) BILLING_CACHE[taskKey] = {};
@@ -1231,6 +1293,34 @@ function getCurrentLocation() {
     );
   });
 }
+
+function dedupeTasks(tasks) {
+  const map = new Map();
+
+  const rank = {
+    PENDING: 1,
+    OFFLINE_PENDING: 2,
+    PROCESSING: 3,
+    UPLOADING: 4,
+    COMPLETED: 5
+  };
+
+  for (const t of tasks) {
+    if (!t || !t._key) continue;
+
+    const prev = map.get(t._key);
+    if (!prev) {
+      map.set(t._key, t);
+    } else {
+      const r1 = rank[prev.status] || 0;
+      const r2 = rank[t.status] || 0;
+
+      if (r2 >= r1) map.set(t._key, t);
+    }
+  }
+
+  return [...map.values()];
+}
   
 function validateDynamic(taskKey) {
   // Sync inputs → cache
@@ -1280,7 +1370,21 @@ function validateDynamic(taskKey) {
 loadTasks();
 
 async function processOfflineQueue() {
-  const q = await getQueue();
+
+  const unique = {};
+  const cleanQueue = [];
+
+  for (const item of getQueue()) {
+    const key = item.taskKey + "_" + item.photoIndex;
+    if (!unique[key]) {
+      unique[key] = true;
+      cleanQueue.push(item);
+    }
+  }
+
+  setQueue(cleanQueue);
+
+  const q = getQueue();
   if (!q.length) return;
 
   console.log("🔁 Processing offline queue:", q.length);
@@ -1288,36 +1392,38 @@ async function processOfflineQueue() {
   for (const item of q) {
     try {
       const blob = await fetch(item.image).then(r => r.blob());
-  
+
       uploadingMap[item.taskKey] = true;
       loadTasks();
-  
+
       await uploadNow(
         item.taskKey,
         blob,
         item.takenAt,
-        item.photoIndex,
+        null,
         item.deliveryData || {},
-        item.gps
+        item.gps,
+        item.photoIndex
       );
-  
-      // ✅ REMOVE THIS ITEM ONLY
-      const db = await openDB();
-      const tx = db.transaction(STORE_NAME, "readwrite");
-      tx.objectStore(STORE_NAME).delete(item.id);
-      await new Promise(r => tx.oncomplete = r);
-  
+
+      let q2 = getQueue();
+      q2 = q2.filter(q =>
+        !(q.taskKey === item.taskKey && q.photoIndex === item.photoIndex)
+      );
+      setQueue(q2);
+
       delete uploadingMap[item.taskKey];
       delete processingMap[item.taskKey];
-  
-      await refreshQueueCount();
-      updateRefreshLock();
+
       loadTasks();
+
     } catch (e) {
       console.error("❌ Offline upload failed", e);
-      return; // STOP safely
+      return;
     }
   }
+
+  setQueue([]);
 }
 
 window.addEventListener("online", async () => {
@@ -1365,6 +1471,8 @@ function isStandalone() {
   return window.matchMedia("(display-mode: standalone)").matches ||
          window.navigator.standalone === true;
 }
+
+
 
 window.addEventListener("beforeinstallprompt", e => {
   // already installed → do nothing
