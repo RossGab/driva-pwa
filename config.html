@@ -75,7 +75,12 @@ button {
   <label>Job Type</label>
   <input id="jobTypeInput" placeholder="e.g. BOV">
 
-  <label>Delivery Method</label>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px;">
+    <button class="secondary" onclick="loadConfigForEdit()">✏️ Load / Edit Config</button>
+    <button class="secondary" onclick="resetBuilder()">🧹 New Config</button>
+  </div>
+
+  <label style="margin-top:10px">Delivery Method</label>
   <input id="deliveryMethodInput" placeholder="e.g. N1-Received">
 
   <button class="secondary" onclick="addDeliveryMethod()">➕ Add Delivery Method</button>
@@ -92,7 +97,7 @@ button {
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import { getDatabase, ref, update } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+import { getDatabase, ref, update, get } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
 const app = initializeApp({
   apiKey: "AIzaSyDFW61pnwLvh6HGKWt10zLYNr860fI8vkg",
@@ -103,6 +108,38 @@ const db = getDatabase(app);
 const STATE = {
   jobType: "",
   methods: {}
+};
+
+window.loadConfigForEdit = async function () {
+  const jobType = jobTypeInput.value.trim();
+  if (!jobType) return alert("Enter Job Type to edit");
+
+  const snap = await get(
+    ref(db, `config/driverUI/jobTypes/${jobType}/deliveryMethods`)
+  );
+
+  if (!snap.exists()) {
+    alert("❌ No configuration found for " + jobType);
+    return;
+  }
+
+  STATE.jobType = jobType;
+  STATE.methods = snap.val() || {};
+
+  renderMethods();
+  alert("✏️ Loaded configuration for editing");
+};
+
+window.resetBuilder = function () {
+  if (!confirm("Clear current configuration?")) return;
+
+  STATE.jobType = "";
+  STATE.methods = {};
+
+  jobTypeInput.value = "";
+  deliveryMethodInput.value = "";
+
+  renderMethods();
 };
 
 window.addDeliveryMethod = function () {
