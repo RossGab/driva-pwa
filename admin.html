@@ -269,7 +269,7 @@ button {
 <div class="admin-header" style="justify-content:space-between;">
   <div style="display:flex;align-items:center;gap:14px;">
     <img src="./logo.jpg" class="admin-logo" alt="Company Logo">
-    <h1>Admin Dashboard <span class="version">V2.4.16.4</span></h1>
+    <h1>Admin Dashboard <span class="version">V2.4.16.5</span></h1>
   </div>
 
   <!-- 📅 DATE FILTER -->
@@ -750,9 +750,11 @@ function renderDynamicCompletedFields(t) {
       <b>DELIVERY DETAILS</b>
   `;
 
-  // ✅ 1. Render DIRECT fields (text / textarea only)
+  /* ===============================
+     1. Render NORMAL text fields
+     =============================== */
   for (const [key, field] of Object.entries(cfg)) {
-    if (field.fields) continue; // skip radio option groups
+    if (field.type === "radio") continue;
 
     const value = t[key] || "";
 
@@ -769,28 +771,36 @@ function renderDynamicCompletedFields(t) {
     }
   }
 
-  // ✅ 2. Render RADIO RESULT + ITS CHILD FIELDS
-  const selected = t.result;
+  /* ===============================
+     2. Render RADIO + children
+     =============================== */
+  const radioField = Object.values(cfg).find(f => f.type === "radio");
 
-  if (selected && cfg[selected] && cfg[selected].fields) {
-    html += `
-      <label class="full">Result</label>
-      <input class="full" value="${cfg[selected].label || selected}" disabled>
-    `;
+  if (radioField) {
+    const selected = t.result;
 
-    for (const [childKey, child] of Object.entries(cfg[selected].fields)) {
-      const value = t[childKey] || "";
+    if (selected && radioField.fields?.[selected]) {
+      const option = radioField.fields[selected];
 
-      if (child.type === "textarea") {
-        html += `
-          <label class="full">${child.label}</label>
-          <textarea class="full" disabled>${value}</textarea>
-        `;
-      } else {
-        html += `
-          <label class="full">${child.label}</label>
-          <input class="full" value="${value}" disabled>
-        `;
+      html += `
+        <label class="full">${radioField.label}</label>
+        <input class="full" value="${option.label || selected}" disabled>
+      `;
+
+      for (const [childKey, child] of Object.entries(option.fields || {})) {
+        const value = t[childKey] || "";
+
+        if (child.type === "textarea") {
+          html += `
+            <label class="full">${child.label}</label>
+            <textarea class="full" disabled>${value}</textarea>
+          `;
+        } else {
+          html += `
+            <label class="full">${child.label}</label>
+            <input class="full" value="${value}" disabled>
+          `;
+        }
       }
     }
   }
