@@ -269,7 +269,7 @@ button {
 <div class="admin-header" style="justify-content:space-between;">
   <div style="display:flex;align-items:center;gap:14px;">
     <img src="./logo.jpg" class="admin-logo" alt="Company Logo">
-    <h1>Admin Dashboard <span class="version">V2.4.16.1</span></h1>
+    <h1>Admin Dashboard <span class="version">V2.4.16.2</span></h1>
   </div>
 
   <!-- 📅 DATE FILTER -->
@@ -751,7 +751,7 @@ function renderDynamicCompletedFields(t) {
   `;
 
   // ============================
-  // DIRECT FIELDS
+  // 1️⃣ DIRECT FIELDS
   // ============================
   for (const [key, field] of Object.entries(cfg)) {
     if (field.type === "radio") continue;
@@ -772,13 +772,13 @@ function renderDynamicCompletedFields(t) {
   }
 
   // ============================
-  // RADIO RESULT
+  // 2️⃣ RADIO RESULT
   // ============================
-  const radioFields = Object.entries(cfg)
-    .filter(([_, v]) => v.type === "radio");
+  const radioEntry = Object.entries(cfg)
+    .find(([_, v]) => v.type === "radio");
 
-  if (radioFields.length) {
-    const [radioKey, radioCfg] = radioFields[0];
+  if (radioEntry) {
+    const [radioKey, radioCfg] = radioEntry;
     const selected = t.result;
 
     if (selected && radioCfg.fields?.[selected]) {
@@ -790,7 +790,7 @@ function renderDynamicCompletedFields(t) {
       `;
 
       // ============================
-      // RADIO CHILD FIELDS
+      // 3️⃣ RADIO CHILD FIELDS
       // ============================
       for (const [ck, cf] of Object.entries(selectedCfg.fields || {})) {
         const val = t[ck] || "";
