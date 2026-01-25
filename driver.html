@@ -160,14 +160,13 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebas
 import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.5.1-DYNAMIC";
+const VERSION = "Driver v3.4.89.14.3-DYNAMIC";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
 const selectedJobTypes = new Set();
 const PHOTO_BUFFER = {};
 const REQUIRED_PHOTOS = 3;
-const submitLock = {};
 let ACTIVE_CAPTURE_TASK = null;
 let jobTypeFilterInitialized = false;
 let LAST_KNOWN_GPS = null;
@@ -584,87 +583,14 @@ cameraInput.onchange = async e => {
   // ✅ render only UI, do not reload DB
   loadTasks();
 };
-  window.submitTask = async function(taskKey) {
-
-  if (submitLock[taskKey]) return;
-  submitLock[taskKey] = true;
-
-  const btn = document.querySelector(
-    `button[onclick="submitTask('${taskKey}')"]`
-  );
-
-  if (btn) {
-    btn.disabled = true;
-    btn.innerText = "⏳ Uploading...";
-  }
-
+  
+window.submitTask = async function(taskKey) {
   const photos = PHOTO_BUFFER[taskKey];
 
   if (!photos || !photos[1] || !photos[2] || !photos[3]) {
     alert("Please take all 3 photos.");
-    submitLock[taskKey] = false;
     return;
   }
-
-  // ==============================
-  // ✅ OFFLINE MODE HANDLING
-  // ==============================
-  if (!navigator.onLine) {
-
-    let cachedTasks =
-      JSON.parse(localStorage.getItem(TASK_CACHE_KEY) || "[]");
-
-    // 🔒 HARD REMOVE ANY OLD COPIES
-    cachedTasks = cachedTasks.filter(t => t._key !== taskKey);
-
-    cachedTasks.push({
-      _key: taskKey,
-      status: "OFFLINE_PENDING",
-      finalized: false
-    });
-
-    processingMap[taskKey] = true;
-
-    localStorage.setItem(
-      TASK_CACHE_KEY,
-      JSON.stringify(cachedTasks)
-    );
-
-    // 🔁 STORE QUEUE
-    let q = getQueue().filter(
-      x => x.taskKey !== taskKey
-    );
-
-    for (let i = 1; i <= 3; i++) {
-      const p = photos[i];
-
-      q.push({
-        taskKey,
-        photoIndex: i,
-        image: p.previewURL,
-        takenAt: p.takenAt,
-        deliveryData: p.deliveryData,
-        gps: p.gps
-      });
-    }
-
-    setQueue(q);
-
-    delete PHOTO_BUFFER[taskKey];
-    ACTIVE_CAPTURE_TASK = null;
-
-    loadTasks();
-    submitLock[taskKey] = false;
-    if (btn) {
-      btn.disabled = false;
-      btn.innerText = "✅ Submit Task";
-    }
-    return;
-  }
-
-  // ==============================
-  // ✅ ONLINE MODE (CURRENT FLOW)
-  // ==============================
 
   processingMap[taskKey] = true;
   loadTasks();
@@ -694,8 +620,6 @@ cameraInput.onchange = async e => {
     console.error(e);
     alert("❌ Upload failed.");
   }
-
-  delete submitLock[taskKey];
 };
 
 
@@ -788,9 +712,9 @@ async function uploadNow(
   // ===== FLATTEN DATA =====
   const updatePayload = {
     ...(photoIndex === REQUIRED_PHOTOS ? { status: "COMPLETED" } : {}),
-    [`photo${photoIndex}Url`]: url,
-    [`photo${photoIndex}Filename`]: filename,
-    [`photo${photoIndex}TakenAt`]: takenAt,
+    imageUrl: url,
+    filename,
+    takenAt,
     uploadedAt: new Date().toISOString(),
     deliveryType: deliveryData.deliveryType || ""
   };
@@ -841,12 +765,8 @@ async function preloadDriverUIConfig(tasks) {
 /* ===== LOAD TASKS ===== */
 async function loadTasks() {
   try {
-    let tasks = dedupeTasks(
-      JSON.parse(localStorage.getItem(TASK_CACHE_KEY) || "[]")
-    );
+    let tasks = JSON.parse(localStorage.getItem(TASK_CACHE_KEY) || "[]");
 
-    localStorage.setItem(TASK_CACHE_KEY, JSON.stringify(tasks));
-        
     if (navigator.onLine) {
       const snap = await get(
         query(ref(db, "tasks"), orderByChild("driverId"), equalTo(DRIVER_ID))
@@ -1053,10 +973,7 @@ const addressHTML = hasGPS
         `;
       }
     
-      // 🔒 Hide delivery options after Photo 1 is taken
-      if (ACTIVE_CAPTURE_TASK !== t._key) {
-        html += await renderDynamicDelivery(t);
-      }
+      html += await renderDynamicDelivery(t);
     
       /* ===== PREVIEW THUMBNAILS (MOVE ABOVE BUTTONS) ===== */
       const previews = [1,2,3].map(i => {
@@ -1219,16 +1136,14 @@ async function renderDynamicDelivery(t) {
   if (!methods || !Object.keys(methods).length) return "";
 
   let html = `<div class="radio-group"><b>Delivery Method</b>`;
-
   for (const m of Object.keys(methods)) {
     html += `
       <label>
         <input type="radio" name="delivery_${t._key}" value="${m}"
-          onchange="handleDeliveryMethod('${t._key}','${t.JOBTYPE}','${m}')">
+          onchange="showDynamicFields('${t._key}','${t.JOBTYPE}','${m}')">
         ${m}
       </label>`;
   }
-
   html += `</div><div id="dyn_${t._key}"></div>`;
   return html;
 }
@@ -1295,36 +1210,9 @@ function getCurrentLocation() {
     );
   });
 }
-
-function dedupeTasks(tasks) {
-  const map = new Map();
-
-  const rank = {
-    PENDING: 1,
-    OFFLINE_PENDING: 2,
-    PROCESSING: 3,
-    UPLOADING: 4,
-    COMPLETED: 5
-  };
-
-  for (const t of tasks) {
-    if (!t || !t._key) continue;
-
-    const prev = map.get(t._key);
-    if (!prev) {
-      map.set(t._key, t);
-    } else {
-      const r1 = rank[prev.status] || 0;
-      const r2 = rank[t.status] || 0;
-
-      if (r2 >= r1) map.set(t._key, t);
-    }
-  }
-
-  return [...map.values()];
-}
   
 function validateDynamic(taskKey) {
+  // Sync inputs → cache
   syncDynamicFields(taskKey);
 
   const data = BILLING_CACHE[taskKey];
@@ -1351,49 +1239,18 @@ function validateDynamic(taskKey) {
     return false;
   }
 
+  // 4️⃣ Method config must exist
   const methodCfg = jobCfg[data.deliveryType];
   if (!methodCfg) {
     alert("Invalid delivery method. Please reselect.");
     return false;
   }
 
-  // =============================
-  // ✅ DIRECT FIELD VALIDATION
-  // =============================
+  // 5️⃣ Required fields enforcement
   for (const [fieldKey, field] of Object.entries(methodCfg)) {
-    if (field.type === "radio") continue;
-
     if (field.required && !data[fieldKey]) {
       alert(`${field.label} is required`);
       return false;
-    }
-  }
-
-  // =============================
-  // ✅ RADIO RESULT VALIDATION
-  // =============================
-  const radioFields = Object.entries(methodCfg)
-    .filter(([_, v]) => v.type === "radio");
-
-  if (radioFields.length) {
-    if (!data.result) {
-      alert("Select Result");
-      return false;
-    }
-
-    const radioKey = data.result;
-    const radioBlock = methodCfg[radioKey];
-
-    if (!radioBlock) {
-      alert("Invalid result selection");
-      return false;
-    }
-
-    for (const [k, f] of Object.entries(radioBlock.fields || {})) {
-      if (f.required && !data[k]) {
-        alert(`${f.label} is required`);
-        return false;
-      }
     }
   }
 
@@ -1402,20 +1259,6 @@ function validateDynamic(taskKey) {
 loadTasks();
 
 async function processOfflineQueue() {
-
-  const unique = {};
-  const cleanQueue = [];
-
-  for (const item of getQueue()) {
-    const key = item.taskKey + "_" + item.photoIndex;
-    if (!unique[key]) {
-      unique[key] = true;
-      cleanQueue.push(item);
-    }
-  }
-
-  setQueue(cleanQueue);
-
   const q = getQueue();
   if (!q.length) return;
 
@@ -1424,38 +1267,53 @@ async function processOfflineQueue() {
   for (const item of q) {
     try {
       const blob = await fetch(item.image).then(r => r.blob());
-
+  
       uploadingMap[item.taskKey] = true;
       loadTasks();
-
+  
       await uploadNow(
         item.taskKey,
         blob,
         item.takenAt,
         null,
         item.deliveryData || {},
-        item.gps,
-        item.photoIndex
+        item.gps                  // ✅ FIX
       );
-
-      let q2 = getQueue();
-      q2 = q2.filter(q =>
-        !(q.taskKey === item.taskKey && q.photoIndex === item.photoIndex)
+  
+      /* ================= FIX 1 START ================= */
+  
+      // ✅ UPDATE LOCAL TASK CACHE AFTER OFFLINE UPLOAD
+      const cachedTasks =
+        JSON.parse(localStorage.getItem(TASK_CACHE_KEY) || "[]");
+  
+      const idx = cachedTasks.findIndex(t => t._key === item.taskKey);
+      if (idx !== -1) {
+        cachedTasks[idx].status = "COMPLETED";
+        cachedTasks[idx].finalized = true;
+      }
+  
+      localStorage.setItem(
+        TASK_CACHE_KEY,
+        JSON.stringify(cachedTasks)
       );
-      setQueue(q2);
-
+  
+      /* ================= FIX 1 END ================= */
+  
+      // ✅ CLEAR FLAGS
       delete uploadingMap[item.taskKey];
+      updateRefreshLock();
       delete processingMap[item.taskKey];
-
+  
       loadTasks();
-
     } catch (e) {
       console.error("❌ Offline upload failed", e);
-      return;
+      return; // STOP if one fails
     }
   }
 
+  // ✅ CLEAR QUEUE ONLY AFTER SUCCESS
   setQueue([]);
+  updateRefreshLock();
 }
 
 window.addEventListener("online", async () => {
@@ -1474,110 +1332,6 @@ window.addEventListener(
   },
   { passive: true }
 );
-
-function renderDirectFields(taskKey, fields) {
-  let html = `<div class="delivery-fields">`;
-
-  for (const [key, field] of Object.entries(fields)) {
-    const req = field.required ? " *" : "";
-
-    if (field.type === "textarea") {
-      html += `
-        <label>${field.label}${req}</label>
-        <textarea
-          data-key="${key}"
-          oninput="BILLING_CACHE['${taskKey}']['${key}'] = this.value"
-        ></textarea>
-      `;
-    } else {
-      html += `
-        <label>${field.label}${req}</label>
-        <input
-          type="text"
-          data-key="${key}"
-          oninput="BILLING_CACHE['${taskKey}']['${key}'] = this.value"
-        />
-      `;
-    }
-  }
-
-  html += `</div>`;
-  return html;
-}
-
-window.handleDeliveryMethod = async function(taskKey, jobType, method) {
-  if (!BILLING_CACHE[taskKey]) BILLING_CACHE[taskKey] = {};
-  BILLING_CACHE[taskKey].deliveryType = method;
-
-  const cfg = await loadDriverUI(jobType);
-  const block = cfg?.[method] || {};
-  const box = document.getElementById(`dyn_${taskKey}`);
-
-  if (!box) return;
-  box.innerHTML = "";
-
-  // 🔹 Separate DIRECT fields and RADIO fields
-  const directFields = {};
-  const radioFields = {};
-
-  for (const [key, val] of Object.entries(block)) {
-    if (val?.type === "radio") {
-      radioFields[key] = val;
-    } else {
-      directFields[key] = val;
-    }
-  }
-
-  let html = "";
-
-  // ✅ Always render DIRECT fields first
-  if (Object.keys(directFields).length) {
-    html += renderDirectFields(taskKey, directFields);
-  }
-
-  // ✅ Render RADIO fields if present
-  if (Object.keys(radioFields).length) {
-    html += `<div class="radio-group"><b>Result</b>`;
-
-    for (const key of Object.keys(radioFields)) {
-      const opt = radioFields[key];
-      html += `
-        <label>
-          <input type="radio" name="sub_${taskKey}" value="${key}"
-            onchange="renderSubFields('${taskKey}','${jobType}','${method}','${key}')">
-          ${opt.label}
-        </label>`;
-    }
-
-    html += `</div><div id="sub_${taskKey}"></div>`;
-  }
-
-  box.innerHTML = html;
-};
-
-window.renderSubFields = async function(taskKey, jobType, method, optionKey) {
-  const cfg = await loadDriverUI(jobType);
-  const opt = cfg?.[method]?.[optionKey];
-  if (!opt) return;
-
-  BILLING_CACHE[taskKey].result = optionKey;
-
-  const box = document.getElementById(`sub_${taskKey}`);
-  if (!box) return;
-
-  let html = `<div class="delivery-fields">`;
-
-  for (const [key, field] of Object.entries(opt.fields || {})) {
-    const req = field.required ? " *" : "";
-    html += `
-      <label>${field.label}${req}</label>
-      <input type="text" data-key="${key}"
-        oninput="BILLING_CACHE['${taskKey}']['${key}'] = this.value">`;
-  }
-
-  html += `</div>`;
-  box.innerHTML = html;
-};
 
 window.addEventListener(
   "touchmove",
