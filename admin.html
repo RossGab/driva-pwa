@@ -269,7 +269,7 @@ button {
 <div class="admin-header" style="justify-content:space-between;">
   <div style="display:flex;align-items:center;gap:14px;">
     <img src="./logo.jpg" class="admin-logo" alt="Company Logo">
-    <h1>Admin Dashboard <span class="version">V2.4.16.3</span></h1>
+    <h1>Admin Dashboard <span class="version">V2.4.16.4</span></h1>
   </div>
 
   <!-- 📅 DATE FILTER -->
@@ -750,9 +750,9 @@ function renderDynamicCompletedFields(t) {
       <b>DELIVERY DETAILS</b>
   `;
 
-  // 1️⃣ DIRECT FIELDS
+  // ✅ 1. Render DIRECT fields (text / textarea only)
   for (const [key, field] of Object.entries(cfg)) {
-    if (field.type === "radio") continue;
+    if (field.fields) continue; // skip radio option groups
 
     const value = t[key] || "";
 
@@ -769,32 +769,26 @@ function renderDynamicCompletedFields(t) {
     }
   }
 
-  // 2️⃣ RADIO RESULT + CHILD FIELDS
-  for (const [key, field] of Object.entries(cfg)) {
-    if (field.type !== "radio") continue;
+  // ✅ 2. Render RADIO RESULT + ITS CHILD FIELDS
+  const selected = t.result;
 
-    const selected = t[key];
-    if (!selected) continue;
-
-    const option = field.fields?.[selected];
-    if (!option) continue;
-
+  if (selected && cfg[selected] && cfg[selected].fields) {
     html += `
-      <label class="full">${field.label}</label>
-      <input class="full" value="${option.label}" disabled>
+      <label class="full">Result</label>
+      <input class="full" value="${cfg[selected].label || selected}" disabled>
     `;
 
-    for (const [childKey, childField] of Object.entries(option.fields || {})) {
+    for (const [childKey, child] of Object.entries(cfg[selected].fields)) {
       const value = t[childKey] || "";
 
-      if (childField.type === "textarea") {
+      if (child.type === "textarea") {
         html += `
-          <label class="full">${childField.label}</label>
+          <label class="full">${child.label}</label>
           <textarea class="full" disabled>${value}</textarea>
         `;
       } else {
         html += `
-          <label class="full">${childField.label}</label>
+          <label class="full">${child.label}</label>
           <input class="full" value="${value}" disabled>
         `;
       }
