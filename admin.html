@@ -269,7 +269,7 @@ button {
 <div class="admin-header" style="justify-content:space-between;">
   <div style="display:flex;align-items:center;gap:14px;">
     <img src="./logo.jpg" class="admin-logo" alt="Company Logo">
-    <h1>Admin Dashboard <span class="version">V2.4.15</span></h1>
+    <h1>Admin Dashboard <span class="version">V2.4.15.1</span></h1>
   </div>
 
   <!-- 📅 DATE FILTER -->
@@ -964,13 +964,30 @@ window.loadTasks = async function (status) {
 
         ${t.status === "COMPLETED" ? renderDynamicCompletedFields(t) : ""}
 
-        ${t.status === "COMPLETED" && t.imageUrl ? `
-          <button class="toggleBtn"
-            onclick="this.nextElementSibling.style.display =
-            this.nextElementSibling.style.display === 'none' ? 'block' : 'none'">
-            👁 Show Photo
-          </button>
-          <img src="${t.imageUrl}" style="display:none;width:100%">
+        ${t.status === "COMPLETED" ? `
+          <div style="
+            display:grid;
+            grid-template-columns:repeat(3,1fr);
+            gap:6px;
+            margin-top:10px;
+          ">
+            ${[1,2,3].map(i => {
+              const url = t[`photo${i}Url`];
+              if (!url) return "";
+              return `
+                <img src="${url}"
+                  onclick="window.open('${url}','_blank')"
+                  style="
+                    width:100%;
+                    height:90px;
+                    object-fit:cover;
+                    border-radius:6px;
+                    border:2px solid #28a745;
+                    cursor:pointer;
+                  ">
+              `;
+            }).join("")}
+          </div>
         ` : ""}
 
         <div class="form-actions">
