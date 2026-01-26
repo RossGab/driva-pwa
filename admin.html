@@ -269,7 +269,7 @@ button {
 <div class="admin-header" style="justify-content:space-between;">
   <div style="display:flex;align-items:center;gap:14px;">
     <img src="./logo.jpg" class="admin-logo" alt="Company Logo">
-    <h1>Admin Dashboard <span class="version">V2.4.16.5</span></h1>
+    <h1>Admin Dashboard <span class="version">V2.4.16.6</span></h1>
   </div>
 
   <!-- 📅 DATE FILTER -->
@@ -743,7 +743,7 @@ function renderDynamicCompletedFields(t) {
       ?.deliveryMethods
       ?.[t.deliveryType];
 
-  if (!cfg) return "";
+  if (!cfg || !cfg._order || !cfg.fields) return "";
 
   let html = `
     <div class="task-form full" style="margin-top:12px">
@@ -751,11 +751,49 @@ function renderDynamicCompletedFields(t) {
   `;
 
   /* ===============================
-     1. Render NORMAL text fields
+     1️⃣ NORMAL + RADIO FIELDS (ORDERED)
      =============================== */
-  for (const [key, field] of Object.entries(cfg)) {
-    if (field.type === "radio") continue;
 
+  for (const key of cfg._order) {
+    const field = cfg.fields[key];
+    if (!field) continue;
+
+    /* ===== RADIO ===== */
+    if (field.type === "radio") {
+      const selected = t.result;
+
+      html += `
+        <label class="full">${field.label}</label>
+        <input class="full" value="${selected || ""}" disabled>
+      `;
+
+      const opt = field.fields?.options?.[selected];
+
+      if (opt?.fields?._order?.length) {
+        for (const childKey of opt.fields._order) {
+          const child = opt.fields.options[childKey];
+          const value = t[childKey] || "";
+
+          if (!child) continue;
+
+          if (child.type === "textarea") {
+            html += `
+              <label class="full">${child.label}</label>
+              <textarea class="full" disabled>${value}</textarea>
+            `;
+          } else {
+            html += `
+              <label class="full">${child.label}</label>
+              <input class="full" value="${value}" disabled>
+            `;
+          }
+        }
+      }
+
+      continue;
+    }
+
+    /* ===== NORMAL INPUT ===== */
     const value = t[key] || "";
 
     if (field.type === "textarea") {
@@ -768,40 +806,6 @@ function renderDynamicCompletedFields(t) {
         <label class="full">${field.label}</label>
         <input class="full" value="${value}" disabled>
       `;
-    }
-  }
-
-  /* ===============================
-     2. Render RADIO + children
-     =============================== */
-  const radioField = Object.values(cfg).find(f => f.type === "radio");
-
-  if (radioField) {
-    const selected = t.result;
-
-    if (selected && radioField.fields?.[selected]) {
-      const option = radioField.fields[selected];
-
-      html += `
-        <label class="full">${radioField.label}</label>
-        <input class="full" value="${option.label || selected}" disabled>
-      `;
-
-      for (const [childKey, child] of Object.entries(option.fields || {})) {
-        const value = t[childKey] || "";
-
-        if (child.type === "textarea") {
-          html += `
-            <label class="full">${child.label}</label>
-            <textarea class="full" disabled>${value}</textarea>
-          `;
-        } else {
-          html += `
-            <label class="full">${child.label}</label>
-            <input class="full" value="${value}" disabled>
-          `;
-        }
-      }
     }
   }
 
