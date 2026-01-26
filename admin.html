@@ -269,7 +269,7 @@ button {
 <div class="admin-header" style="justify-content:space-between;">
   <div style="display:flex;align-items:center;gap:14px;">
     <img src="./logo.jpg" class="admin-logo" alt="Company Logo">
-    <h1>Admin Dashboard <span class="version">V2.4.17</span></h1>
+    <h1>Admin Dashboard <span class="version">V2.4.18</span></h1>
   </div>
 
   <!-- 📅 DATE FILTER -->
@@ -881,10 +881,13 @@ window.revertToPending = async function (taskKey) {
     finalized: false,
     reopenedAt: new Date().toISOString(),
 
+    
+
     // remove photos
     photo1Url: null,
     photo1Filename: null,
     photo1TakenAt: null,
+    
 
     photo2Url: null,
     photo2Filename: null,
@@ -902,6 +905,7 @@ window.revertToPending = async function (taskKey) {
   };
 
   await update(ref(db, `tasks/${taskKey}`), payload);
+  ACTIVE_CAPTURE_TASK = null;
 
   // 🔥 Also clean local cache
   const cached = getCachedTasks() || [];
