@@ -160,7 +160,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebas
 import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.5.2-DYNAMIC";
+const VERSION = "Driver v3.5.3-DYNAMIC";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -1216,11 +1216,14 @@ function renderCachedOnly() {
   
 async function renderDynamicDelivery(t) {
   const methods = await loadDriverUI(t.JOBTYPE);
-  if (!methods || !methods._order || !methods._order.length) return "";
+  if (!methods || typeof methods !== "object") return "";
+
+  const methodNames = Object.keys(methods);
+  if (!methodNames.length) return "";
 
   let html = `<div class="radio-group"><b>Delivery Method</b>`;
 
-  for (const m of methods._order) {
+  for (const m of methodNames) {
     html += `
       <label>
         <input type="radio" name="delivery_${t._key}" value="${m}"
