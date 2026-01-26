@@ -161,7 +161,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebas
 import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.5.12.2-DYNAMIC";
+const VERSION = "Driver v3.5.12.3-DYNAMIC";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -1350,15 +1350,15 @@ function validateDynamic(taskKey) {
   // ✅ RADIO CHILD FIELD VALIDATION
   // =============================
   
-  for (const key of methodCfg._order || []) {
-    const field = methodCfg.fields[key];
+  const selectedRadio = data.__selectedRadio;
+
+  if (selectedRadio) {
+    const radioField = methodCfg.fields[selectedRadio];
   
-    if (field?.type !== "radio") continue;
-  
-    const childOrder = field.fields?._order || [];
+    const childOrder = radioField?.fields?._order || [];
   
     for (const k of childOrder) {
-      const f = field.fields.options[k];
+      const f = radioField.fields.options[k];
   
       if (f.required && !data[k]) {
         alert(`${f.label} is required`);
@@ -1504,6 +1504,7 @@ window.handleDeliveryMethod = async function(taskKey, jobType, method) {
 };
 
 window.handleRadioTrigger = async function(taskKey, jobType, method, radioKey) {
+  BILLING_CACHE[taskKey].__selectedRadio = radioKey;
   const cfg = await loadDriverUI(jobType);
   const radioBlock = cfg?.[method]?.fields?.[radioKey];
   const box = document.getElementById(`sub_${taskKey}`);
