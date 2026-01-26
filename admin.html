@@ -269,7 +269,7 @@ button {
 <div class="admin-header" style="justify-content:space-between;">
   <div style="display:flex;align-items:center;gap:14px;">
     <img src="./logo.jpg" class="admin-logo" alt="Company Logo">
-    <h1>Admin Dashboard <span class="version">V2.4.18</span></h1>
+    <h1>Admin Dashboard <span class="version">V2.4.19</span></h1>
   </div>
 
   <!-- 📅 DATE FILTER -->
@@ -874,20 +874,55 @@ function renderTaskDetails(t) {
 }
 
 window.revertToPending = async function (taskKey) {
-  if (!confirm("This will DELETE all photos and send task back to PENDING.\n\nContinue?")) return;
+  if (!confirm("This will RESET this task and send it back to PENDING.\n\nAll delivery info & photos will be deleted.\n\nContinue?")) return;
 
-  const payload = {
+  const snap = await get(ref(db, `tasks/${taskKey}`));
+  if (!snap.exists()) return alert("Task not found");
+
+  const original = snap.val();
+
+  const CORE_FIELDS = [
+    "JOBTYPE",
+    "BA",
+    "DMZ",
+    "MRU",
+    "SEQUENCE",
+    "METERNUMBER",
+    "ACCOUNTNUMBER",
+    "CUSTOMERNAME",
+    "ADDRESS",
+    "ZIPCODE",
+    "LATITUDE",
+    "LONGITUDE",
+    "AGENTID",
+    "AGENTNAME",
+    "driverId",
+    "rowIndex",
+    "createdAt"
+  ];
+
+  const rebuilt = {};
+
+  CORE_FIELDS.forEach(k => {
+    if (original[k] !== undefined) {
+      rebuilt[k] = original[k];
+    }
+  });
+
+  Object.assign(rebuilt, {
     status: "PENDING",
     finalized: false,
     reopenedAt: new Date().toISOString(),
 
-    
+    // explicitly clear runtime fields
+    deliveryType: null,
+    deliverytype_2nd: null,
+    result: null,
+    uploadedAt: null,
 
-    // remove photos
     photo1Url: null,
     photo1Filename: null,
     photo1TakenAt: null,
-    
 
     photo2Url: null,
     photo2Filename: null,
@@ -895,28 +930,14 @@ window.revertToPending = async function (taskKey) {
 
     photo3Url: null,
     photo3Filename: null,
-    photo3TakenAt: null,
+    photo3TakenAt: null
+  });
 
-    // remove delivery + dynamic fields
-    deliveryType: null,
-    deliverytype_2nd: null,
-    result: null,
-    uploadedAt: null
-  };
+  await set(ref(db, `tasks/${taskKey}`), rebuilt);
 
-  await update(ref(db, `tasks/${taskKey}`), payload);
-  ACTIVE_CAPTURE_TASK = null;
+  clearTaskCache();
 
-  // 🔥 Also clean local cache
-  const cached = getCachedTasks() || [];
-  const idx = cached.findIndex(t => t._key === taskKey);
-
-  if (idx !== -1) {
-    cached[idx] = { ...cached[idx], ...payload };
-    setCachedTasks(cached);
-  }
-
-  alert("✅ Task reverted to PENDING.\nAll photos and delivery data removed.");
+  alert("✅ Task reset successfully.\n\nDriver will receive a fresh clean task.");
 
   refreshDashboard();
   loadTasks("PENDING");
