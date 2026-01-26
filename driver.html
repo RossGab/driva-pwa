@@ -160,7 +160,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebas
 import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.5.13-DYNAMIC";
+const VERSION = "Driver v3.5.14-DYNAMIC";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -1402,8 +1402,11 @@ function validateDynamic(taskKey) {
 
     const radioKey = data.result;
 
+    const radioFieldKey = (methodCfg._order || [])
+      .find(k => methodCfg.fields[k]?.type === "radio");
+    
     const radioBlock =
-      methodCfg.fields?.result?.fields?.options?.[radioKey];
+      methodCfg.fields?.[radioFieldKey]?.fields?.options?.[radioKey];
     
     if (!radioBlock) {
       alert("Invalid result selection");
@@ -1568,33 +1571,46 @@ window.handleDeliveryMethod = async function(taskKey, jobType, method) {
   }
 
   // 2️⃣ RESULT RADIO GROUP
-  const radios = (block._order || [])
-    .filter(k => block.fields[k]?.type === "radio")
-    .map(k => ({ key: k, ...block.fields[k] }));
+  const radioKey = (block._order || [])
+  .find(k => block.fields[k]?.type === "radio");
 
-  if (radios.length) {
-    html += `<div class="radio-group"><b>Result *</b>`;
+if (radioKey) {
+  const radioBlock = block.fields[radioKey];
 
-    for (const r of radios) {
-      html += `
-        <label>
-          <input type="radio"
-            name="result_${taskKey}"
-            value="${r.key}"
-            onchange="renderSubFields('${taskKey}','${jobType}','${method}','${r.key}')">
-          ${r.label}
-        </label>`;
-    }
+  html += `<div class="radio-group"><b>Result *</b>`;
 
-    html += `</div><div id="sub_${taskKey}"></div>`;
+  for (const optKey of radioBlock.fields?._order || []) {
+    const opt = radioBlock.fields.options[optKey];
+
+    html += `
+      <label>
+        <input type="radio"
+          name="result_${taskKey}"
+          value="${optKey}"
+          onchange="renderSubFields('${taskKey}','${jobType}','${method}','${optKey}')">
+        ${opt.label}
+      </label>`;
   }
+
+  html += `</div><div id="sub_${taskKey}"></div>`;
+}
 
   box.innerHTML = html;
 };
-  
-window.renderSubFields = async function(taskKey, jobType, method, radioKey) {
+  window.renderSubFields = async function(taskKey, jobType, method, radioKey) {
   const cfg = await loadDriverUI(jobType);
-  const radioBlock = cfg?.[method]?.fields?.[radioKey];
+
+  const methodCfg = cfg?.[method];
+  if (!methodCfg) return;
+
+  const radioFieldKey = (methodCfg._order || [])
+    .find(k => methodCfg.fields[k]?.type === "radio");
+
+  if (!radioFieldKey) return;
+
+  const radioBlock =
+    methodCfg.fields?.[radioFieldKey]?.fields?.options?.[radioKey];
+
   if (!radioBlock) return;
 
   // 🔥 FULL RESET of previous dynamic fields
@@ -1610,7 +1626,7 @@ window.renderSubFields = async function(taskKey, jobType, method, radioKey) {
 
   box.innerHTML = "";
 
-  // ✅ If NO child fields → STOP (fixes your bug)
+  // ✅ If NO child fields → STOP
   if (!radioBlock.fields?._order?.length) return;
 
   let html = `<div class="delivery-fields">`;
