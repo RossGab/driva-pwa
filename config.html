@@ -69,7 +69,7 @@ button {
 
 <body>
 
-<h2>⚙ Driver UI Dynamic Configuration Builder V5.2</h2>
+<h2>⚙ Driver UI Dynamic Configuration Builder V5.3</h2>
 
 <div class="card">
   <label>Job Type</label>
@@ -474,12 +474,12 @@ window.saveConfig = async function() {
   await update(
     ref(db, `config/driverUI/jobTypes/${STATE.jobType}`),
     {
-      deliveryMethods: cleanForFirebase(STATE.methods),
+      deliveryMethods: STATE.methods,
       updatedAt: new Date().toISOString()
     }
   );
 
-  alert("✅ Configuration saved");
+  alert("✅ Configuration saved with ordering preserved");
 };
 </script>
 
