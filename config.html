@@ -69,7 +69,7 @@ button {
 
 <body>
 
-<h2>⚙ Driver UI Dynamic Configuration Builder V5.1</h2>
+<h2>⚙ Driver UI Dynamic Configuration Builder V5.2</h2>
 
 <div class="card">
   <label>Job Type</label>
@@ -89,6 +89,11 @@ button {
 <div class="card">
   <h3>Delivery Methods</h3>
   <div id="methodsContainer"></div>
+</div>
+
+<div class="card">
+  <h3>👀 Live Driver UI Preview</h3>
+  <div id="previewContainer"></div>
 </div>
 
 <div class="card">
@@ -127,6 +132,7 @@ window.loadConfigForEdit = async function () {
   STATE.methods = snap.val() || {};
 
   renderMethods();
+  renderPreview();
   alert("✏️ Loaded configuration for editing");
 };
 
@@ -140,6 +146,7 @@ window.resetBuilder = function () {
   deliveryMethodInput.value = "";
 
   renderMethods();
+  renderPreview();
 };
 
 window.addDeliveryMethod = function () {
@@ -159,6 +166,7 @@ window.addDeliveryMethod = function () {
 
   deliveryMethodInput.value = "";
   renderMethods();
+  renderPreview();
 };
 
 function renderMethods() {
@@ -211,10 +219,77 @@ function renderMethods() {
       };
 
       renderMethods();
+      renderPreview();
     };
 
     methodsContainer.appendChild(div);
   });
+}
+
+  function renderPreview() {
+  const box = document.getElementById("previewContainer");
+  box.innerHTML = "";
+
+  Object.entries(STATE.methods).forEach(([method, mObj]) => {
+    const section = document.createElement("div");
+    section.className = "method-box";
+
+    section.innerHTML = `<b>${method}</b>`;
+
+    mObj._order.forEach(key => {
+      const f = mObj.fields[key];
+
+      const row = document.createElement("div");
+      row.style.marginTop = "8px";
+
+      let html = `<label>${f.label}${f.required ? " *" : ""}</label>`;
+
+      if (f.type === "text") {
+        html += `<input placeholder="${f.label}" />`;
+      }
+
+      if (f.type === "textarea") {
+        html += `<textarea rows="2" placeholder="${f.label}"></textarea>`;
+      }
+
+      if (f.type === "radio") {
+        html += `<div style="margin-top:4px">`;
+
+        f.fields._order.forEach(rk => {
+          const rf = f.fields.options[rk];
+
+          html += `
+            <div style="margin-left:10px;margin-top:4px">
+              <label>
+                <input type="radio" name="${key}">
+                ${rf.label}
+              </label>
+              ${renderPreviewChild(rf)}
+            </div>
+          `;
+        });
+
+        html += `</div>`;
+      }
+
+      row.innerHTML = html;
+      section.appendChild(row);
+    });
+
+    box.appendChild(section);
+  });
+}
+
+function renderPreviewChild(rf) {
+  if (rf.type === "text") {
+    return `<input style="margin-top:4px" placeholder="${rf.label}"/>`;
+  }
+
+  if (rf.type === "textarea") {
+    return `<textarea rows="2" style="margin-top:4px" placeholder="${rf.label}"></textarea>`;
+  }
+
+  return "";
 }
 
 function renderField(method, key, f) {
@@ -288,7 +363,7 @@ function renderRadioChildren(method, key, f) {
 
 /* ---------- Actions ---------- */
 
-window.removeDeliveryMethod = m => { delete STATE.methods[m]; renderMethods(); };
+window.removeDeliveryMethod = m => { delete STATE.methods[m]; renderMethods(); renderPreview();};
 
 window.toggleRequired = (m,f,v) => {
   STATE.methods[m].fields[f].required = v;
@@ -296,7 +371,7 @@ window.toggleRequired = (m,f,v) => {
 
 window.removeField = (m,f) => { const obj = STATE.methods[m];
 obj._order = obj._order.filter(x => x !== f);
-delete obj.fields[f]; renderMethods(); };
+delete obj.fields[f]; renderMethods(); renderPreview();};
 
 window.addChild = (m,f) => {
   const k = "tmp_" + Date.now();
@@ -312,6 +387,7 @@ window.addChild = (m,f) => {
   };
 
   renderMethods();
+  renderPreview();
 };
 
 window.removeChild = (m,f,k) => {
@@ -321,6 +397,7 @@ window.removeChild = (m,f,k) => {
   delete obj.options[k];
 
   renderMethods();
+  renderPreview();
 };
 
 window.updateChildLabel = (m,f,k,v) => {
@@ -354,6 +431,7 @@ window.updateChildLabel = (m,f,k,v) => {
   delete obj.options[k];
 
   renderMethods();
+  renderPreview();
 };
 window.updateChildType = (m,f,k,v) => {
   STATE.methods[m].fields[f].fields.options[k].type = v;
