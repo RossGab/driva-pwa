@@ -160,7 +160,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebas
 import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.5.14-DYNAMIC";
+const VERSION = "Driver v3.5.16-DYNAMIC";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -422,33 +422,36 @@ function renderJobTypeFilters(tasks) {
 
 function syncDynamicFields(taskKey) {
   const box = document.getElementById(`dyn_${taskKey}`);
-  if (!box) return;
+  const sub = document.getElementById(`sub_${taskKey}`);
 
   if (!BILLING_CACHE[taskKey]) return;
 
-  const inputs = box.querySelectorAll("input, textarea");
+  const inputs = [
+    ...(box?.querySelectorAll("input, textarea") || []),
+    ...(sub?.querySelectorAll("input, textarea") || [])
+  ];
 
   const allowedKeys = new Set();
 
-  // Only allow CURRENT visible inputs
   inputs.forEach(el => {
     const k = el.getAttribute("data-key");
     if (k) allowedKeys.add(k);
   });
 
-  // Purge stale keys
+  // 🔥 HARD PURGE — remove stale child keys
   for (const k of Object.keys(BILLING_CACHE[taskKey])) {
-    if (k !== "deliveryType" && k !== "result" && !allowedKeys.has(k)) {
+    if (
+      k !== "deliveryType" &&
+      k !== "result" &&
+      !allowedKeys.has(k)
+    ) {
       delete BILLING_CACHE[taskKey][k];
     }
   }
 
-  // Sync only current fields
   inputs.forEach(el => {
-    const fieldKey = el.getAttribute("data-key");
-    if (!fieldKey) return;
-
-    BILLING_CACHE[taskKey][fieldKey] = el.value.trim();
+    const k = el.getAttribute("data-key");
+    if (k) BILLING_CACHE[taskKey][k] = el.value.trim();
   });
 }
 
@@ -1597,9 +1600,12 @@ if (radioKey) {
 
   box.innerHTML = html;
 };
+  
   window.renderSubFields = async function(taskKey, jobType, method, radioKey) {
-  const cfg = await loadDriverUI(jobType);
+  const box = document.getElementById(`sub_${taskKey}`);
+  if (box) box.innerHTML = ""; // 🔒 HARD CLEAR BEFORE RENDER
 
+  const cfg = await loadDriverUI(jobType);
   const methodCfg = cfg?.[method];
   if (!methodCfg) return;
 
@@ -1613,20 +1619,15 @@ if (radioKey) {
 
   if (!radioBlock) return;
 
-  // 🔥 FULL RESET of previous dynamic fields
-  const base = {
-    deliveryType: BILLING_CACHE[taskKey].deliveryType,
+  // 🔥 FULL RESET — PERFECT
+  BILLING_CACHE[taskKey] = {
+    deliveryType: method,
     result: radioKey
   };
 
-  BILLING_CACHE[taskKey] = base;
-
-  const box = document.getElementById(`sub_${taskKey}`);
   if (!box) return;
 
-  box.innerHTML = "";
-
-  // ✅ If NO child fields → STOP
+  // ✅ NO CHILD FIELDS → STOP HERE
   if (!radioBlock.fields?._order?.length) return;
 
   let html = `<div class="delivery-fields">`;
@@ -1639,12 +1640,14 @@ if (radioKey) {
       html += `
         <label>${field.label}${req}</label>
         <textarea data-key="${key}"
-          oninput="BILLING_CACHE['${taskKey}']['${key}'] = this.value"></textarea>`;
+          oninput="BILLING_CACHE['${taskKey}']['${key}'] = this.value"></textarea>
+      `;
     } else {
       html += `
         <label>${field.label}${req}</label>
         <input type="text" data-key="${key}"
-          oninput="BILLING_CACHE['${taskKey}']['${key}'] = this.value">`;
+          oninput="BILLING_CACHE['${taskKey}']['${key}'] = this.value">
+      `;
     }
   }
 
