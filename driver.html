@@ -161,7 +161,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebas
 import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.5.12-DYNAMIC";
+const VERSION = "Driver v3.5.12.1-DYNAMIC";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -1386,39 +1386,39 @@ function validateDynamic(taskKey) {
   }
 
   // =============================
-  // ✅ RADIO RESULT VALIDATION
-  // =============================
-  // =============================
-  // ✅ RADIO RESULT VALIDATION (ORDER SAFE)
-  // =============================
-  const radioKeys = (methodCfg._order || []).filter(
-    k => methodCfg.fields[k]?.type === "radio"
-  );
+// ✅ RADIO RESULT VALIDATION (FIXED)
+// =============================
 
-  if (radioKeys.length) {
-    if (!data.result) {
-      alert("Select Result");
-      return false;
-    }
+const radioFieldKey = (methodCfg._order || [])
+  .find(k => methodCfg.fields[k]?.type === "radio");
 
-    const radioKey = radioKeys[0];
-    const radioBlock = methodCfg.fields[radioKey];
+if (radioFieldKey) {
 
-    if (!radioBlock) {
-      alert("Invalid result selection");
-      return false;
-    }
-
-    for (const k of radioBlock.fields._order || []) {
-      const f = radioBlock.fields.options[k];
-
-      if (f.required && !data[k]) {
-        alert(`${f.label} is required`);
-        return false;
-      }
-    }
+  if (!data.result) {
+    alert("Select Result");
+    return false;
   }
 
+  const radioField = methodCfg.fields[radioFieldKey];
+
+  const selectedOption =
+    radioField.fields?.options?.[data.result];
+
+  if (!selectedOption) {
+    alert("Invalid result selection");
+    return false;
+  }
+
+  // ✅ Only validate fields belonging to SELECTED OPTION
+  for (const k of selectedOption.fields?._order || []) {
+    const f = selectedOption.fields.options[k];
+
+    if (f.required && !data[k]) {
+      alert(`${f.label} is required`);
+      return false;
+    }
+  }
+}
   return true;
 }  
 loadTasks();
@@ -1594,23 +1594,22 @@ window.handleDeliveryMethod = async function(taskKey, jobType, method) {
 window.renderSubFields = async function(taskKey, jobType, method, radioKey) {
   const cfg = await loadDriverUI(jobType);
   const radioBlock = cfg?.[method]?.fields?.[radioKey];
-  if (!radioBlock) return;
 
-  // 🔥 FULL RESET of previous dynamic fields
+  // 🔒 ALWAYS RESET CACHE PROPERLY
   const base = {
     deliveryType: BILLING_CACHE[taskKey].deliveryType,
     result: radioKey
   };
-
   BILLING_CACHE[taskKey] = base;
 
   const box = document.getElementById(`sub_${taskKey}`);
   if (!box) return;
 
+  // 🔥 HARD CLEAR UI
   box.innerHTML = "";
 
-  // ✅ If NO child fields → STOP (fixes your bug)
-  if (!radioBlock.fields?._order?.length) return;
+  // ✅ If NO child fields → STOP (THIS IS THE KEY FIX)
+  if (!radioBlock?.fields?._order?.length) return;
 
   let html = `<div class="delivery-fields">`;
 
