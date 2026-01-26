@@ -160,7 +160,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebas
 import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.5.8-DYNAMIC";
+const VERSION = "Driver v3.5.9-DYNAMIC";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -1518,7 +1518,7 @@ function renderDirectFields(taskKey, fields) {
 
 window.handleDeliveryMethod = async function(taskKey, jobType, method) {
   if (!BILLING_CACHE[taskKey]) BILLING_CACHE[taskKey] = {};
-  BILLING_CACHE[taskKey].deliveryType = method;
+  BILLING_CACHE[taskKey] = { deliveryType: method };
 
   const cfg = await loadDriverUI(jobType);
   const block = cfg?.[method];
@@ -1529,113 +1529,93 @@ window.handleDeliveryMethod = async function(taskKey, jobType, method) {
 
   let html = "";
 
+  // 1️⃣ DIRECT FIELDS (text / textarea)
   for (const key of block._order || []) {
     const field = block.fields[key];
-    if (!field) continue;
+    if (!field || field.type === "radio") continue;
 
     const req = field.required ? " *" : "";
 
-    // ===== RADIO GROUP =====
-    if (field.type === "radio") {
-      if (!window.__radioBlock) {
-        window.__radioBlock = { label: "Result", radios: [] };
-      }
-    
-      window.__radioBlock.radios.push({
-        key,
-        label: field.label,
-        field
-      });
-    }
-
-    // ===== DIRECT INPUT =====
-    else if (field.type === "textarea") {
+    if (field.type === "textarea") {
       html += `
         <div class="delivery-fields">
           <label>${field.label}${req}</label>
-          <textarea
-            data-key="${key}"
-            oninput="BILLING_CACHE['${taskKey}']['${key}'] = this.value"
-          ></textarea>
-        </div>
-      `;
-    }
-
-    else {
+          <textarea data-key="${key}"
+            oninput="BILLING_CACHE['${taskKey}']['${key}'] = this.value"></textarea>
+        </div>`;
+    } else {
       html += `
         <div class="delivery-fields">
           <label>${field.label}${req}</label>
-          <input
-            type="text"
-            data-key="${key}"
-            oninput="BILLING_CACHE['${taskKey}']['${key}'] = this.value"
-          />
-        </div>
-      `;
+          <input type="text" data-key="${key}"
+            oninput="BILLING_CACHE['${taskKey}']['${key}'] = this.value"/>
+        </div>`;
     }
   }
 
-  if (window.__radioBlock?.radios?.length) {
-  html += `<div class="radio-group"><b>${window.__radioBlock.label} *</b>`;
+  // 2️⃣ RESULT RADIO GROUP
+  const radios = (block._order || [])
+    .filter(k => block.fields[k]?.type === "radio")
+    .map(k => ({ key: k, ...block.fields[k] }));
 
-  for (const r of window.__radioBlock.radios) {
-    html += `
-      <label>
-        <input type="radio"
-          name="sub_${taskKey}"
-          value="${r.key}"
-          onchange="renderSubFields('${taskKey}','${jobType}','${method}','${r.key}','${r.key}')">
-        ${r.label}
-      </label>
-    `;
+  if (radios.length) {
+    html += `<div class="radio-group"><b>Result *</b>`;
+
+    for (const r of radios) {
+      html += `
+        <label>
+          <input type="radio"
+            name="result_${taskKey}"
+            value="${r.key}"
+            onchange="renderSubFields('${taskKey}','${jobType}','${method}','${r.key}')">
+          ${r.label}
+        </label>`;
+    }
+
+    html += `</div><div id="sub_${taskKey}"></div>`;
   }
-
-  html += `</div><div id="sub_${taskKey}"></div>`;
-}
-
-window.__radioBlock = null;
 
   box.innerHTML = html;
 };
-
-window.renderSubFields = async function(taskKey, jobType, method, radioKey, optionKey) {
+  
+window.renderSubFields = async function(taskKey, jobType, method, radioKey) {
   const cfg = await loadDriverUI(jobType);
   const radioBlock = cfg?.[method]?.fields?.[radioKey];
   if (!radioBlock) return;
 
-  const opt = radioBlock.fields?.options?.[optionKey];
-  if (!opt) return;
-
-  // 🔥 HARD RESET OLD CHILD DATA
+  // HARD RESET child cache
   const keep = { deliveryType: true, result: true };
   for (const k in BILLING_CACHE[taskKey]) {
     if (!keep[k]) delete BILLING_CACHE[taskKey][k];
   }
 
-  BILLING_CACHE[taskKey].result = optionKey;
+  BILLING_CACHE[taskKey].result = radioKey;
 
   const box = document.getElementById(`sub_${taskKey}`);
   if (!box) return;
 
-  // 🔥 CLEAR PREVIOUS UI
   box.innerHTML = "";
 
-  // ✅ If NO child fields → STOP (THIS FIXES YOUR BUG)
-  if (!opt.fields || !opt.fields._order || !opt.fields._order.length) return;
+  // NO CHILD FIELDS → STOP (fixes your bug)
+  if (!radioBlock.fields?._order?.length) return;
 
   let html = `<div class="delivery-fields">`;
 
-  for (const key of opt.fields._order) {
-    const field = opt.fields.options[key];
+  for (const key of radioBlock.fields._order) {
+    const field = radioBlock.fields.options[key];
     const req = field.required ? " *" : "";
 
-    html += `
-      <label>${field.label}${req}</label>
-      <input
-        type="text"
-        data-key="${key}"
-        oninput="BILLING_CACHE['${taskKey}']['${key}'] = this.value">
-    `;
+    if (field.type === "textarea") {
+      html += `
+        <label>${field.label}${req}</label>
+        <textarea data-key="${key}"
+          oninput="BILLING_CACHE['${taskKey}']['${key}'] = this.value"></textarea>`;
+    } else {
+      html += `
+        <label>${field.label}${req}</label>
+        <input type="text" data-key="${key}"
+          oninput="BILLING_CACHE['${taskKey}']['${key}'] = this.value">`;
+    }
   }
 
   html += `</div>`;
