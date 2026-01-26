@@ -269,7 +269,7 @@ button {
 <div class="admin-header" style="justify-content:space-between;">
   <div style="display:flex;align-items:center;gap:14px;">
     <img src="./logo.jpg" class="admin-logo" alt="Company Logo">
-    <h1>Admin Dashboard <span class="version">V2.4.16.7</span></h1>
+    <h1>Admin Dashboard <span class="version">V2.4.17</span></h1>
   </div>
 
   <!-- 📅 DATE FILTER -->
@@ -872,6 +872,51 @@ function renderTaskDetails(t) {
     </div>
   `;
 }
+
+window.revertToPending = async function (taskKey) {
+  if (!confirm("This will DELETE all photos and send task back to PENDING.\n\nContinue?")) return;
+
+  const payload = {
+    status: "PENDING",
+    finalized: false,
+    reopenedAt: new Date().toISOString(),
+
+    // remove photos
+    photo1Url: null,
+    photo1Filename: null,
+    photo1TakenAt: null,
+
+    photo2Url: null,
+    photo2Filename: null,
+    photo2TakenAt: null,
+
+    photo3Url: null,
+    photo3Filename: null,
+    photo3TakenAt: null,
+
+    // remove delivery + dynamic fields
+    deliveryType: null,
+    deliverytype_2nd: null,
+    result: null,
+    uploadedAt: null
+  };
+
+  await update(ref(db, `tasks/${taskKey}`), payload);
+
+  // 🔥 Also clean local cache
+  const cached = getCachedTasks() || [];
+  const idx = cached.findIndex(t => t._key === taskKey);
+
+  if (idx !== -1) {
+    cached[idx] = { ...cached[idx], ...payload };
+    setCachedTasks(cached);
+  }
+
+  alert("✅ Task reverted to PENDING.\nAll photos and delivery data removed.");
+
+  refreshDashboard();
+  loadTasks("PENDING");
+};
   
 window.showCompletedTasks = function () {
   // ✅ STEP 4
@@ -1010,6 +1055,12 @@ window.loadTasks = async function (status) {
         ${renderTaskDetails(t)}
 
         ${t.status === "COMPLETED" ? renderDynamicCompletedFields(t) : ""}
+        ${t.status === "COMPLETED" ? `
+          <button class="deleteBtn"
+            onclick="revertToPending('${t._key}')">
+            🔁 Back to Pending (Reset)
+          </button>
+        ` : ""}
 
         ${t.status === "COMPLETED" ? `
           <div style="
