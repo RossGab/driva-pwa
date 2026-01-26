@@ -69,7 +69,7 @@ button {
 
 <body>
 
-<h2>⚙ Driver UI Dynamic Configuration Builder V5.3</h2>
+<h2>⚙ Driver UI Dynamic Configuration Builder V5.4</h2>
 
 <div class="card">
   <label>Job Type</label>
@@ -128,8 +128,37 @@ window.loadConfigForEdit = async function () {
     return;
   }
 
+  const raw = snap.val() || {};
+  const fixed = {};
+
+  for (const [method, fields] of Object.entries(raw)) {
+    const keys = Object.keys(fields);
+
+    fixed[method] = {
+      _order: keys,
+      fields: {}
+    };
+
+    keys.forEach(k => {
+      const f = fields[k];
+
+      if (f.type === "radio") {
+        const childKeys = Object.keys(f.fields || {});
+        fixed[method].fields[k] = {
+          ...f,
+          fields: {
+            _order: childKeys,
+            options: f.fields || {}
+          }
+        };
+      } else {
+        fixed[method].fields[k] = f;
+      }
+    });
+  }
+
   STATE.jobType = jobType;
-  STATE.methods = snap.val() || {};
+  STATE.methods = fixed;
 
   renderMethods();
   renderPreview();
@@ -368,10 +397,6 @@ window.removeDeliveryMethod = m => { delete STATE.methods[m]; renderMethods(); r
 window.toggleRequired = (m,f,v) => {
   STATE.methods[m].fields[f].required = v;
 };
-
-window.removeField = (m,f) => { const obj = STATE.methods[m];
-obj._order = obj._order.filter(x => x !== f);
-delete obj.fields[f]; renderMethods(); renderPreview();};
 
 window.addChild = (m,f) => {
   const k = "tmp_" + Date.now();
