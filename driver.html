@@ -160,7 +160,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebas
 import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.5.4-DYNAMIC";
+const VERSION = "Driver v3.5.5-DYNAMIC";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -1537,23 +1537,15 @@ window.handleDeliveryMethod = async function(taskKey, jobType, method) {
 
     // ===== RADIO GROUP =====
     if (field.type === "radio") {
-      html += `<div class="radio-group"><b>${field.label}${req}</b>`;
-
-      for (const optKey of field.fields?._order || []) {
-        const opt = field.fields.options[optKey];
-
-        html += `
-          <label>
-            <input type="radio"
-              name="sub_${taskKey}"
-              value="${optKey}"
-              onchange="renderSubFields('${taskKey}','${jobType}','${method}','${key}','${optKey}')">
-            ${opt.label}
-          </label>
-        `;
+      if (!window.__radioBlock) {
+        window.__radioBlock = { label: "Result", radios: [] };
       }
-
-      html += `</div><div id="sub_${taskKey}"></div>`;
+    
+      window.__radioBlock.radios.push({
+        key,
+        label: field.label,
+        field
+      });
     }
 
     // ===== DIRECT INPUT =====
@@ -1583,6 +1575,26 @@ window.handleDeliveryMethod = async function(taskKey, jobType, method) {
     }
   }
 
+  if (window.__radioBlock?.radios?.length) {
+  html += `<div class="radio-group"><b>${window.__radioBlock.label} *</b>`;
+
+  for (const r of window.__radioBlock.radios) {
+    html += `
+      <label>
+        <input type="radio"
+          name="sub_${taskKey}"
+          value="${r.key}"
+          onchange="renderSubFields('${taskKey}','${jobType}','${method}','${r.key}','${r.key}')">
+        ${r.label}
+      </label>
+    `;
+  }
+
+  html += `</div><div id="sub_${taskKey}"></div>`;
+}
+
+window.__radioBlock = null;
+
   box.innerHTML = html;
 };
 
@@ -1591,7 +1603,7 @@ window.renderSubFields = async function(taskKey, jobType, method, radioKey, opti
   const radioBlock = cfg?.[method]?.fields?.[radioKey];
   if (!radioBlock) return;
 
-  const opt = radioBlock.fields?.options?.[optionKey];
+  const opt = radioBlock.fields?.options || {};
   if (!opt) return;
 
   BILLING_CACHE[taskKey].result = optionKey;
