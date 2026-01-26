@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Driver UI Configuration Builder</title>
+<title>Driver UI Configuration Builder V5</title>
 
 <style>
 body { font-family: Arial, sans-serif; background:#f3f3f3; padding:12px; }
@@ -154,7 +154,7 @@ window.addDeliveryMethod = function () {
   STATE.jobType = jobType;
 
   if (!STATE.methods[method]) {
-    STATE.methods[method] = {};
+    STATE.methods[method] = { _order: [], fields: {} };
   }
 
   deliveryMethodInput.value = "";
@@ -186,7 +186,8 @@ function renderMethods() {
 
     const list = div.querySelector(".field-list");
 
-    Object.entries(fields).forEach(([key, f]) => {
+    fields._order.forEach(key => {
+      const f = fields.fields[key];
       list.innerHTML += renderField(method, key, f);
     });
 
@@ -198,11 +199,15 @@ function renderMethods() {
 
       const key = label.toLowerCase().replace(/[^a-z0-9]+/g,"_");
 
-      STATE.methods[method][key] = {
+      const methodObj = STATE.methods[method];
+
+      methodObj._order.push(key);
+      
+      methodObj.fields[key] = {
         label,
         type,
         required:false,
-        ...(type==="radio"?{fields:{}}:{})
+        ...(type==="radio" ? { fields:{ _order: [], options:{} } } : {})
       };
 
       renderMethods();
@@ -230,33 +235,53 @@ function renderField(method, key, f) {
   `;
 }
 
-function renderRadioChildren(method,key,f) {
+function renderRadioChildren(method, key, f) {
+  const order = f.fields?._order || [];
+  const options = f.fields?.options || {};
+
   return `
     <div class="child-box">
       <b>Radio Options</b>
 
-      ${Object.entries(f.fields || {}).map(([ck,cf])=>`
-        <div style="margin-top:6px">
-          <input placeholder="Option label" value="${cf.label}"
-            onchange="updateChildLabel('${method}','${key}','${ck}',this.value)">
-          <select onchange="updateChildType('${method}','${key}','${ck}',this.value)">
-            <option value="text" ${cf.type==="text"?"selected":""}>Text</option>
-            <option value="textarea" ${cf.type==="textarea"?"selected":""}>Textarea</option>
-          </select>
+      ${order.map(ck => {
+        const cf = options[ck];
 
-          <label class="required-row">
-            <input type="checkbox" ${cf.required?"checked":""}
-              onchange="updateChildRequired('${method}','${key}','${ck}',this.checked)">
-            Required
-          </label>
+        return `
+          <div style="margin-top:6px">
+            <input
+              placeholder="Option label"
+              value="${cf.label || ""}"
+              onchange="updateChildLabel('${method}','${key}','${ck}',this.value)"
+            >
 
-          <button class="danger"
-            onclick="removeChild('${method}','${key}','${ck}')">❌</button>
-        </div>
-      `).join("")}
+            <select
+              onchange="updateChildType('${method}','${key}','${ck}',this.value)">
+              <option value="text" ${cf.type==="text"?"selected":""}>Text</option>
+              <option value="textarea" ${cf.type==="textarea"?"selected":""}>Textarea</option>
+            </select>
 
-      <button class="secondary"
-        onclick="addChild('${method}','${key}')">➕ Add Radio Option</button>
+            <label class="required-row">
+              <input
+                type="checkbox"
+                ${cf.required ? "checked" : ""}
+                onchange="updateChildRequired('${method}','${key}','${ck}',this.checked)">
+              Required
+            </label>
+
+            <button
+              class="danger"
+              onclick="removeChild('${method}','${key}','${ck}')">
+              ❌
+            </button>
+          </div>
+        `;
+      }).join("")}
+
+      <button
+        class="secondary"
+        onclick="addChild('${method}','${key}')">
+        ➕ Add Radio Option
+      </button>
     </div>
   `;
 }
@@ -265,14 +290,22 @@ function renderRadioChildren(method,key,f) {
 
 window.removeDeliveryMethod = m => { delete STATE.methods[m]; renderMethods(); };
 
-window.toggleRequired = (m,f,v) => STATE.methods[m][f].required = v;
+window.toggleRequired = (m,f,v) => {
+  STATE.methods[m].fields[f].required = v;
+};
 
-window.removeField = (m,f) => { delete STATE.methods[m][f]; renderMethods(); };
+window.removeField = (m,f) => { const obj = STATE.methods[m];
+obj._order = obj._order.filter(x => x !== f);
+delete obj.fields[f]; renderMethods(); };
 
 window.addChild = (m,f) => {
-  const k = "tmp_" + Date.now();   // temporary key until label is typed
+  const k = "tmp_" + Date.now();
 
-  STATE.methods[m][f].fields[k] = {
+  const obj = STATE.methods[m].fields[f].fields;
+
+  obj._order.push(k);
+
+  obj.options[k] = {
     label: "",
     type: "text",
     required: false
@@ -281,7 +314,14 @@ window.addChild = (m,f) => {
   renderMethods();
 };
 
-window.removeChild = (m,f,k) => { delete STATE.methods[m][f].fields[k]; renderMethods(); };
+window.removeChild = (m,f,k) => {
+  const obj = STATE.methods[m].fields[f].fields;
+
+  obj._order = obj._order.filter(x => x !== k);
+  delete obj.options[k];
+
+  renderMethods();
+};
 
 window.updateChildLabel = (m,f,k,v) => {
   if (!v) return;
@@ -291,29 +331,63 @@ window.updateChildLabel = (m,f,k,v) => {
     .replace(/[^a-z0-9]+/g, "_")
     .replace(/^_|_$/g, "");
 
-  const fields = STATE.methods[m][f].fields;
+  const obj = STATE.methods[m].fields[f].fields;
 
-  // If already converted, just update label
+  // If already same key, just update label
   if (k === newKey) {
-    fields[k].label = v;
+    obj.options[k].label = v;
     return;
   }
 
   // Prevent overwrite
-  if (fields[newKey]) {
+  if (obj.options[newKey]) {
     alert("This option already exists.");
     return;
   }
 
-  // Move data to new key
-  fields[newKey] = { ...fields[k], label: v };
-  delete fields[k];
+  // Replace key in order list
+  const idx = obj._order.indexOf(k);
+  obj._order[idx] = newKey;
+
+  // Move data
+  obj.options[newKey] = { ...obj.options[k], label: v };
+  delete obj.options[k];
 
   renderMethods();
 };
-window.updateChildType = (m,f,k,v) => STATE.methods[m][f].fields[k].type = v;
-window.updateChildRequired = (m,f,k,v) => STATE.methods[m][f].fields[k].required = v;
+window.updateChildType = (m,f,k,v) => {
+  STATE.methods[m].fields[f].fields.options[k].type = v;
+};
 
+window.updateChildRequired = (m,f,k,v) => {
+  STATE.methods[m].fields[f].fields.options[k].required = v;
+};
+
+
+ function cleanForFirebase(methods) {
+  const out = {};
+
+  for (const [m, mObj] of Object.entries(methods)) {
+    const res = {};
+    mObj._order.forEach(k=>{
+      const f = mObj.fields[k];
+
+      if (f.type === "radio") {
+        const rf = {};
+        f.fields._order.forEach(rk=>{
+          rf[rk] = f.fields.options[rk];
+        });
+        res[k] = { ...f, fields: rf };
+      } else {
+        res[k] = f;
+      }
+    });
+    out[m] = res;
+  }
+  return out;
+}
+
+  
 /* ---------- SAVE ---------- */
 
 window.saveConfig = async function() {
@@ -322,7 +396,7 @@ window.saveConfig = async function() {
   await update(
     ref(db, `config/driverUI/jobTypes/${STATE.jobType}`),
     {
-      deliveryMethods: STATE.methods,
+      deliveryMethods: cleanForFirebase(STATE.methods),
       updatedAt: new Date().toISOString()
     }
   );
