@@ -160,7 +160,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebas
 import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.5.1-DYNAMIC";
+const VERSION = "Driver v3.5.2-DYNAMIC";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -1216,11 +1216,11 @@ function renderCachedOnly() {
   
 async function renderDynamicDelivery(t) {
   const methods = await loadDriverUI(t.JOBTYPE);
-  if (!methods || !Object.keys(methods).length) return "";
+  if (!methods || !methods._order || !methods._order.length) return "";
 
   let html = `<div class="radio-group"><b>Delivery Method</b>`;
 
-  for (const m of Object.keys(methods)) {
+  for (const m of methods._order) {
     html += `
       <label>
         <input type="radio" name="delivery_${t._key}" value="${m}"
@@ -1240,11 +1240,13 @@ window.showDynamicFields = async function (taskKey, jobType, method) {
   const cfg = await loadDriverUI(jobType);
   const box = document.getElementById(`dyn_${taskKey}`);
 
-  const fields = cfg?.[method] || {};
+  const block = cfg?.[method];
+  if (!block) return;
 
   let html = `<div class="delivery-fields">`;
 
-  for (const [fieldKey, field] of Object.entries(fields)) {
+  for (const fieldKey of block._order || []) {
+    const field = block.fields[fieldKey];
     const requiredMark = field.required ? " *" : "";
 
     if (field.type === "textarea") {
@@ -1269,7 +1271,6 @@ window.showDynamicFields = async function (taskKey, jobType, method) {
 
   html += `</div>`;
   box.innerHTML = html;
-  // 🔒 HARD LOCK if task is no longer pending
 };  
   
 function getCurrentLocation() {
@@ -1360,10 +1361,11 @@ function validateDynamic(taskKey) {
   // =============================
   // ✅ DIRECT FIELD VALIDATION
   // =============================
-  for (const [fieldKey, field] of Object.entries(methodCfg)) {
+  for (const key of methodCfg._order || []) {
+    const field = methodCfg.fields[key];
     if (field.type === "radio") continue;
-
-    if (field.required && !data[fieldKey]) {
+  
+    if (field.required && !data[key]) {
       alert(`${field.label} is required`);
       return false;
     }
@@ -1372,24 +1374,30 @@ function validateDynamic(taskKey) {
   // =============================
   // ✅ RADIO RESULT VALIDATION
   // =============================
-  const radioFields = Object.entries(methodCfg)
-    .filter(([_, v]) => v.type === "radio");
+  // =============================
+  // ✅ RADIO RESULT VALIDATION (ORDER SAFE)
+  // =============================
+  const radioKeys = (methodCfg._order || []).filter(
+    k => methodCfg.fields[k]?.type === "radio"
+  );
 
-  if (radioFields.length) {
+  if (radioKeys.length) {
     if (!data.result) {
       alert("Select Result");
       return false;
     }
 
-    const radioKey = data.result;
-    const radioBlock = methodCfg[radioKey];
+    const radioKey = radioKeys[0];
+    const radioBlock = methodCfg.fields[radioKey];
 
     if (!radioBlock) {
       alert("Invalid result selection");
       return false;
     }
 
-    for (const [k, f] of Object.entries(radioBlock.fields || {})) {
+    for (const k of radioBlock.fields._order || []) {
+      const f = radioBlock.fields.options[k];
+
       if (f.required && !data[k]) {
         alert(`${f.label} is required`);
         return false;
@@ -1510,41 +1518,47 @@ window.handleDeliveryMethod = async function(taskKey, jobType, method) {
   BILLING_CACHE[taskKey].deliveryType = method;
 
   const cfg = await loadDriverUI(jobType);
-  const block = cfg?.[method] || {};
+  const block = cfg?.[method];
   const box = document.getElementById(`dyn_${taskKey}`);
 
-  if (!box) return;
+  if (!box || !block) return;
   box.innerHTML = "";
 
-  // 🔹 Separate DIRECT fields and RADIO fields
   const directFields = {};
   const radioFields = {};
 
-  for (const [key, val] of Object.entries(block)) {
-    if (val?.type === "radio") {
-      radioFields[key] = val;
+  // ✅ ORDERED FIELD EXTRACTION
+  for (const key of block._order || []) {
+    const field = block.fields[key];
+    if (!field) continue;
+
+    if (field.type === "radio") {
+      radioFields[key] = field;
     } else {
-      directFields[key] = val;
+      directFields[key] = field;
     }
   }
 
   let html = "";
 
-  // ✅ Always render DIRECT fields first
+  // ✅ DIRECT FIELDS FIRST (ORDERED)
   if (Object.keys(directFields).length) {
     html += renderDirectFields(taskKey, directFields);
   }
 
-  // ✅ Render RADIO fields if present
-  if (Object.keys(radioFields).length) {
-    html += `<div class="radio-group"><b>Result</b>`;
+  // ✅ RADIO FIELDS (ORDERED)
+  for (const radioKey of Object.keys(radioFields)) {
+    const radioBlock = radioFields[radioKey];
 
-    for (const key of Object.keys(radioFields)) {
-      const opt = radioFields[key];
+    html += `<div class="radio-group"><b>${radioBlock.label}</b>`;
+
+    for (const optKey of radioBlock.fields._order || []) {
+      const opt = radioBlock.fields.options[optKey];
+
       html += `
         <label>
-          <input type="radio" name="sub_${taskKey}" value="${key}"
-            onchange="renderSubFields('${taskKey}','${jobType}','${method}','${key}')">
+          <input type="radio" name="sub_${taskKey}" value="${optKey}"
+            onchange="renderSubFields('${taskKey}','${jobType}','${method}','${radioKey}','${optKey}')">
           ${opt.label}
         </label>`;
     }
@@ -1555,9 +1569,12 @@ window.handleDeliveryMethod = async function(taskKey, jobType, method) {
   box.innerHTML = html;
 };
 
-window.renderSubFields = async function(taskKey, jobType, method, optionKey) {
+window.renderSubFields = async function(taskKey, jobType, method, radioKey, optionKey) {
   const cfg = await loadDriverUI(jobType);
-  const opt = cfg?.[method]?.[optionKey];
+  const radioBlock = cfg?.[method]?.fields?.[radioKey];
+  if (!radioBlock) return;
+
+  const opt = radioBlock.fields?.options?.[optionKey];
   if (!opt) return;
 
   BILLING_CACHE[taskKey].result = optionKey;
@@ -1567,12 +1584,17 @@ window.renderSubFields = async function(taskKey, jobType, method, optionKey) {
 
   let html = `<div class="delivery-fields">`;
 
-  for (const [key, field] of Object.entries(opt.fields || {})) {
+  for (const key of radioBlock.fields._order || []) {
+    const field = radioBlock.fields.options[key];
     const req = field.required ? " *" : "";
+
     html += `
       <label>${field.label}${req}</label>
-      <input type="text" data-key="${key}"
-        oninput="BILLING_CACHE['${taskKey}']['${key}'] = this.value">`;
+      <input
+        type="text"
+        data-key="${key}"
+        oninput="BILLING_CACHE['${taskKey}']['${key}'] = this.value">
+    `;
   }
 
   html += `</div>`;
