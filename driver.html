@@ -160,7 +160,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebas
 import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.4.89.14.7-DYNAMIC";
+const VERSION = "Driver v3.5.1-DYNAMIC";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -1053,7 +1053,10 @@ const addressHTML = hasGPS
         `;
       }
     
-      html += await renderDynamicDelivery(t);
+      // 🔒 Hide delivery options after Photo 1 is taken
+      if (ACTIVE_CAPTURE_TASK !== t._key) {
+        html += await renderDynamicDelivery(t);
+      }
     
       /* ===== PREVIEW THUMBNAILS (MOVE ABOVE BUTTONS) ===== */
       const previews = [1,2,3].map(i => {
@@ -1216,14 +1219,16 @@ async function renderDynamicDelivery(t) {
   if (!methods || !Object.keys(methods).length) return "";
 
   let html = `<div class="radio-group"><b>Delivery Method</b>`;
+
   for (const m of Object.keys(methods)) {
     html += `
       <label>
         <input type="radio" name="delivery_${t._key}" value="${m}"
-          onchange="showDynamicFields('${t._key}','${t.JOBTYPE}','${m}')">
+          onchange="handleDeliveryMethod('${t._key}','${t.JOBTYPE}','${m}')">
         ${m}
       </label>`;
   }
+
   html += `</div><div id="dyn_${t._key}"></div>`;
   return html;
 }
@@ -1320,7 +1325,6 @@ function dedupeTasks(tasks) {
 }
   
 function validateDynamic(taskKey) {
-  // Sync inputs → cache
   syncDynamicFields(taskKey);
 
   const data = BILLING_CACHE[taskKey];
@@ -1347,18 +1351,49 @@ function validateDynamic(taskKey) {
     return false;
   }
 
-  // 4️⃣ Method config must exist
   const methodCfg = jobCfg[data.deliveryType];
   if (!methodCfg) {
     alert("Invalid delivery method. Please reselect.");
     return false;
   }
 
-  // 5️⃣ Required fields enforcement
+  // =============================
+  // ✅ DIRECT FIELD VALIDATION
+  // =============================
   for (const [fieldKey, field] of Object.entries(methodCfg)) {
+    if (field.type === "radio") continue;
+
     if (field.required && !data[fieldKey]) {
       alert(`${field.label} is required`);
       return false;
+    }
+  }
+
+  // =============================
+  // ✅ RADIO RESULT VALIDATION
+  // =============================
+  const radioFields = Object.entries(methodCfg)
+    .filter(([_, v]) => v.type === "radio");
+
+  if (radioFields.length) {
+    if (!data.result) {
+      alert("Select Result");
+      return false;
+    }
+
+    const radioKey = data.result;
+    const radioBlock = methodCfg[radioKey];
+
+    if (!radioBlock) {
+      alert("Invalid result selection");
+      return false;
+    }
+
+    for (const [k, f] of Object.entries(radioBlock.fields || {})) {
+      if (f.required && !data[k]) {
+        alert(`${f.label} is required`);
+        return false;
+      }
     }
   }
 
@@ -1439,6 +1474,110 @@ window.addEventListener(
   },
   { passive: true }
 );
+
+function renderDirectFields(taskKey, fields) {
+  let html = `<div class="delivery-fields">`;
+
+  for (const [key, field] of Object.entries(fields)) {
+    const req = field.required ? " *" : "";
+
+    if (field.type === "textarea") {
+      html += `
+        <label>${field.label}${req}</label>
+        <textarea
+          data-key="${key}"
+          oninput="BILLING_CACHE['${taskKey}']['${key}'] = this.value"
+        ></textarea>
+      `;
+    } else {
+      html += `
+        <label>${field.label}${req}</label>
+        <input
+          type="text"
+          data-key="${key}"
+          oninput="BILLING_CACHE['${taskKey}']['${key}'] = this.value"
+        />
+      `;
+    }
+  }
+
+  html += `</div>`;
+  return html;
+}
+
+window.handleDeliveryMethod = async function(taskKey, jobType, method) {
+  if (!BILLING_CACHE[taskKey]) BILLING_CACHE[taskKey] = {};
+  BILLING_CACHE[taskKey].deliveryType = method;
+
+  const cfg = await loadDriverUI(jobType);
+  const block = cfg?.[method] || {};
+  const box = document.getElementById(`dyn_${taskKey}`);
+
+  if (!box) return;
+  box.innerHTML = "";
+
+  // 🔹 Separate DIRECT fields and RADIO fields
+  const directFields = {};
+  const radioFields = {};
+
+  for (const [key, val] of Object.entries(block)) {
+    if (val?.type === "radio") {
+      radioFields[key] = val;
+    } else {
+      directFields[key] = val;
+    }
+  }
+
+  let html = "";
+
+  // ✅ Always render DIRECT fields first
+  if (Object.keys(directFields).length) {
+    html += renderDirectFields(taskKey, directFields);
+  }
+
+  // ✅ Render RADIO fields if present
+  if (Object.keys(radioFields).length) {
+    html += `<div class="radio-group"><b>Result</b>`;
+
+    for (const key of Object.keys(radioFields)) {
+      const opt = radioFields[key];
+      html += `
+        <label>
+          <input type="radio" name="sub_${taskKey}" value="${key}"
+            onchange="renderSubFields('${taskKey}','${jobType}','${method}','${key}')">
+          ${opt.label}
+        </label>`;
+    }
+
+    html += `</div><div id="sub_${taskKey}"></div>`;
+  }
+
+  box.innerHTML = html;
+};
+
+window.renderSubFields = async function(taskKey, jobType, method, optionKey) {
+  const cfg = await loadDriverUI(jobType);
+  const opt = cfg?.[method]?.[optionKey];
+  if (!opt) return;
+
+  BILLING_CACHE[taskKey].result = optionKey;
+
+  const box = document.getElementById(`sub_${taskKey}`);
+  if (!box) return;
+
+  let html = `<div class="delivery-fields">`;
+
+  for (const [key, field] of Object.entries(opt.fields || {})) {
+    const req = field.required ? " *" : "";
+    html += `
+      <label>${field.label}${req}</label>
+      <input type="text" data-key="${key}"
+        oninput="BILLING_CACHE['${taskKey}']['${key}'] = this.value">`;
+  }
+
+  html += `</div>`;
+  box.innerHTML = html;
+};
 
 window.addEventListener(
   "touchmove",
