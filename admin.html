@@ -269,7 +269,7 @@ button {
 <div class="admin-header" style="justify-content:space-between;">
   <div style="display:flex;align-items:center;gap:14px;">
     <img src="./logo.jpg" class="admin-logo" alt="Company Logo">
-    <h1>Admin Dashboard <span class="version">V2.4.20</span></h1>
+    <h1>Admin Dashboard <span class="version">V2.4.21</span></h1>
   </div>
 
   <!-- 📅 DATE FILTER -->
@@ -874,7 +874,7 @@ function renderTaskDetails(t) {
 }
 
 window.revertToPending = async function (taskKey) {
-  if (!confirm("This will RESET this task and send it back to PENDING.\n\nAll delivery info & photos will be deleted.\n\nContinue?")) return;
+  if (!confirm("Reset task and send back to pending?")) return;
 
   const snap = await get(ref(db, `tasks/${taskKey}`));
   if (!snap.exists()) return alert("Task not found");
@@ -882,57 +882,35 @@ window.revertToPending = async function (taskKey) {
   const original = snap.val();
 
   const CORE_FIELDS = [
-    "JOBTYPE",
-    "BA",
-    "DMZ",
-    "MRU",
-    "SEQUENCE",
-    "METERNUMBER",
-    "ACCOUNTNUMBER",
-    "CUSTOMERNAME",
-    "ADDRESS",
-    "ZIPCODE",
-    "LATITUDE",
-    "LONGITUDE",
-    "AGENTID",
-    "AGENTNAME",
-    "driverId",
-    "rowIndex",
-    "createdAt"
+    "JOBTYPE","BA","DMZ","MRU","SEQUENCE","METERNUMBER",
+    "ACCOUNTNUMBER","CUSTOMERNAME","ADDRESS","ZIPCODE",
+    "LATITUDE","LONGITUDE","AGENTID","AGENTNAME",
+    "driverId","rowIndex","createdAt"
   ];
 
   const rebuilt = {};
 
   CORE_FIELDS.forEach(k => {
-    if (original[k] !== undefined) {
-      rebuilt[k] = original[k];
-    }
+    if (original[k] !== undefined) rebuilt[k] = original[k];
   });
 
   Object.assign(rebuilt, {
     status: "PENDING",
     finalized: false,
-    reopenedAt: new Date().toISOString(),
-
-    // explicitly clear runtime fields
-    deliveryType: null,
-    deliverytype_2nd: null,
-    result: null,
-    uploadedAt: null,
-
-    photo1Url: null,
-    photo1Filename: null,
-    photo1TakenAt: null,
-
-    photo2Url: null,
-    photo2Filename: null,
-    photo2TakenAt: null,
-
-    photo3Url: null,
-    photo3Filename: null,
-    photo3TakenAt: null
+    reopenedAt: new Date().toISOString()
   });
 
+  await set(ref(db, `tasks/${taskKey}`), rebuilt);
+
+  clearTaskCache();
+
+  alert("✅ Task reset. Driver receives clean task.");
+
+  refreshDashboard();
+  loadTasks("PENDING");
+};
+
+  
   await set(ref(db, `tasks/${taskKey}`), rebuilt);
 
   clearTaskCache();
