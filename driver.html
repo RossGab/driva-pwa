@@ -439,7 +439,7 @@ function syncDynamicFields(taskKey) {
 
   // Purge stale keys
   for (const k of Object.keys(BILLING_CACHE[taskKey])) {
-    if (k !== "deliveryType" && k !== "__selectedRadio" && !allowedKeys.has(k)) {
+    if (k !== "deliveryType" && k !== "deliverytype_2nd" && !allowedKeys.has(k)) {
       delete BILLING_CACHE[taskKey][k];
     }
   }
@@ -807,8 +807,18 @@ async function uploadNow(
   };
 
   for (const [k, v] of Object.entries(deliveryData)) {
-    if (k !== "deliveryType") updatePayload[k] = v;
+  if (k === "deliveryType") continue;
+
+  if (k === "deliverytype_2nd") {
+    updatePayload[k] = v;
+    continue;
   }
+
+  // append _2nd for radio child inputs
+  const finalKey = deliveryData.deliverytype_2nd ? `${k}_2nd` : k;
+
+  updatePayload[finalKey] = v;
+}
 
   if (photoGPS && photoGPS.latitude) {
     updatePayload.LATITUDE  = photoGPS.latitude;
@@ -1350,7 +1360,7 @@ function validateDynamic(taskKey) {
   // ✅ RADIO CHILD FIELD VALIDATION
   // =============================
   
-  const selectedRadio = data.__selectedRadio;
+  const selectedRadio = data.deliverytype_2nd;
 
   if (selectedRadio) {
     const radioField = methodCfg.fields[selectedRadio];
@@ -1504,7 +1514,7 @@ window.handleDeliveryMethod = async function(taskKey, jobType, method) {
 };
 
 window.handleRadioTrigger = async function(taskKey, jobType, method, radioKey) {
-  BILLING_CACHE[taskKey].__selectedRadio = radioKey;
+  BILLING_CACHE[taskKey].deliverytype_2nd = radioKey;
   const cfg = await loadDriverUI(jobType);
   const radioBlock = cfg?.[method]?.fields?.[radioKey];
   const box = document.getElementById(`sub_${taskKey}`);
