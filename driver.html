@@ -160,7 +160,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebas
 import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.5.10-DYNAMIC";
+const VERSION = "Driver v3.5.11-DYNAMIC";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -1583,20 +1583,20 @@ window.renderSubFields = async function(taskKey, jobType, method, radioKey) {
   const radioBlock = cfg?.[method]?.fields?.[radioKey];
   if (!radioBlock) return;
 
-  // HARD RESET child cache
-  const keep = { deliveryType: true, result: true };
-  for (const k in BILLING_CACHE[taskKey]) {
-    if (!keep[k]) delete BILLING_CACHE[taskKey][k];
-  }
+  // 🔥 FULL RESET of previous dynamic fields
+  const base = {
+    deliveryType: BILLING_CACHE[taskKey].deliveryType,
+    result: radioKey
+  };
 
-  BILLING_CACHE[taskKey].result = radioKey;
+  BILLING_CACHE[taskKey] = base;
 
   const box = document.getElementById(`sub_${taskKey}`);
   if (!box) return;
 
   box.innerHTML = "";
 
-  // NO CHILD FIELDS → STOP (fixes your bug)
+  // ✅ If NO child fields → STOP (fixes your bug)
   if (!radioBlock.fields?._order?.length) return;
 
   let html = `<div class="delivery-fields">`;
