@@ -161,13 +161,12 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebas
 import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.5.12.4-DYNAMIC";
+const VERSION = "Driver v3.5.12.4.3-DYNAMIC";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
 const selectedJobTypes = new Set();
 const PHOTO_BUFFER = {};
-const REQUIRED_PHOTOS = 3;
 const submitLock = {};
 let ACTIVE_CAPTURE_TASK = null;
 let jobTypeFilterInitialized = false;
@@ -209,8 +208,12 @@ dateFilter.addEventListener("change", () => {
 });
 
 function normalizeDatePH(dateStr) {
-  if (!dateStr) return null;
-  return new Date(dateStr).toLocaleDateString("en-CA", {
+  if (!dateStr || typeof dateStr !== "string") return null;
+
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return null;
+
+  return d.toLocaleDateString("en-CA", {
     timeZone: "Asia/Manila"
   });
 }
@@ -595,6 +598,7 @@ cameraInput.onchange = async e => {
   // ✅ render only UI, do not reload DB
   loadTasks();
 };
+  
   window.submitTask = async function(taskKey) {
 
   if (submitLock[taskKey]) return;
@@ -611,8 +615,8 @@ cameraInput.onchange = async e => {
 
   const photos = PHOTO_BUFFER[taskKey];
 
-  if (!photos || !photos[1] || !photos[2] || !photos[3]) {
-    alert("Please take all 3 photos.");
+  if (!photos || Object.keys(photos).length === 0) {
+    alert("Please take at least 1 photo.");
     submitLock[taskKey] = false;
     return;
   }
@@ -646,9 +650,11 @@ cameraInput.onchange = async e => {
       x => x.taskKey !== taskKey
     );
 
-    for (let i = 1; i <= 3; i++) {
-      const p = photos[i];
+    const indices = Object.keys(photos).map(Number).sort((a,b)=>a-b);
 
+    for (const i of indices) {
+      const p = photos[i];
+    
       q.push({
         taskKey,
         photoIndex: i,
@@ -681,9 +687,11 @@ cameraInput.onchange = async e => {
   loadTasks();
 
   try {
-    for (let i = 1; i <= 3; i++) {
+    const indices = Object.keys(photos).map(Number).sort((a,b)=>a-b);
+  
+    for (const i of indices) {
       const p = photos[i];
-
+  
       await uploadNow(
         taskKey,
         p.blob,
@@ -691,7 +699,8 @@ cameraInput.onchange = async e => {
         null,
         p.deliveryData,
         p.gps,
-        i
+        i,
+        i === indices[indices.length - 1]   // ✅ last upload flag
       );
     }
 
@@ -747,8 +756,7 @@ function resolveStatus(task) {
   if (p) {
     const count = Object.keys(p).length;
 
-    if (count < REQUIRED_PHOTOS) return "CAPTURING";
-    if (count === REQUIRED_PHOTOS) return "READY";
+    if (count > 0) return "READY";   // 🔥 ANY photo makes task ready
   }
 
   if (processingMap[task._key]) return "PROCESSING";
@@ -759,14 +767,15 @@ function resolveStatus(task) {
 }
 
 async function uploadNow(
-  taskKey,
-  blob,
-  takenAt,
-  _ignoredFilename,
-  deliveryData = {},
-  photoGPS,
-  photoIndex
-) {
+    taskKey,
+    blob,
+    takenAt,
+    _ignoredFilename,
+    deliveryData = {},
+    photoGPS,
+    photoIndex,
+    isLastPhoto
+  ) {
   const taskSnap = await get(ref(db, `tasks/${taskKey}`));
   const task = taskSnap.val() || {};
 
@@ -798,7 +807,7 @@ async function uploadNow(
 
   // ===== FLATTEN DATA =====
   const updatePayload = {
-    ...(photoIndex === REQUIRED_PHOTOS ? { status: "COMPLETED" } : {}),
+  ...(isLastPhoto ? { status: "COMPLETED" } : {}),
     [`photo${photoIndex}Url`]: url,
     [`photo${photoIndex}Filename`]: filename,
     [`photo${photoIndex}TakenAt`]: takenAt,
@@ -862,9 +871,17 @@ async function preloadDriverUIConfig(tasks) {
 /* ===== LOAD TASKS ===== */
 async function loadTasks() {
   try {
-    let tasks = dedupeTasks(
-      JSON.parse(localStorage.getItem(TASK_CACHE_KEY) || "[]")
-    );
+    let tasks = [];
+
+    try {
+      tasks = dedupeTasks(
+        JSON.parse(localStorage.getItem(TASK_CACHE_KEY) || "[]")
+      );
+    } catch (e) {
+      console.warn("⚠️ Corrupt cache — resetting", e);
+      localStorage.removeItem(TASK_CACHE_KEY);
+      tasks = [];
+    }
 
     localStorage.setItem(TASK_CACHE_KEY, JSON.stringify(tasks));
         
@@ -874,7 +891,9 @@ async function loadTasks() {
       );
     
       const raw = snap.val() || {};
-      const serverTasks = Object.keys(raw).map(k => ({ _key: k, ...raw[k] }));
+      const serverTasks = Object.entries(raw)
+        .filter(([k, v]) => v && typeof v === "object")
+        .map(([k, v]) => ({ _key: k, ...v }));
     
       // 🔒 MERGE with local cache to preserve finalized/offline flags
       const localTasks =
@@ -902,6 +921,18 @@ async function loadTasks() {
       });
     
       tasks = merged;
+
+      tasks = tasks.map(t => {
+        if (
+          t.status === "PENDING" &&
+          (t.photo1Url || t.photo2Url || t.photo3Url) &&
+          t.uploadedAt
+        ) {
+          return { ...t, status: "COMPLETED", finalized: true };
+        }
+        return t;
+      });
+      
       localStorage.setItem(TASK_CACHE_KEY, JSON.stringify(tasks));
     }
 
@@ -1058,18 +1089,10 @@ const addressHTML = hasGPS
       const p = PHOTO_BUFFER[t._key] || {};
       const count = Object.keys(p).length;
     
-      if (count > 0 && count < REQUIRED_PHOTOS) {
-        html += `
-          <div class="uploading">
-            📸 Photos: ${count} / ${REQUIRED_PHOTOS} — continue taking photos
-          </div>
-        `;
-      }
-    
-      if (count === REQUIRED_PHOTOS) {
+      if (count > 0) {
         html += `
           <div class="uploading" style="color:green;">
-            ✅ All photos taken — press SUBMIT
+            📸 Photos taken: ${count} — you may submit
           </div>
         `;
       }
@@ -1116,7 +1139,7 @@ const addressHTML = hasGPS
       const disable1 = !!p[1];
       const disable2 = !p[1] || !!p[2];
       const disable3 = !p[2] || !!p[3];
-      const disableSubmit = !p[1] || !p[2] || !p[3];
+      const disableSubmit = Object.keys(p).length === 0;
       
       html += `
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-top:8px;">
@@ -1414,7 +1437,8 @@ async function processOfflineQueue() {
         null,
         item.deliveryData || {},
         item.gps,
-        item.photoIndex
+        item.photoIndex,
+        true   // ✅ last photo during offline replay
       );
 
       let q2 = getQueue();
