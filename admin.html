@@ -909,17 +909,6 @@ window.revertToPending = async function (taskKey) {
   refreshDashboard();
   loadTasks("PENDING");
 };
-
-  
-  await set(ref(db, `tasks/${taskKey}`), rebuilt);
-
-  clearTaskCache();
-
-  alert("✅ Task reset successfully.\n\nDriver will receive a fresh clean task.");
-
-  refreshDashboard();
-  loadTasks("PENDING");
-};
   
 window.showCompletedTasks = function () {
   // ✅ STEP 4
