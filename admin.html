@@ -269,7 +269,7 @@ button {
 <div class="admin-header" style="justify-content:space-between;">
   <div style="display:flex;align-items:center;gap:14px;">
     <img src="./logo.jpg" class="admin-logo" alt="Company Logo">
-    <h1>Admin Dashboard <span class="version">V2.4.21</span></h1>
+    <h1>Admin Dashboard <span class="version">V2.4.22</span></h1>
   </div>
 
   <!-- 📅 DATE FILTER -->
@@ -329,10 +329,6 @@ button {
     style="width:100%; padding:10px; padding-right:34px;
            border-radius:6px; border:1px solid #ccc; font-size:14px;"
   >
-  <input id="adminPhotoInput"
-       type="file"
-       accept="image/*"
-       hidden>
   <button
     id="clearSearchBtn"
     onclick="clearSearch()"
@@ -417,8 +413,6 @@ import {
 
 const TASK_CACHE_KEY = "ADMIN_TASK_CACHE_V1";
 
-
-
 /* ===== FIREBASE ===== */
 const firebaseConfig = {
   apiKey: "AIzaSyDFW61pnwLvh6HGKWt10zLYNr860fI8vkg",
@@ -467,101 +461,6 @@ function showLoader(text = "Loading…") {
   setLoaderText(text);
   el.classList.remove("hide");
   el.style.display = "flex";
-}
-
-const app = initializeApp(firebaseConfig);
-const db = getDatabase(app);
-  
-import { getStorage, ref as sRef, uploadBytes, getDownloadURL }
-  from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
-  
-const storage = getStorage(app);
-
-let ADMIN_REPLACE_TASK = null;
-let ADMIN_REPLACE_INDEX = null;
-
-window.replacePhoto = function(taskKey, index) {
-  if (!confirm(`Replace Photo ${index}?`)) return;
-
-  ADMIN_REPLACE_TASK = taskKey;
-  ADMIN_REPLACE_INDEX = index;
-
-  const input = document.getElementById("adminPhotoInput");
-  input.value = "";
-  input.click();
-};
-
-document.getElementById("adminPhotoInput").onchange = async e => {
-  const file = e.target.files?.[0];
-  if (!file || !ADMIN_REPLACE_TASK) return;
-
-  showLoader("Uploading replacement photo…");
-
-  try {
-    const blob = await compressAdminImage(file);
-
-    const filename =
-      `ADMIN_${ADMIN_REPLACE_TASK}_P${ADMIN_REPLACE_INDEX}_` +
-      `${Date.now()}.jpg`;
-
-    const imgRef =
-      sRef(storage, `tasks/${ADMIN_REPLACE_TASK}/${filename}`);
-
-    await uploadBytes(imgRef, blob);
-
-    const url = await getDownloadURL(imgRef);
-
-    const payload = {
-      [`photo${ADMIN_REPLACE_INDEX}Url`]: url,
-      [`photo${ADMIN_REPLACE_INDEX}Filename`]: filename,
-      [`photo${ADMIN_REPLACE_INDEX}TakenAt`]: new Date().toISOString(),
-
-      editedByAdmin: true,
-      editedAt: new Date().toISOString(),
-      editedReason: "Admin photo replacement"
-    };
-
-    await update(ref(db, `tasks/${ADMIN_REPLACE_TASK}`), payload);
-
-    clearTaskCache();
-
-    alert("✅ Photo replaced");
-
-    loadTasks("COMPLETED");
-
-  } catch (err) {
-    alert("❌ Upload failed");
-    console.error(err);
-  } finally {
-    hideLoader();
-  }
-};
-
-function compressAdminImage(file) {
-  return new Promise(resolve => {
-    const img = new Image();
-    const r = new FileReader();
-
-    r.onload = e => img.src = e.target.result;
-
-    img.onload = () => {
-      const c = document.createElement("canvas");
-      let w = img.width, h = img.height;
-
-      if (w > 1600) {
-        h *= 1600 / w;
-        w = 1600;
-      }
-
-      c.width = w;
-      c.height = h;
-
-      c.getContext("2d").drawImage(img, 0, 0, w, h);
-      c.toBlob(b => resolve(b), "image/jpeg", 0.8);
-    };
-
-    r.readAsDataURL(file);
-  });
 }
 
 function reloadAllAdminViews() {
@@ -684,7 +583,8 @@ function clearTaskCache() {
   localStorage.removeItem(TASK_CACHE_KEY);
 }
 
-
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
 
 
 let CURRENT_STATUS = null;
@@ -1137,72 +1037,1172 @@ window.loadTasks = async function (status) {
     div.className = `task ${status === "COMPLETED" ? "completed" : "pending"}`;
 
     div.innerHTML = `
-  <div class="task-header">
-    <b>${t.CUSTOMERNAME || ""}</b>
-    <div class="small">${t.ADDRESS || ""}</div>
-    <div class="small">Driver: ${t.driverId || "—"}</div>
-    ${sla ? `<div class="small ${sla.cls}">⏱ ${sla.text}</div>` : ""}
-  </div>
-
-  <div class="task-details" data-task-id="${t._key}" style="display:none">
-    ${renderTaskDetails(t)}
-
-    ${t.status === "COMPLETED" ? renderDynamicCompletedFields(t) : ""}
-
-    ${t.status === "COMPLETED" ? `
-      <button class="deleteBtn"
-        onclick="revertToPending('${t._key}')">
-        🔁 Back to Pending (Reset)
-      </button>
-    ` : ""}
-
-    ${t.status === "COMPLETED" ? `
-      <div style="
-        display:grid;
-        grid-template-columns:repeat(3,1fr);
-        gap:6px;
-        margin-top:10px;
-      ">
-        ${[1,2,3].map(i => {
-          const url = t[\`photo\${i}Url\`];
-          if (!url) return "";
-          return `
-            <div style="position:relative">
-              <img src="${url}"
-                   onclick="window.open('${url}','_blank')"
-                   style="
-                     width:100%;
-                     height:90px;
-                     object-fit:cover;
-                     border-radius:6px;
-                     border:2px solid #28a745;
-                     cursor:pointer;
-                   ">
-
-              <button
-                onclick="replacePhoto('${t._key}',${i})"
-                style="
-                  position:absolute;
-                  bottom:4px;
-                  right:4px;
-                  background:#000000aa;
-                  color:white;
-                  border:none;
-                  padding:4px 6px;
-                  font-size:11px;
-                  border-radius:4px;
-                  cursor:pointer;
-                "
-              >
-                🔄 Replace
-              </button>
-            </div>
-          `;
-        }).join("")}
+      <div class="task-header">
+        <b>${t.CUSTOMERNAME || ""}</b>
+        <div class="small">${t.ADDRESS || ""}</div>
+        <div class="small">Driver: ${t.driverId || "—"}</div>
+        ${sla ? `<div class="small ${sla.cls}">⏱ ${sla.text}</div>` : ""}
       </div>
-    ` : ""}
+
+      <div class="task-details" data-task-id="${t._key}" style="display:none">
+        ${renderTaskDetails(t)}
+
+        ${t.status === "COMPLETED" ? renderDynamicCompletedFields(t) : ""}
+        ${t.status === "COMPLETED" ? `
+          <button class="deleteBtn"
+            onclick="revertToPending('${t._key}')">
+            🔁 Back to Pending (Reset)
+          </button>
+        ` : ""}
+
+        ${t.status === "COMPLETED" ? `
+          <div style="
+            display:grid;
+            grid-template-columns:repeat(3,1fr);
+            gap:6px;
+            margin-top:10px;
+          ">
+            ${[1,2,3].map(i => {
+              const url = t[`photo${i}Url`];
+              if (!url) return "";
+              return `
+                <img src="${url}"
+                  onclick="window.open('${url}','_blank')"
+                  style="
+                    width:100%;
+                    height:90px;
+                    object-fit:cover;
+                    border-radius:6px;
+                    border:2px solid #28a745;
+                    cursor:pointer;
+                  ">
+              `;
+            }).join("")}
+          </div>
+        ` : ""}
+
+        <div class="form-actions">
+          <button class="toggleBtn" onclick="enableEdit(this)">✏ Modify Task</button>
+        </div>
+      </div>
+    `;
+
+    const header = div.querySelector(".task-header");
+    const details = div.querySelector(".task-details");
+    header.onclick = () =>
+      details.style.display = details.style.display === "none" ? "block" : "none";
+
+    taskList.appendChild(div);
+  });
+};
+
+
+window.enableEdit = function (btn) {
+  const details = btn.closest(".task-details");
+  const fields = details.querySelectorAll("input, textarea, select");
+
+  fields.forEach(el => {
+    el.dataset.original = el.value;
+    el.disabled = false;
+  });
+
+  details.querySelector(".form-actions").innerHTML = `
+    <button class="toggleBtn" onclick="saveEdit(this)">💾 Save</button>
+    <button class="toggleBtn" style="background:#777"
+      onclick="cancelEdit(this)">❌ Cancel</button>
+  `;
+};
+  
+window.cancelEdit = function (btn) {
+  const details = btn.closest(".task-details");<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin Dashboard V 2.0.0</title>
+<!-- ===== LEAFLET (OPTION 2 MAP) ===== -->
+<link
+  rel="stylesheet"
+  href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<style>
+body {
+  font-family: Arial, sans-serif;
+  background:#f3f3f3;
+  padding:10px;
+}
+
+h2 { text-align:center; }
+
+#scrollTopBtn {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  z-index: 999;
+  padding: 12px 14px;
+  border-radius: 50%;
+  border: none;
+  font-size: 18px;
+  background: #007bff;
+  color: #fff;
+  cursor: pointer;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.25);
+  display: none; /* hidden by default */
+}
+
+#scrollTopBtn:hover {
+  background: #0056b3;
+}
+
+.dashboard {
+  display:flex;
+  gap:10px;
+  margin-bottom:12px;
+}
+
+.card {
+  flex:1;
+  background:#fff;
+  padding:16px;
+  border-radius:10px;
+  text-align:center;
+  box-shadow:0 0 4px rgba(0,0,0,.1);
+}
+
+.open { border-top:5px solid orange; }
+.done { border-top:5px solid green; }
+
+.big {
+  font-size:32px;
+  font-weight:bold;
+}
+
+.actions {
+  display:flex;
+  gap:8px;
+  margin-bottom:12px;
+}
+
+button {
+  flex:1;
+  padding:12px;
+  font-size:14px;
+  border:none;
+  border-radius:6px;
+  cursor:pointer;
+}
+
+.assign { background:#007bff; color:#fff; }
+.openBtn { background:orange; color:#fff; }
+.doneBtn { background:green; color:#fff; }
+.refresh { background:#444; color:#fff; }
+
+.task-header {
+  cursor: pointer;
+}
+
+/* ===== LOADING SCREEN ===== */
+#loadingScreen {
+  position: fixed;
+  inset: 0;
+  background: rgba(255, 255, 255, 0.95);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 1;
+  transition: opacity 0.4s ease;
+}
+  
+#loadingScreen.hide {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.loader-box {
+  text-align: center;
+}
+
+.spinner {
+  width: 42px;
+  height: 42px;
+  border: 4px solid #ddd;
+  border-top: 4px solid #007bff;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin: 0 auto 10px;
+}
+
+.loader-text {
+  font-size: 14px;
+  color: #555;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+#searchBox {
+  width:100%;
+  padding:10px;
+  margin-bottom:12px;
+  border-radius:6px;
+  border:1px solid #ccc;
+  font-size:14px;
+}
+
+.task {
+  background:#fff;
+  padding:12px;
+  margin-bottom:10px;
+  border-radius:8px;
+  box-shadow:0 0 4px rgba(0,0,0,.1);
+  border-left:5px solid #ccc;
+}
+
+  .task-form {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.task-form .full {
+  grid-column: span 2;
+}
+
+.task-form label {
+  font-size: 12px;
+  font-weight: bold;
+  color: #555;
+}
+
+.task-form input,
+.task-form textarea,
+.task-form select {
+  width: 100%;
+  padding: 6px;
+  border-radius: 4px;
+  border: 1px solid #ccc;
+}
+
+.form-actions {
+  grid-column: span 2;
+  margin-top: 10px;
+}
+
+.task.completed { border-left-color:green; }
+.task.pending { border-left-color:orange; }
+
+.small {
+  font-size:13px;
+  color:#555;
+  margin-top:4px;
+}
+
+.remarks {
+  margin-top:6px;
+  padding:6px;
+  background:#f7f7f7;
+  border-left:3px solid #007bff;
+  font-size:13px;
+}
+
+.toggleBtn {
+  margin-top:8px;
+  background:#0069d9;
+  color:#fff;
+  padding:8px;
+  width:100%;
+  border-radius:5px;
+  font-size:13px;
+}
+
+.reassignBox {
+  margin-top:10px;
+  display:flex;
+  gap:6px;
+}
+
+.reassignBox input {
+  flex:1;
+  padding:6px;
+}
+
+.reassignBtn {
+  background:#c0392b;
+  color:#fff;
+  padding:6px 10px;
+  border-radius:5px;
+}
+
+.deleteBtn {
+  margin-top:6px;
+  background:#b00020;
+  color:#fff;
+  padding:8px;
+  width:100%;
+  border-radius:5px;
+}
+
+.sla-ok { color:green; font-weight:bold; }
+.sla-warn { color:orange; font-weight:bold; }
+.sla-breach { color:red; font-weight:bold; }
+
+#mapContainer {
+  display:none;
+  margin-top:12px;
+}
+.version {
+  font-size: 16px;
+  color: #777;
+  margin-left: 6px;
+}
+
+.admin-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 12px;
+}
+
+.admin-logo {
+  height: 72px;
+  width: auto;
+  object-fit: contain;
+}
+
+#map {
+  height:420px;
+  border-radius:10px;
+}
+</style>
+</head>
+
+<body>
+
+<div class="admin-header" style="justify-content:space-between;">
+  <div style="display:flex;align-items:center;gap:14px;">
+    <img src="./logo.jpg" class="admin-logo" alt="Company Logo">
+    <h1>Admin Dashboard <span class="version">V2.4.22</span></h1>
   </div>
-`;
+
+  <!-- 📅 DATE FILTER -->
+  <input
+    type="date"
+    id="adminDateFilter"
+    style="
+      padding:8px 12px;
+      border-radius:6px;
+      border:1px solid #ccc;
+      font-size:14px;
+    "
+  >
+</div>
+
+<!-- ===== DASHBOARD ===== -->
+<div class="dashboard">
+  <div class="card open">
+    <div class="big" id="openCount">0</div>
+    <div class="small">
+      🔴 <span id="slaBreach">0</span> |
+      🟡 <span id="slaWarn">0</span> |
+      🟢 <span id="slaOk">0</span>
+    </div>
+    Open Tasks
+  </div>
+  <div class="card done">
+    <div class="big" id="doneCount">0</div>
+    Completed Tasks
+  </div>
+</div>
+
+<!-- ===== ACTIONS ===== -->
+<div class="actions">
+  <button class="assign" onclick="toggleLiveMap()">🗺 Live Map</button>
+  <button class="assign" onclick="location.href='assign.html'">➕ Manage Task</button>
+  <button class="openBtn" onclick="showAllOpenTasks()">📂 Open</button>
+  <button class="doneBtn" onclick="showCompletedTasks()">✅ Completed</button>
+  <button class="assign" onclick="location.href='add-driver.html'">👤 Add Driver</button>
+  <button class="assign" onclick="location.href=''">⚙ Driver Configuration</button>
+  <button class="assign" onclick="openReport()">📊 Report</button>
+  <button class="refresh" onclick="hardRefresh()">🔄</button>
+</div>
+
+<div id="loadingScreen">
+  <div class="loader-box">
+    <div class="spinner"></div>
+    <div class="loader-text">Loading dashboard…</div>
+  </div>
+</div>
+  
+<!-- 🔍 SEARCH (Open & Completed only) -->
+<div id="searchWrapper" style="display:none; position:relative; margin-bottom:12px;">
+  <input
+    id="searchBox"
+    placeholder="Search name, address, driver, remarks…"
+    style="width:100%; padding:10px; padding-right:34px;
+           border-radius:6px; border:1px solid #ccc; font-size:14px;"
+  >
+  <button
+    id="clearSearchBtn"
+    onclick="clearSearch()"
+    style="
+      position:absolute;
+      right:8px;
+      top:50%;
+      transform:translateY(-50%);
+      border:none;
+      background:transparent;
+      font-size:16px;
+      cursor:pointer;
+      display:none;
+    "
+    title="Clear search"
+  >
+    ❌
+  </button>
+</div>
+  <div id="baFilters" style="display:none; background:#fff; padding:8px;
+     border-radius:6px; margin-bottom:12px; box-shadow:0 0 4px rgba(0,0,0,.1);">
+  <div style="font-size:13px;font-weight:bold;margin-bottom:6px;">
+    Filter by BA
+  </div>
+  <div id="baCheckboxes" style="display:flex;flex-wrap:wrap;gap:10px;"></div>
+</div>
+
+<!-- ===== TASK LIST ===== -->
+<div id="taskList">Select Open or Completed</div>
+
+<!-- ===== LIVE MAP ===== -->
+<div id="mapContainer" style="display:none;">
+  <div style="display:flex; gap:10px;">
+
+    <div id="mapBAFilter" style="
+      background:#fff;
+      padding:8px;
+      border-radius:6px;
+      margin-bottom:8px;
+      box-shadow:0 0 4px rgba(0,0,0,.1);
+    ">
+      <b style="font-size:13px;">Filter Drivers by BA</b>
+      <div id="mapBACheckboxes"
+           style="
+             display:flex;
+             flex-direction:column;
+             gap:6px;
+             margin-top:6px;
+           ">
+      </div>
+    </div>
+
+    <!-- 🗺 MAP (BLUE AREA) -->
+    <div id="map" style="flex:3; height:420px; border-radius:10px;"></div>
+
+    <!-- 👤 DRIVER LIST (YELLOW AREA) -->
+    <div id="driverList" style="
+      flex:1;
+      background:#fff;
+      border-radius:10px;
+      padding:10px;
+      overflow-y:auto;
+      max-height:420px;
+      box-shadow:0 0 4px rgba(0,0,0,.1);
+    ">
+      <b>🚗 Drivers</b>
+      <div id="driverItems" style="margin-top:8px;">
+        Loading drivers…
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script type="module">
+import { initializeApp } from
+  "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import {
+  getDatabase, ref, get, update, remove, set
+} from
+  "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+
+const TASK_CACHE_KEY = "ADMIN_TASK_CACHE_V1";
+
+/* ===== FIREBASE ===== */
+const firebaseConfig = {
+  apiKey: "AIzaSyDFW61pnwLvh6HGKWt10zLYNr860fI8vkg",
+  authDomain: "driva-pwa.firebaseapp.com",
+  databaseURL: "https://driva-pwa-default-rtdb.firebaseio.com",
+  projectId: "driva-pwa",
+  storageBucket: "driva-pwa.firebasestorage.app",
+  messagingSenderId: "299138219722",
+  appId: "1:299138219722:web:623ff6b0a067ea822dfe33"
+};
+
+
+
+
+window.DRIVER_UI_CONFIG = {};
+
+function getTodayPH() {
+  return new Date().toLocaleDateString("en-CA", {
+    timeZone: "Asia/Manila"
+  });
+}
+
+let SELECTED_DATE = getTodayPH();
+
+const adminDateFilter = document.getElementById("adminDateFilter");
+
+adminDateFilter.value = SELECTED_DATE;
+
+adminDateFilter.addEventListener("change", async e => {
+  SELECTED_DATE = e.target.value;
+
+  // ✅ persist selected date
+  localStorage.setItem("ADMIN_SELECTED_DATE", SELECTED_DATE);
+
+  await hardRefresh();
+});
+
+async function loadDriverUIConfig() {
+  const snap = await get(ref(db, "config/driverUI/jobTypes"));
+  window.DRIVER_UI_CONFIG = snap.val() || {};
+}
+
+function showLoader(text = "Loading…") {
+  const el = document.getElementById("loadingScreen");
+  if (!el) return;
+  setLoaderText(text);
+  el.classList.remove("hide");
+  el.style.display = "flex";
+}
+
+function reloadAllAdminViews() {
+  refreshDashboard();
+
+  if (MAP_VISIBLE) {
+    refreshMap();
+  } else if (CURRENT_STATUS) {
+    loadTasks(CURRENT_STATUS);
+  }
+}
+
+function normalizeDate(dateStr) {
+  if (!dateStr) return null;
+
+  const d = new Date(dateStr);
+
+  if (isNaN(d.getTime())) return null;
+
+  return d.toLocaleDateString("en-CA", {
+    timeZone: "Asia/Manila"
+  });
+}
+
+function buildLiveMapBAFilters() {
+  const box = document.getElementById("mapBACheckboxes");
+  box.innerHTML = "";
+
+  const allBAs = new Set();
+
+  Object.values(DRIVER_BA_MAP).forEach(baList => {
+    baList.forEach(ba => allBAs.add(ba));
+  });
+
+  [...allBAs].sort().forEach(ba => {
+    const label = document.createElement("label");
+    label.style.cssText = `
+      font-size:13px;
+      display:flex;
+      align-items:center;
+      gap:6px;
+      padding:4px 6px;
+      border-radius:4px;
+      cursor:pointer;
+      background:#f5f5f5;
+    `;
+
+    label.innerHTML = `
+      <input type="checkbox" value="${ba}">
+      <span>${ba}</span>
+    `;
+
+    const input = label.querySelector("input");
+    input.checked = FILTER_BA.has(ba);
+
+    input.onchange = () => {
+      if (input.checked) FILTER_BA.add(ba);
+      else FILTER_BA.delete(ba);
+
+      refreshMap();        // 🔥 refresh markers
+    };
+
+    box.appendChild(label);
+  });
+}
+
+function driverMatchesBA(driverId) {
+  // No BA filter → show all drivers
+  if (!FILTER_BA.size) return true;
+
+  const baSet = DRIVER_BA_MAP[driverId];
+  if (!baSet) return false;
+
+  // Match if ANY BA overlaps
+  for (const ba of baSet) {
+    if (FILTER_BA.has(ba)) return true;
+  }
+
+  return false;
+}
+
+function hideLoader() {
+  const el = document.getElementById("loadingScreen");
+  if (!el || el.classList.contains("hide")) return;
+  el.classList.add("hide");
+  setTimeout(() => {
+    el.style.display = "none";
+  }, 400);
+}
+
+function withTimeout(promise, ms = 8000) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) =>
+      setTimeout(() => reject(new Error("Timeout")), ms)
+    )
+  ]);
+}
+
+window.openReport = function () {
+  window.location.href = "report.html";
+};
+
+function getCachedTasks() {
+  try {
+    const raw = localStorage.getItem(TASK_CACHE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function setCachedTasks(tasks) {
+  try {
+    localStorage.setItem(TASK_CACHE_KEY, JSON.stringify(tasks));
+  } catch {}
+}
+
+function clearTaskCache() {
+  localStorage.removeItem(TASK_CACHE_KEY);
+}
+
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
+
+
+let CURRENT_STATUS = null;
+let FILTER_BA = new Set();
+let SEARCH_TERM = "";
+let MAP_VISIBLE = false;
+let TASK_STATS = {};
+let FILTER_DRIVER = null;
+let DRIVER_BA_MAP = {};
+const searchWrapper = document.getElementById("searchWrapper");
+const baFilters = document.getElementById("baFilters");
+const searchBox = document.getElementById("searchBox");
+
+/* ===== SEARCH ===== */
+searchBox.addEventListener("input", e => {
+  SEARCH_TERM = e.target.value.toLowerCase();
+
+  const clearBtn = document.getElementById("clearSearchBtn");
+  clearBtn.style.display = SEARCH_TERM ? "block" : "none";
+
+  if (CURRENT_STATUS) {
+    loadTasks(CURRENT_STATUS);
+  }
+});
+
+function buildBAFilters(allTasks) {
+  if (MAP_VISIBLE || !CURRENT_STATUS) {
+    baFilters.style.display = "none";
+    return;
+  }
+
+  const container = document.getElementById("baFilters");
+  const box = document.getElementById("baCheckboxes");
+
+  box.innerHTML = "";
+
+  const baCount = {};
+
+  allTasks.forEach(t => {
+    if (t.status !== CURRENT_STATUS) return;
+    if (normalizeDate(t.createdAt) !== SELECTED_DATE) return;
+    if (!t.BA) return;
+
+    baCount[t.BA] = (baCount[t.BA] || 0) + 1;
+  });
+
+  const bas = Object.keys(baCount);
+
+  if (!bas.length) {
+    container.style.display = "none";
+    return;
+  }
+
+  container.style.display = "block";
+
+  bas.sort().forEach(ba => {
+    const count = baCount[ba];
+
+    const label = document.createElement("label");
+    label.style.cssText =
+      "font-size:13px;display:flex;align-items:center;gap:6px;";
+
+    label.innerHTML = `
+      <input type="checkbox" value="${ba}">
+      <span>${ba} (${count})</span>
+    `;
+
+    const input = label.querySelector("input");
+    input.checked = FILTER_BA.has(ba);
+
+    input.onchange = () => {
+      if (input.checked) FILTER_BA.add(ba);
+      else FILTER_BA.delete(ba);
+
+      loadTasks(CURRENT_STATUS);
+    };
+
+    box.appendChild(label);
+  });
+}
+  
+/* ===== SLA ===== */
+function getSLA(task) {
+  if (!task.createdAt || task.status === "COMPLETED") return null;
+  const hrs = (Date.now() - new Date(task.createdAt)) / 36e5;
+  if (hrs < 24) return { text:"Within SLA", cls:"sla-ok" };
+  if (hrs < 48) return { text:"At Risk", cls:"sla-warn" };
+  return { text:"SLA Breached", cls:"sla-breach" };
+}
+
+let DRIVER_CACHE = {};
+
+async function loadDrivers() {
+  const snap = await withTimeout(get(ref(db, "drivers")), 8000);
+  DRIVER_CACHE = snap.val() || {};
+}
+
+
+window.onerror = (msg, src, line) => {
+  alert(`JS Error:\n${msg}\nLine: ${line}`);
+};
+window.clearSearch = function () {
+  SEARCH_TERM = "";
+  searchBox.value = "";
+  document.getElementById("clearSearchBtn").style.display = "none";
+
+  if (CURRENT_STATUS) {
+    loadTasks(CURRENT_STATUS);
+  }
+};
+  
+/* ===== DASHBOARD ===== */
+window.refreshDashboard = async function () {
+  const snap = await withTimeout(get(ref(db,"tasks")), 60000);
+  const tasks = Object.values(snap.val()||{});
+  let open=0,done=0,ok=0,warn=0,breach=0;
+
+  tasks.forEach(t => {
+  if (normalizeDate(t.createdAt) !== SELECTED_DATE) return;
+  if (t.status === "COMPLETED") {
+    done++;
+    return;
+  }
+
+  if (t.status === "PENDING") {
+    open++;
+
+    const sla = getSLA(t);
+    if (!sla) return;
+
+    if (sla.cls === "sla-ok") ok++;
+    else if (sla.cls === "sla-warn") warn++;
+    else breach++;
+  }
+});
+  
+  openCount.innerText=open;
+  doneCount.innerText=done;
+  slaOk.innerText=ok;
+  slaWarn.innerText=warn;
+  slaBreach.innerText=breach;
+};
+
+/* ===== TASK LIST ===== */
+import {
+  query,
+  orderByChild,
+  equalTo
+} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+
+function renderDynamicCompletedFields(t) {
+  if (!t.deliveryType || !t.JOBTYPE) return "";
+
+  const cfg =
+    window.DRIVER_UI_CONFIG?.[t.JOBTYPE]
+      ?.deliveryMethods
+      ?.[t.deliveryType];
+
+  if (!cfg || !cfg._order || !cfg.fields) return "";
+
+  let html = `
+    <div class="task-form full" style="margin-top:12px">
+      <b>DELIVERY DETAILS</b>
+  `;
+
+  /* ===============================
+     1️⃣ NORMAL INPUT FIELDS
+     =============================== */
+
+  for (const key of cfg._order) {
+    const field = cfg.fields[key];
+    if (!field) continue;
+
+    if (field.type === "radio") continue; // skip radio here
+
+    const value = t[key] || "";
+
+    if (field.type === "textarea") {
+      html += `
+        <label class="full">${field.label}</label>
+        <textarea class="full" disabled>${value}</textarea>
+      `;
+    } else {
+      html += `
+        <label class="full">${field.label}</label>
+        <input class="full" value="${value}" disabled>
+      `;
+    }
+  }
+
+  /* ===============================
+     2️⃣ RADIO RESULT + CHILD FIELDS
+     =============================== */
+
+  const selected = t.result;
+
+  if (selected && cfg.fields[selected]) {
+    const radioField = cfg.fields[selected];
+
+    html += `
+      <label class="full">Result</label>
+      <input class="full" value="${radioField.label}" disabled>
+    `;
+
+    const children = radioField.fields?.options;
+
+    if (children && radioField.fields?._order?.length) {
+      for (const childKey of radioField.fields._order) {
+        const child = children[childKey];
+        if (!child) continue;
+
+        const value = t[childKey] || "";
+
+        if (child.type === "textarea") {
+          html += `
+            <label class="full">${child.label}</label>
+            <textarea class="full" disabled>${value}</textarea>
+          `;
+        } else {
+          html += `
+            <label class="full">${child.label}</label>
+            <input class="full" value="${value}" disabled>
+          `;
+        }
+      }
+    }
+  }
+
+  html += `</div>`;
+  return html;
+}
+  
+function renderTaskDetails(t) {
+  return `
+    <div class="task-form">
+
+      <label>ASSIGNED DRIVER</label>
+      <select data-field="driverId" disabled>
+        <option value="">— Unassigned —</option>
+        ${Object.entries(DRIVER_CACHE).map(([id, d]) => `
+          <option value="${id}" ${id === t.driverId ? "selected" : ""}>
+            ${id} - ${d.name || ""}
+          </option>
+        `).join("")}
+      </select>
+
+      <label>JOB TYPE</label>
+      <input data-field="JOBTYPE" value="${t.JOBTYPE || ""}" disabled>
+
+      <label>BA</label>
+      <input data-field="BA" value="${t.BA || ""}" disabled>
+
+      <label>DMZ</label>
+      <input data-field="DMZ" value="${t.DMZ || ""}" disabled>
+
+      <label>MRU</label>
+      <input data-field="MRU" value="${t.MRU || ""}" disabled>
+
+      <label>SEQUENCE</label>
+      <input data-field="SEQUENCE" value="${t.SEQUENCE || ""}" disabled>
+
+      <label>METER NUMBER</label>
+      <input data-field="METERNUMBER" value="${t.METERNUMBER || ""}" disabled>
+
+      <label>ACCOUNT NUMBER</label>
+      <input data-field="ACCOUNTNUMBER" value="${t.ACCOUNTNUMBER || ""}" disabled>
+
+      <label>CUSTOMER NAME</label>
+      <input data-field="CUSTOMERNAME" value="${t.CUSTOMERNAME || ""}" disabled>
+
+      <label class="full">ADDRESS</label>
+      <textarea class="full" data-field="ADDRESS" disabled>${t.ADDRESS || ""}</textarea>
+
+      <label>ZIP CODE</label>
+      <input data-field="ZIPCODE" value="${t.ZIPCODE || ""}" disabled>
+
+      <label>DELIVERY TYPE</label>
+      <input data-field="deliveryType" value="${t.deliveryType || ""}" disabled>
+      <label>LATITUDE</label>
+      <input data-field="LATITUDE" value="${t.LATITUDE || ""}" disabled>
+      
+      <label>LONGITUDE</label>
+      <input data-field="LONGITUDE" value="${t.LONGITUDE || ""}" disabled>
+
+    </div>
+  `;
+}
+
+window.revertToPending = async function (taskKey) {
+  if (!confirm("Reset task and send back to pending?")) return;
+
+  const snap = await get(ref(db, `tasks/${taskKey}`));
+  if (!snap.exists()) return alert("Task not found");
+
+  const original = snap.val();
+
+  const CORE_FIELDS = [
+    "JOBTYPE","BA","DMZ","MRU","SEQUENCE","METERNUMBER",
+    "ACCOUNTNUMBER","CUSTOMERNAME","ADDRESS","ZIPCODE",
+    "LATITUDE","LONGITUDE","AGENTID","AGENTNAME",
+    "driverId","rowIndex","createdAt"
+  ];
+
+  const rebuilt = {};
+
+  CORE_FIELDS.forEach(k => {
+    if (original[k] !== undefined) rebuilt[k] = original[k];
+  });
+
+  Object.assign(rebuilt, {
+    status: "PENDING",
+    finalized: false,
+    forceReopen: true,   
+    reopenedAt: new Date().toISOString()
+  });
+
+  await set(ref(db, `tasks/${taskKey}`), rebuilt);
+
+  clearTaskCache();
+
+  alert("✅ Task reset. Driver receives clean task.");
+
+  refreshDashboard();
+  loadTasks("PENDING");
+};
+  
+window.showCompletedTasks = function () {
+  // ✅ STEP 4
+  searchWrapper.style.display = "block";
+  baFilters.style.display = "block";
+
+  MAP_VISIBLE = false;
+  FILTER_DRIVER = null;
+
+  mapContainer.style.display = "none";
+  taskList.style.display = "block";
+
+  loadTasks("COMPLETED");
+};
+
+window.showAllOpenTasks = function () {
+  // ✅ STEP 4
+  searchWrapper.style.display = "block";
+  baFilters.style.display = "block";
+
+  FILTER_DRIVER = null;
+  MAP_VISIBLE = false;
+
+  mapContainer.style.display = "none";
+  taskList.style.display = "block";
+
+  loadTasks("PENDING");
+};
+  
+window.hardRefresh = async function () {
+  clearTaskCache();
+
+  showLoader("Refreshing all data…");
+
+  // ✅ Preserve BA filter selections (especially for Live Map)
+  const preservedBA = new Set(FILTER_BA);
+
+  try {
+    await loadDrivers();
+    await refreshDashboard();
+    await loadTasks(CURRENT_STATUS || "PENDING");
+    await buildDriverBAMapLive();
+    await buildTaskStatsLive();
+
+    // 🔁 Restore BA selections
+    FILTER_BA = new Set(preservedBA);
+
+    // Only rebuild BA UI when NOT in live map
+    if (!MAP_VISIBLE) {
+      buildBAFilters(window.ALL_TASKS || []);
+    }
+
+    // Refresh live map if visible
+    if (MAP_VISIBLE) {
+      buildLiveMapBAFilters();  // 🔥 rebuild checkbox UI
+      await refreshMap();       // 🔥 reapply BA filter
+    }
+
+  } catch (err) {
+    alert("Refresh failed. Please try again.");
+    console.error(err);
+  } finally {
+    hideLoader();
+  }
+};
+window.loadTasks = async function (status) {
+  CURRENT_STATUS = status;
+  taskList.innerHTML = "Loading...";
+
+  let allTasks = getCachedTasks();
+
+  // 🔁 FETCH ONLY IF NO CACHE
+  if (!allTasks) {
+    try {
+      const snap = await withTimeout(get(ref(db, "tasks")), 60000);
+      const raw = snap.val() || {};
+      allTasks = Object.keys(raw).map(k => ({ _key: k, ...raw[k] }));
+      setCachedTasks(allTasks);
+    } catch (e) {
+      taskList.innerHTML = "⚠️ Failed to load tasks";
+      return;
+    }
+  }
+
+  // ✅ FILTER LOCALLY (FAST)
+  let tasks = allTasks.filter(t =>
+    t.status === status &&
+    normalizeDate(t.createdAt) === SELECTED_DATE
+  );
+
+  window.ALL_TASKS = tasks;
+
+  // Driver filter
+  if (FILTER_DRIVER) {
+    tasks = tasks.filter(t => t.driverId === FILTER_DRIVER);
+  }
+
+  // Search filter
+  if (SEARCH_TERM) {
+    const term = SEARCH_TERM.toLowerCase();
+    tasks = tasks.filter(t =>
+      JSON.stringify(t).toLowerCase().includes(term)
+    );
+  }
+
+  // BA filters
+  if (!MAP_VISIBLE) {
+    buildBAFilters(allTasks);
+  }
+  if (FILTER_BA.size) {
+    tasks = tasks.filter(t => FILTER_BA.has(t.BA));
+  }
+
+  // 🔽 render (your existing logic untouched)
+  taskList.innerHTML = "";
+  if (!tasks.length) {
+    taskList.innerHTML = "No tasks found";
+    return;
+  }
+
+  tasks.forEach(t => {
+    const sla = getSLA(t);
+
+    const div = document.createElement("div");
+    div.className = `task ${status === "COMPLETED" ? "completed" : "pending"}`;
+
+    div.innerHTML = `
+      <div class="task-header">
+        <b>${t.CUSTOMERNAME || ""}</b>
+        <div class="small">${t.ADDRESS || ""}</div>
+        <div class="small">Driver: ${t.driverId || "—"}</div>
+        ${sla ? `<div class="small ${sla.cls}">⏱ ${sla.text}</div>` : ""}
+      </div>
+
+      <div class="task-details" data-task-id="${t._key}" style="display:none">
+        ${renderTaskDetails(t)}
+
+        ${t.status === "COMPLETED" ? renderDynamicCompletedFields(t) : ""}
+        ${t.status === "COMPLETED" ? `
+          <button class="deleteBtn"
+            onclick="revertToPending('${t._key}')">
+            🔁 Back to Pending (Reset)
+          </button>
+        ` : ""}
+
+        ${t.status === "COMPLETED" ? `
+          <div style="
+            display:grid;
+            grid-template-columns:repeat(3,1fr);
+            gap:6px;
+            margin-top:10px;
+          ">
+            ${[1,2,3].map(i => {
+              const url = t[`photo${i}Url`];
+              if (!url) return "";
+              return `
+                <img src="${url}"
+                  onclick="window.open('${url}','_blank')"
+                  style="
+                    width:100%;
+                    height:90px;
+                    object-fit:cover;
+                    border-radius:6px;
+                    border:2px solid #28a745;
+                    cursor:pointer;
+                  ">
+              `;
+            }).join("")}
+          </div>
+        ` : ""}
+
+        <div class="form-actions">
+          <button class="toggleBtn" onclick="enableEdit(this)">✏ Modify Task</button>
+        </div>
+      </div>
+    `;
+
     const header = div.querySelector(".task-header");
     const details = div.querySelector(".task-details");
     header.onclick = () =>
@@ -1231,6 +2231,437 @@ window.enableEdit = function (btn) {
   
 window.cancelEdit = function (btn) {
   const details = btn.closest(".task-details");
+  const fields = details.querySelectorAll("input, textarea, select");
+
+  fields.forEach(el => {
+    el.value = el.dataset.original;
+    el.disabled = true;
+  });
+
+  details.querySelector(".form-actions").innerHTML = `
+    <button class="toggleBtn" onclick="enableEdit(this)">
+      ✏ Modify Task
+    </button>
+  `;
+};
+
+  
+window.saveEdit = async function (btn) {
+  const details = btn.closest(".task-details");
+  const taskId = details.dataset.taskId;
+
+  alert("Saving task: " + taskId);
+
+  const fields = details.querySelectorAll("input, textarea, select");
+  const payload = {};
+  let selectedDriverId = null;
+
+  fields.forEach(el => {
+    payload[el.dataset.field] = el.value;
+    el.disabled = true;
+
+    if (el.dataset.field === "driverId") {
+      selectedDriverId = el.value;
+    }
+  });
+
+  if (selectedDriverId && DRIVER_CACHE[selectedDriverId]) {
+    payload.AGENTID = selectedDriverId;
+    payload.AGENTNAME = DRIVER_CACHE[selectedDriverId].name || "";
+  } else {
+    payload.AGENTID = "";
+    payload.AGENTNAME = "";
+  }
+  alert(JSON.stringify(payload, null, 2));
+  await update(ref(db, `tasks/${taskId}`), payload);
+
+  /* 🔥 ADD THIS BLOCK — UPDATE LOCAL CACHE */
+  const cached = getCachedTasks() || [];
+  const idx = cached.findIndex(t => t._key === taskId);
+  
+  if (idx !== -1) {
+    cached[idx] = { ...cached[idx], ...payload };
+    setCachedTasks(cached);
+  }
+  /* 🔥 END CACHE UPDATE */
+  
+  alert("✅ Task updated");
+  
+  details.querySelector(".form-actions").innerHTML = `
+    <button class="toggleBtn" onclick="enableEdit(this)">
+      ✏ Modify Task
+    </button>
+  `;
+  
+  refreshDashboard();
+  loadTasks(CURRENT_STATUS);
+  
+};
+/* ===== LIVE MAP ===== */
+let map, markers={};
+
+window.toggleLiveMap = async function () {
+  MAP_VISIBLE = !MAP_VISIBLE;
+
+  mapContainer.style.display = MAP_VISIBLE ? "block" : "none";
+  taskList.style.display = MAP_VISIBLE ? "none" : "block";
+
+  // ✅ HIDE SEARCH BAR IN LIVE MAP
+  searchWrapper.style.display = MAP_VISIBLE ? "none" : "block";
+
+  // Optional: also hide BA filters on map
+  baFilters.style.display = MAP_VISIBLE ? "none" : "block";
+
+  if (!MAP_VISIBLE) return;
+
+  initMap();
+  setTimeout(() => map.invalidateSize(), 200);
+
+  await buildTaskStatsLive();
+  await buildDriverBAMapLive();
+  buildLiveMapBAFilters();
+  await refreshMap();
+};  
+  
+window.showDriverOpenTasks = function (driverId) {
+  FILTER_DRIVER = driverId;
+
+  // Exit map view
+  MAP_VISIBLE = false;
+  mapContainer.style.display = "none";
+  taskList.style.display = "block";
+
+  // Load open tasks for this driver
+  loadTasks("PENDING");
+};
+  
+function initMap(){
+  if(map) return;
+  map=L.map("map").setView([14.5995,120.9842],11);
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png").addTo(map);
+  refreshMap();
+}
+  
+function getDriverStatus(lastSeen) {
+  if (!lastSeen) return { label: "Unknown", color: "gray" };
+
+  const diff = Date.now() - new Date(lastSeen).getTime();
+
+  if (diff < 60000) return { label: "Active", color: "green" };
+  if (diff < 120000) return { label: "Idle", color: "orange" };
+  return { label: "Offline", color: "red" };
+}
+
+function log(msg) {
+  const box = document.getElementById("debugLog");
+  if (!box) return;
+
+  box.style.display = "block";
+  const time = new Date().toLocaleTimeString();
+  box.innerHTML += `[${time}] ${msg}<br>`;
+  box.scrollTop = box.scrollHeight;
+}
+
+function renderDriverList(statusData = {}) {
+  const list = document.getElementById("driverItems");
+  list.innerHTML = "";
+
+  const driverIds = Object.keys(DRIVER_CACHE);
+
+  driverIds.forEach(driverId => {
+    const driverInfo = DRIVER_CACHE[driverId];
+    const status = statusData[driverId] || {};
+
+    // 🔹 BA filter (based on tasks, not GPS)
+    if (!driverMatchesBA(driverId)) return;
+
+    const hasLocation =
+      status.latitude != null &&
+      status.longitude != null;
+
+    const driverStatus = getDriverStatus(status.lastSeen);
+    const stats = TASK_STATS[driverId] || { open: 0, completed: 0 };
+
+    const row = document.createElement("div");
+    row.style.cssText = `
+      display:flex;
+      gap:8px;
+      padding:8px 0;
+      border-bottom:1px solid #eee;
+      cursor:${hasLocation ? "pointer" : "default"};
+      align-items:flex-start;
+      opacity:${hasLocation ? "1" : "0.6"};
+    `;
+
+    row.innerHTML = `
+      <!-- STATUS DOT -->
+      <div style="
+        width:10px;
+        height:10px;
+        margin-top:4px;
+        border-radius:50%;
+        background:${driverStatus.color};
+        flex-shrink:0;
+      "></div>
+
+      <!-- DRIVER INFO -->
+      <div style="flex:1">
+        <div style="font-size:13px;font-weight:bold;">
+          ${driverInfo.name || "Unnamed Driver"}
+        </div>
+
+        <div style="font-size:12px;color:#444;">
+          📞 ${driverInfo.contact || "—"}
+        </div>
+
+        <div style="font-size:11px;color:#666;margin-top:2px;">
+          ${driverId} · ${driverStatus.label}
+          ${!hasLocation ? " · No GPS yet" : ""}
+        </div>
+
+        <div style="font-size:11px;color:#444;margin-top:4px;">
+          <span
+            style="color:orange;cursor:pointer;font-weight:bold"
+            onclick="event.stopPropagation(); showDriverOpenTasks('${driverId}')">
+            🟠 Open: ${stats.open}
+          </span>
+          |
+          <span style="color:green">
+            ✅ Done: ${stats.completed}
+          </span>
+        </div>
+      </div>
+    `;
+
+    // 🗺 Focus map ONLY if GPS exists
+    if (hasLocation) {
+      row.onclick = () => {
+        map.setView([status.latitude, status.longitude], 15);
+        markers[driverId]?.openPopup();
+      };
+    }
+
+    list.appendChild(row);
+  });
+
+  if (!list.children.length) {
+    list.innerHTML = `
+      <div style="font-size:12px;color:#888;padding:6px 0;">
+        No drivers available
+      </div>
+    `;
+  }
+}
+  
+async function buildTaskStats() {
+  const snap = await withTimeout(get(ref(db, "tasks")), 8000);
+  const tasks = snap.val() || {};
+
+  const stats = {};
+
+  Object.values(tasks).forEach(t => {
+    if (!t.driverId) return;
+
+    if (!stats[t.driverId]) {
+      stats[t.driverId] = { open: 0, completed: 0 };
+    }
+
+    if (t.status === "COMPLETED") {
+      stats[t.driverId].completed++;
+    } else {
+      stats[t.driverId].open++;
+    }
+  });
+
+  TASK_STATS = stats;
+}
+
+async function buildTaskStatsLive() {
+  const snap = await withTimeout(get(ref(db, "tasks")), 8000);
+  const tasks = snap.val() || {};
+
+  const stats = {};
+
+  Object.values(tasks).forEach(t => {
+  if (normalizeDate(t.createdAt) !== SELECTED_DATE) return;
+    if (!t.driverId) return;
+
+    if (!stats[t.driverId]) {
+      stats[t.driverId] = { open: 0, completed: 0 };
+    }
+
+    if (t.status === "COMPLETED") {
+      stats[t.driverId].completed++;
+    } else {
+      stats[t.driverId].open++;
+    }
+  });
+
+  TASK_STATS = stats;
+}
+
+async function buildDriverBAMapLive() {
+  const snap = await withTimeout(get(ref(db, "tasks")), 8000);
+  const tasks = snap.val() || {};
+
+  const map = {};
+
+  Object.values(tasks).forEach(t => {
+    if (normalizeDate(t.createdAt) !== SELECTED_DATE) return;
+    if (!t.driverId || !t.BA) return;
+
+    if (!map[t.driverId]) {
+      map[t.driverId] = [];
+    }
+
+    if (!map[t.driverId].includes(t.BA)) {
+      map[t.driverId].push(t.BA);
+    }
+  });
+
+  DRIVER_BA_MAP = map;
+}
+  
+async function refreshMap() {
+  const snap = await withTimeout(get(ref(db, "driverStatus")), 8000);
+  const data = snap.val() || {};
+
+  renderDriverList(data);
+
+  Object.entries(data).forEach(([id, d]) => {
+
+  // 🔥 BA FILTER
+  if (!driverMatchesBA(id)) {
+    if (markers[id]) {
+      map.removeLayer(markers[id]);
+      delete markers[id];
+    }
+    return;
+  }
+    if (!d.latitude || !d.longitude) return;
+
+    const pos = [d.latitude, d.longitude];
+    const status = getDriverStatus(d.lastSeen);
+
+    const icon = L.divIcon({
+      html: `<div style="
+        width:14px;
+        height:14px;
+        background:${status.color};
+        border-radius:50%;
+        border:2px solid white;
+      "></div>`,
+      className: ""
+    });
+
+    if (!markers[id]) {
+      markers[id] = L.marker(pos, { icon })
+        .addTo(map)
+        .bindPopup(`
+          <b>${id}</b><br>
+          Status: ${status.label}<br>
+          Last seen: ${new Date(d.lastSeen).toLocaleString()}
+        `);
+    } else {
+      markers[id].setLatLng(pos);
+      markers[id].setIcon(icon);
+    }
+  });
+
+  // 🧹 CLEANUP REMOVED DRIVERS
+  Object.keys(markers).forEach(id => {
+    if (!data[id]) {
+      map.removeLayer(markers[id]);
+      delete markers[id];
+    }
+  });
+}
+
+setInterval(()=>{ if(MAP_VISIBLE) refreshMap(); },60000);
+
+/* ===== SCROLL TO TOP BUTTON ===== */
+const scrollTopBtn = document.getElementById("scrollTopBtn");
+
+window.addEventListener("scroll", () => {
+  if (window.scrollY > 300) {
+    scrollTopBtn.style.display = "block";
+  } else {
+    scrollTopBtn.style.display = "none";
+  }
+});
+
+window.scrollToTop = function () {
+  window.scrollTo({
+    top: 0,
+    behavior: "smooth"
+  });
+};
+
+async function ensureDriverStatusNodes() {
+  const statusSnap = await get(ref(db, "driverStatus"));
+  const statusData = statusSnap.val() || {};
+
+  for (const driverId of Object.keys(DRIVER_CACHE)) {
+    if (!statusData[driverId]) {
+      console.log("➕ Creating driverStatus for", driverId);
+
+      await update(ref(db, `driverStatus/${driverId}`), {
+        lastSeen: null,
+        latitude: null,
+        longitude: null
+      });
+    }
+  }
+}
+
+/* INIT */
+function setLoaderText(txt) {
+  const el = document.querySelector(".loader-text");
+  if (el) el.textContent = txt;
+}
+
+(async function init() {
+  showLoader("Loading drivers…");
+  try {
+    await loadDrivers();
+
+    // 🔥 ADD THIS
+    await ensureDriverStatusNodes();
+
+    showLoader("Loading driver config…");
+    await loadDriverUIConfig();
+
+    showLoader("Loading dashboard…");
+    await refreshDashboard();
+
+    showLoader("Loading tasks…");
+    await loadTasks("PENDING");
+  } catch (e) {
+    alert("Dashboard failed to load. Please refresh.");
+  } finally {
+    hideLoader();
+  }
+})();
+</script>
+
+<button id="scrollTopBtn" onclick="scrollToTop()">⬆</button>
+
+<div id="debugLog" style="
+  position:fixed;
+  bottom:0;
+  left:0;
+  right:0;
+  max-height:40%;
+  overflow:auto;
+  background:#111;
+  color:#0f0;
+  font-size:11px;
+  padding:6px;
+  z-index:10000;
+  display:none;
+"></div>
+</body>
+</html>3
   const fields = details.querySelectorAll("input, textarea, select");
 
   fields.forEach(el => {
