@@ -161,7 +161,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebas
 import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.5.12.4.7-DYNAMIC";
+const VERSION = "Driver v3.5.12.4.8-DYNAMIC";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -457,6 +457,7 @@ function syncDynamicFields(taskKey) {
 }
 
 function startGPSTracking(driverId) {
+  detectGPSPermission();
   if (!navigator.geolocation) return;
 
   const gpsStatus = document.getElementById("gpsStatus");
@@ -488,13 +489,7 @@ function startGPSTracking(driverId) {
         lastSeen: new Date().toISOString()
       });
     },
-    err => {
-      console.warn("GPS error:", err.message);
-
-      if (gpsStatus) {
-        gpsStatus.innerText = "📡 GPS unavailable";
-      }
-    },
+    handleGPSError,
     {
       enableHighAccuracy: true,
       maximumAge: 5000,
@@ -831,7 +826,7 @@ async function uploadNow(
 
   if (photoGPS && photoGPS.latitude) {
     updatePayload.LATITUDE  = photoGPS.latitude;
-    updatePayload.LONGTITUDE = photoGPS.longitude;
+    updatePayload.LONGITUDE = photoGPS.longitude;
     updatePayload.gpsAccuracy = photoGPS.accuracy || null;
   }
 
@@ -1023,6 +1018,46 @@ const filtered = tasks
   } catch (e) {
     taskList.innerHTML = "⚠️ Failed to load tasks. Pull to refresh.";
   }
+}
+
+async function detectGPSPermission() {
+  if (!navigator.permissions) return;
+
+  try {
+    const result = await navigator.permissions.query({ name: "geolocation" });
+
+    if (result.state === "denied") {
+      gpsStatus.innerText =
+        "🚫 Location blocked — Tap ⚙️ → Allow Location";
+    }
+
+    result.onchange = () => detectGPSPermission();
+  } catch {}
+}
+
+function handleGPSError(err) {
+  const gpsStatus = document.getElementById("gpsStatus");
+
+  let msg = "";
+
+  switch (err.code) {
+    case 1:
+      msg = "🚫 Location blocked — Phone Settings → App → Allow Location (Always)";
+      break;
+
+    case 2:
+      msg = "📴 GPS is OFF — Turn ON Location services";
+      break;
+
+    case 3:
+      msg = "⏳ Can't get GPS — Move to open area & wait";
+      break;
+
+    default:
+      msg = "⚠️ GPS error — Restart phone";
+  }
+
+  if (gpsStatus) gpsStatus.innerText = msg;
 }
   
 function updateRemainingCounter(tasks) {
