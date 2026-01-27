@@ -161,7 +161,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebas
 import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.5.12.4.10-DYNAMIC";
+const VERSION = "Driver v3.5.12.4.11-DYNAMIC";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -578,10 +578,7 @@ cameraInput.onchange = async e => {
     deliveryData: BILLING_CACHE[CURRENT_TASK] || {}
   };
   
-  // 🧠 MEMORY FIX — prevent Android WebView crash
-  setTimeout(() => {
-    URL.revokeObjectURL(previewURL);
-  }, 2000);
+  
 
   // 🔒 Lock UI to this task after first photo
   if (CURRENT_PHOTO_INDEX === 1) {
@@ -711,10 +708,17 @@ cameraInput.onchange = async e => {
       );
     }
 
+    // 🧠 FREE ALL PREVIEW MEMORY AFTER SUBMIT
+    if (PHOTO_BUFFER[taskKey]) {
+      Object.values(PHOTO_BUFFER[taskKey]).forEach(p => {
+        if (p.previewURL) URL.revokeObjectURL(p.previewURL);
+      });
+    }
+    
     delete PHOTO_BUFFER[taskKey];
     delete processingMap[taskKey];
     ACTIVE_CAPTURE_TASK = null;
-
+    
     loadTasks();
 
   } catch (e) {
