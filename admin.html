@@ -269,7 +269,7 @@ button {
 <div class="admin-header" style="justify-content:space-between;">
   <div style="display:flex;align-items:center;gap:14px;">
     <img src="./logo.jpg" class="admin-logo" alt="Company Logo">
-    <h1>Admin Dashboard <span class="version">V2.4.22</span></h1>
+    <h1>Admin Dashboard <span class="version">V2.4.21</span></h1>
   </div>
 
   <!-- 📅 DATE FILTER -->
@@ -329,6 +329,10 @@ button {
     style="width:100%; padding:10px; padding-right:34px;
            border-radius:6px; border:1px solid #ccc; font-size:14px;"
   >
+  <input id="adminPhotoInput"
+       type="file"
+       accept="image/*"
+       hidden>
   <button
     id="clearSearchBtn"
     onclick="clearSearch()"
@@ -413,6 +417,8 @@ import {
 
 const TASK_CACHE_KEY = "ADMIN_TASK_CACHE_V1";
 
+
+
 /* ===== FIREBASE ===== */
 const firebaseConfig = {
   apiKey: "AIzaSyDFW61pnwLvh6HGKWt10zLYNr860fI8vkg",
@@ -461,6 +467,101 @@ function showLoader(text = "Loading…") {
   setLoaderText(text);
   el.classList.remove("hide");
   el.style.display = "flex";
+}
+
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
+  
+import { getStorage, ref as sRef, uploadBytes, getDownloadURL }
+  from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
+  
+const storage = getStorage(app);
+
+let ADMIN_REPLACE_TASK = null;
+let ADMIN_REPLACE_INDEX = null;
+
+window.replacePhoto = function(taskKey, index) {
+  if (!confirm(`Replace Photo ${index}?`)) return;
+
+  ADMIN_REPLACE_TASK = taskKey;
+  ADMIN_REPLACE_INDEX = index;
+
+  const input = document.getElementById("adminPhotoInput");
+  input.value = "";
+  input.click();
+};
+
+document.getElementById("adminPhotoInput").onchange = async e => {
+  const file = e.target.files?.[0];
+  if (!file || !ADMIN_REPLACE_TASK) return;
+
+  showLoader("Uploading replacement photo…");
+
+  try {
+    const blob = await compressAdminImage(file);
+
+    const filename =
+      `ADMIN_${ADMIN_REPLACE_TASK}_P${ADMIN_REPLACE_INDEX}_` +
+      `${Date.now()}.jpg`;
+
+    const imgRef =
+      sRef(storage, `tasks/${ADMIN_REPLACE_TASK}/${filename}`);
+
+    await uploadBytes(imgRef, blob);
+
+    const url = await getDownloadURL(imgRef);
+
+    const payload = {
+      [`photo${ADMIN_REPLACE_INDEX}Url`]: url,
+      [`photo${ADMIN_REPLACE_INDEX}Filename`]: filename,
+      [`photo${ADMIN_REPLACE_INDEX}TakenAt`]: new Date().toISOString(),
+
+      editedByAdmin: true,
+      editedAt: new Date().toISOString(),
+      editedReason: "Admin photo replacement"
+    };
+
+    await update(ref(db, `tasks/${ADMIN_REPLACE_TASK}`), payload);
+
+    clearTaskCache();
+
+    alert("✅ Photo replaced");
+
+    loadTasks("COMPLETED");
+
+  } catch (err) {
+    alert("❌ Upload failed");
+    console.error(err);
+  } finally {
+    hideLoader();
+  }
+};
+
+function compressAdminImage(file) {
+  return new Promise(resolve => {
+    const img = new Image();
+    const r = new FileReader();
+
+    r.onload = e => img.src = e.target.result;
+
+    img.onload = () => {
+      const c = document.createElement("canvas");
+      let w = img.width, h = img.height;
+
+      if (w > 1600) {
+        h *= 1600 / w;
+        w = 1600;
+      }
+
+      c.width = w;
+      c.height = h;
+
+      c.getContext("2d").drawImage(img, 0, 0, w, h);
+      c.toBlob(b => resolve(b), "image/jpeg", 0.8);
+    };
+
+    r.readAsDataURL(file);
+  });
 }
 
 function reloadAllAdminViews() {
@@ -583,8 +684,7 @@ function clearTaskCache() {
   localStorage.removeItem(TASK_CACHE_KEY);
 }
 
-const app = initializeApp(firebaseConfig);
-const db = getDatabase(app);
+
 
 
 let CURRENT_STATUS = null;
@@ -1037,56 +1137,72 @@ window.loadTasks = async function (status) {
     div.className = `task ${status === "COMPLETED" ? "completed" : "pending"}`;
 
     div.innerHTML = `
-      <div class="task-header">
-        <b>${t.CUSTOMERNAME || ""}</b>
-        <div class="small">${t.ADDRESS || ""}</div>
-        <div class="small">Driver: ${t.driverId || "—"}</div>
-        ${sla ? `<div class="small ${sla.cls}">⏱ ${sla.text}</div>` : ""}
+  <div class="task-header">
+    <b>${t.CUSTOMERNAME || ""}</b>
+    <div class="small">${t.ADDRESS || ""}</div>
+    <div class="small">Driver: ${t.driverId || "—"}</div>
+    ${sla ? `<div class="small ${sla.cls}">⏱ ${sla.text}</div>` : ""}
+  </div>
+
+  <div class="task-details" data-task-id="${t._key}" style="display:none">
+    ${renderTaskDetails(t)}
+
+    ${t.status === "COMPLETED" ? renderDynamicCompletedFields(t) : ""}
+
+    ${t.status === "COMPLETED" ? `
+      <button class="deleteBtn"
+        onclick="revertToPending('${t._key}')">
+        🔁 Back to Pending (Reset)
+      </button>
+    ` : ""}
+
+    ${t.status === "COMPLETED" ? `
+      <div style="
+        display:grid;
+        grid-template-columns:repeat(3,1fr);
+        gap:6px;
+        margin-top:10px;
+      ">
+        ${[1,2,3].map(i => {
+          const url = t[\`photo\${i}Url\`];
+          if (!url) return "";
+          return `
+            <div style="position:relative">
+              <img src="${url}"
+                   onclick="window.open('${url}','_blank')"
+                   style="
+                     width:100%;
+                     height:90px;
+                     object-fit:cover;
+                     border-radius:6px;
+                     border:2px solid #28a745;
+                     cursor:pointer;
+                   ">
+
+              <button
+                onclick="replacePhoto('${t._key}',${i})"
+                style="
+                  position:absolute;
+                  bottom:4px;
+                  right:4px;
+                  background:#000000aa;
+                  color:white;
+                  border:none;
+                  padding:4px 6px;
+                  font-size:11px;
+                  border-radius:4px;
+                  cursor:pointer;
+                "
+              >
+                🔄 Replace
+              </button>
+            </div>
+          `;
+        }).join("")}
       </div>
-
-      <div class="task-details" data-task-id="${t._key}" style="display:none">
-        ${renderTaskDetails(t)}
-
-        ${t.status === "COMPLETED" ? renderDynamicCompletedFields(t) : ""}
-        ${t.status === "COMPLETED" ? `
-          <button class="deleteBtn"
-            onclick="revertToPending('${t._key}')">
-            🔁 Back to Pending (Reset)
-          </button>
-        ` : ""}
-
-        ${t.status === "COMPLETED" ? `
-          <div style="
-            display:grid;
-            grid-template-columns:repeat(3,1fr);
-            gap:6px;
-            margin-top:10px;
-          ">
-            ${[1,2,3].map(i => {
-              const url = t[`photo${i}Url`];
-              if (!url) return "";
-              return `
-                <img src="${url}"
-                  onclick="window.open('${url}','_blank')"
-                  style="
-                    width:100%;
-                    height:90px;
-                    object-fit:cover;
-                    border-radius:6px;
-                    border:2px solid #28a745;
-                    cursor:pointer;
-                  ">
-              `;
-            }).join("")}
-          </div>
-        ` : ""}
-
-        <div class="form-actions">
-          <button class="toggleBtn" onclick="enableEdit(this)">✏ Modify Task</button>
-        </div>
-      </div>
-    `;
-
+    ` : ""}
+  </div>
+`;
     const header = div.querySelector(".task-header");
     const details = div.querySelector(".task-details");
     header.onclick = () =>
