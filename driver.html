@@ -161,7 +161,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebas
 import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.5.12.4.6-DYNAMIC";
+const VERSION = "Driver v3.5.12.4.7-DYNAMIC";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -902,21 +902,27 @@ async function loadTasks() {
       const merged = serverTasks.map(st => {
         const local = localTasks.find(lt => lt._key === st._key);
       
-        // ✅ SERVER COMPLETED ALWAYS WINS
+        // ✅ SERVER COMPLETED ALWAYS FINAL
         if (st.status === "COMPLETED") {
-          return {
-            ...st,
-            finalized: true
-          };
+          return { ...st, finalized: true };
+        }
+      
+        // ✅ If local offline processing exists → LOCAL WINS
+        if (local && (
+            local.status === "OFFLINE_PENDING" ||
+            processingMap[local._key] ||
+            uploadingMap[local._key] || 
+            PHOTO_BUFFER[local._key]
+        )) {
+          return { ...local, ...st, status: local.status };
         }
       
         if (!local) return st;
-
-        // ✅ Server always wins for dates & status
+      
         return {
           ...local,
           ...st,
-          finalized: st.status === "COMPLETED"
+          finalized: false
         };
       });
     
