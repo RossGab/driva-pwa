@@ -269,7 +269,7 @@ button {
 <div class="admin-header" style="justify-content:space-between;">
   <div style="display:flex;align-items:center;gap:14px;">
     <img src="./logo.jpg" class="admin-logo" alt="Company Logo">
-    <h1>Admin Dashboard <span class="version">V2.4.21</span></h1>
+    <h1>Admin Dashboard <span class="version">V2.4.22</span></h1>
   </div>
 
   <!-- 📅 DATE FILTER -->
@@ -897,6 +897,7 @@ window.revertToPending = async function (taskKey) {
   Object.assign(rebuilt, {
     status: "PENDING",
     finalized: false,
+    forceReopen: true,   
     reopenedAt: new Date().toISOString()
   });
 
