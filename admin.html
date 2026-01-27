@@ -269,7 +269,7 @@ button {
 <div class="admin-header" style="justify-content:space-between;">
   <div style="display:flex;align-items:center;gap:14px;">
     <img src="./logo.jpg" class="admin-logo" alt="Company Logo">
-    <h1>Admin Dashboard <span class="version">V2.4.22</span></h1>
+    <h1>Admin Dashboard <span class="version">V2.4.21</span></h1>
   </div>
 
   <!-- 📅 DATE FILTER -->
@@ -897,7 +897,6 @@ window.revertToPending = async function (taskKey) {
   Object.assign(rebuilt, {
     status: "PENDING",
     finalized: false,
-    forceReopen: true,   
     reopenedAt: new Date().toISOString()
   });
 
@@ -1082,39 +1081,7 @@ window.loadTasks = async function (status) {
         ` : ""}
 
         <div class="form-actions">
-          <button class="toggleBtn" onclick="enableEdit(this)">✏ Modify Task</button>
-        </div>
-      </div>
-    `;
-
-    const header = div.querySelector(".task-header");
-    const details = div.querySelector(".task-details");
-    header.onclick = () =>
-      details.style.display = details.style.display === "none" ? "block" : "none";
-
-    taskList.appendChild(div);
-  });
-};
-
-
-window.enableEdit = function (btn) {
-  const details = btn.closest(".task-details");
-  const fields = details.querySelectorAll("input, textarea, select");
-
-  fields.forEach(el => {
-    el.dataset.original = el.value;
-    el.disabled = false;
-  });
-
-  details.querySelector(".form-actions").innerHTML = `
-    <button class="toggleBtn" onclick="saveEdit(this)">💾 Save</button>
-    <button class="toggleBtn" style="background:#777"
-      onclick="cancelEdit(this)">❌ Cancel</button>
-  `;
-};
-  
-window.cancelEdit = function (btn) {
-  const details = btn.closest(".task-details");<!DOCTYPE html>
+          <button class="toggleBtn" onclick="enableEdit(this)">✏ Modify <!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -1385,7 +1352,7 @@ button {
 <div class="admin-header" style="justify-content:space-between;">
   <div style="display:flex;align-items:center;gap:14px;">
     <img src="./logo.jpg" class="admin-logo" alt="Company Logo">
-    <h1>Admin Dashboard <span class="version">V2.4.22</span></h1>
+    <h1>Admin Dashboard <span class="version">V2.4.21</span></h1>
   </div>
 
   <!-- 📅 DATE FILTER -->
@@ -2013,7 +1980,6 @@ window.revertToPending = async function (taskKey) {
   Object.assign(rebuilt, {
     status: "PENDING",
     finalized: false,
-    forceReopen: true,   
     reopenedAt: new Date().toISOString()
   });
 
@@ -2661,7 +2627,39 @@ function setLoaderText(txt) {
   display:none;
 "></div>
 </body>
-</html>3
+</html></button>
+        </div>
+      </div>
+    `;
+
+    const header = div.querySelector(".task-header");
+    const details = div.querySelector(".task-details");
+    header.onclick = () =>
+      details.style.display = details.style.display === "none" ? "block" : "none";
+
+    taskList.appendChild(div);
+  });
+};
+
+
+window.enableEdit = function (btn) {
+  const details = btn.closest(".task-details");
+  const fields = details.querySelectorAll("input, textarea, select");
+
+  fields.forEach(el => {
+    el.dataset.original = el.value;
+    el.disabled = false;
+  });
+
+  details.querySelector(".form-actions").innerHTML = `
+    <button class="toggleBtn" onclick="saveEdit(this)">💾 Save</button>
+    <button class="toggleBtn" style="background:#777"
+      onclick="cancelEdit(this)">❌ Cancel</button>
+  `;
+};
+  
+window.cancelEdit = function (btn) {
+  const details = btn.closest(".task-details");
   const fields = details.querySelectorAll("input, textarea, select");
 
   fields.forEach(el => {
