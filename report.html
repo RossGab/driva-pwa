@@ -57,7 +57,7 @@ button:hover {
 
 <body>
 
-<h2>📊 Task Report V2.0.1</h2>
+<h2>📊 Task Report V2.0.2</h2>
 
 <button
   onclick="location.href='admin.html'"
@@ -214,7 +214,16 @@ function fillSelect(id, field) {
 /* ===== DATE HELPERS ===== */
 function toDateOnly(val) {
   if (!val) return null;
-  return new Date(val).setHours(0,0,0,0);
+
+  const d = new Date(val);
+  if (isNaN(d.getTime())) return null;
+
+  const ph = new Date(
+    d.toLocaleString("en-US", { timeZone: "Asia/Manila" })
+  );
+
+  ph.setHours(0,0,0,0);
+  return ph.getTime();
 }
 
 /* ===== EXPORT ===== */
@@ -278,16 +287,23 @@ window.generateReport = function () {
     });
 
   /* ===== FINAL SYSTEM COLUMNS (ALWAYS LAST) ===== */
-  row.LATITUDE = t.latitude || "";
-  row.LONGITUDE = t.longitude || "";
+  row.LATITUDE = t.LATITUDE || "";
+  row.LONGITUDE = t.LONGITUDE || "";
 
   row.CREATED_AT = t.createdAt || "";
   row.COMPLETED_AT = t.uploadedAt || "";
 
-  row.IMAGE_FILENAME = t.filename || "";
-  row.IMAGE_URL = t.imageUrl
-    ? { t: "s", v: "View Image", l: { Target: t.imageUrl } }
-    : "";
+  row.PHOTO1_URL = t.photo1Url
+  ? { t: "s", v: "View Photo 1", l: { Target: t.photo1Url } }
+  : "";
+
+row.PHOTO2_URL = t.photo2Url
+  ? { t: "s", v: "View Photo 2", l: { Target: t.photo2Url } }
+  : "";
+
+row.PHOTO3_URL = t.photo3Url
+  ? { t: "s", v: "View Photo 3", l: { Target: t.photo3Url } }
+  : "";
 
   return row;
 });
