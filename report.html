@@ -57,7 +57,7 @@ button:hover {
 
 <body>
 
-<h2>📊 Task Report V2.0.2</h2>
+<h2>📊 Task Report V2.0.3</h2>
 
 <button
   onclick="location.href='admin.html'"
@@ -312,8 +312,13 @@ row.PHOTO3_URL = t.photo3Url
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "Tasks");
 
-  const today = new Date().toISOString().slice(0,10);
-  XLSX.writeFile(wb, `Task_Report_${today}.xlsx`);
+  const df = document.getElementById("dateFrom").value || "ALL";
+  const dt = document.getElementById("dateTo").value || "ALL";
+  
+  XLSX.writeFile(
+    wb,
+    `Task_Report_${df}_to_${dt}.xlsx`
+  );
 };
 </script>
 
