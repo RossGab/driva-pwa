@@ -81,7 +81,7 @@ select, input[type="date"] {
 
 <body>
 
-<h2>Manage Tasks V4.0.8.5</h2>
+<h2>Manage Tasks V4.0.8.6</h2>
 
 <button onclick="location.href='admin.html'" class="small-btn">⬅ Back</button>
 
@@ -104,6 +104,12 @@ select, input[type="date"] {
     <select id="filterDMZ"><option value="">All DMZ</option></select>
     <select id="filterMRU"><option value="">All MRU</option></select>
     <button id="bulkBtn" disabled onclick="openBulkActions()">Bulk Action</button>
+    <input
+  type="text"
+  id="searchBox"
+  placeholder="Search customer, address, account, meter…"
+  style="min-width:220px;"
+>
   </div>
 </div>
 
@@ -162,6 +168,14 @@ const filterBA = document.getElementById("filterBA");
 const filterDMZ = document.getElementById("filterDMZ");
 const filterMRU = document.getElementById("filterMRU");
 const checkAll = document.getElementById("checkAll");
+
+const searchBox = document.getElementById("searchBox");
+let SEARCH_TERM = "";
+
+searchBox.addEventListener("input", e => {
+  SEARCH_TERM = e.target.value.toLowerCase().trim();
+  applyFilters();
+}); 
 
 let TASKS = [];
 
@@ -252,31 +266,58 @@ function buildFilterLists() {
 function applyFilters() {
   let data = [...TASKS];
 
+  /* ===== DATE FILTER ===== */
   if (filterDateFrom.value || filterDateTo.value) {
     const from = filterDateFrom.value || "0000-00-00";
     const to   = filterDateTo.value   || "9999-99-99";
-  
+
     data = data.filter(t => {
       const d = normalizeDate(t.createdAt);
       return d && d >= from && d <= to;
     });
   }
 
-  if(filterJob.value)
-    data = data.filter(t=>t.JOBTYPE===filterJob.value);
+  /* ===== DROPDOWN FILTERS ===== */
+  if (filterDriver.value)
+    data = data.filter(t => t.driverId === filterDriver.value);
 
-  if(filterBA.value)
-    data = data.filter(t=>t.BA===filterBA.value);
-  
-  if(filterDMZ.value)
-    data = data.filter(t=>t.DMZ===filterDMZ.value);
+  if (filterJob.value)
+    data = data.filter(t => t.JOBTYPE === filterJob.value);
 
-  if(filterMRU.value)
+  if (filterBA.value)
+    data = data.filter(t => t.BA === filterBA.value);
+
+  if (filterDMZ.value)
+    data = data.filter(t => t.DMZ === filterDMZ.value);
+
+  if (filterMRU.value)
     data = data.filter(t => t.MRU === filterMRU.value);
-  
+
+  /* ===== SEARCH FILTER ===== */
+  if (SEARCH_TERM) {
+    data = data.filter(t => {
+      const haystack = [
+        t.CUSTOMERNAME,
+        t.ADDRESS,
+        t.ACCOUNTNUMBER,
+        t.METERNUMBER,
+        t.JOBTYPE,
+        t.BA,
+        t.DMZ,
+        t.MRU,
+        t.driverId
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+
+      return haystack.includes(SEARCH_TERM);
+    });
+  }
 
   renderTable(data);
 }
+    
 
 /* ===== RENDER ===== */
 function renderTable(data) {
