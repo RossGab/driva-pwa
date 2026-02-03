@@ -175,7 +175,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebas
 import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.5.12.5.3-DYNAMIC";
+const VERSION = "Driver v3.5.12.5.0-DYNAMIC";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -206,13 +206,6 @@ const processingMap = {};
 const uploadingMap = {};
 let SEARCH_TERM = "";
 const dateFilter = document.getElementById("dateFilter");
-let DEVICE_INFO = null;
-
-async function ensureDeviceInfo() {
-  if (DEVICE_INFO) return DEVICE_INFO;
-  DEVICE_INFO = await getDeviceInfo();
-  return DEVICE_INFO;
-}
 
 /* ===============================
    DEVICE CAPABILITY DETECTION
@@ -229,37 +222,12 @@ const LOW_END_DEVICE =
   DEVICE_PROFILE.memory <= 2 ||
   DEVICE_PROFILE.cores <= 4;
 
+const BAD_NETWORK =
+  ["slow-2g", "2g"].includes(DEVICE_PROFILE.network);
 
-// ===============================
-// PROCESSING SAFETY WATCHDOG
-// ===============================
-const PROCESSING_TIMEOUT_MS = LOW_END_DEVICE ? 45000 : 30000;
-const processingStartTime = {};
-
-async function sendDeviceProfileToFirebase(driverId) {
-  const key = `deviceProfileSent_${driverId}`;
-  if (localStorage.getItem(key)) return; // send once only
-
-  try {
-    await update(ref(db, `deviceProfiles/${driverId}`), {
-      memoryGB: DEVICE_PROFILE.memory,
-      cpuCores: DEVICE_PROFILE.cores,
-      networkType: DEVICE_PROFILE.network,
-      lowEndDevice: LOW_END_DEVICE,
-      badNetwork:
-        ["slow-2g", "2g"].includes(
-          navigator.connection?.effectiveType || ""
-        ),
-      standalone: DEVICE_PROFILE.standalone,
-      appVersion: VERSION,
-      lastReported: new Date().toISOString()
-    });
-
-    localStorage.setItem(key, "1");
-  } catch (e) {
-    console.warn("Device profile upload failed", e);
-  }
-}
+console.log("📱 DEVICE PROFILE", DEVICE_PROFILE);
+console.log("⚠️ L E?", LOW_END_DEVICE);
+console.log("📶 BAD NETWORK?", BAD_NETWORK);
 
 /* ===============================
    LOW PERFORMANCE MODE INDICATOR
@@ -274,16 +242,10 @@ if (LOW_END_DEVICE && perfModeEl) {
    STEP 4: NETWORK DEGRADATION
 =============================== */
 function isEffectivelyOffline() {
-  const conn = navigator.connection;
-
-  const badNetwork =
-    conn &&
-    ["slow-2g", "2g"].includes(conn.effectiveType);
-
   return (
     !navigator.onLine ||
-    badNetwork ||
-    conn?.saveData === true
+    BAD_NETWORK ||
+    navigator.connection?.saveData === true
   );
 }
 
@@ -300,67 +262,9 @@ if (!sessionStorage.getItem("deviceProfileLogged")) {
   console.log("📱 DEVICE PROFILE", {
     ...DEVICE_PROFILE,
     lowEnd: LOW_END_DEVICE,
-    badNetwork: ["slow-2g", "2g"].includes(
-      navigator.connection?.effectiveType || ""
-    )
+    badNetwork: BAD_NETWORK
   });
   sessionStorage.setItem("deviceProfileLogged", "1");
-}
-
-async function getDeviceInfo() {
-  const ua = navigator.userAgent || "";
-  const platform = navigator.platform || "";
-
-  let brand = "Unknown";
-  let model = "Unknown";
-  let os = "Unknown";
-
-  // OS
-  if (/Android/i.test(ua)) {
-    os = ua.match(/Android\s([\d.]+)/)?.[1] || "Android";
-  }
-
-  // ✅ Modern Chrome (ALL devices)
-  if (navigator.userAgentData?.getHighEntropyValues) {
-    try {
-      const uaData = await navigator.userAgentData.getHighEntropyValues([
-        "platform",
-        "platformVersion",
-        "model",
-        "fullVersionList"
-      ]);
-
-      if (uaData.model) model = uaData.model;
-
-      const brandEntry = uaData.fullVersionList
-        ?.find(b => !/Chromium|Google Chrome/i.test(b.brand));
-
-      if (brandEntry) brand = brandEntry.brand;
-
-    } catch (e) {
-      console.warn("UA-CH blocked", e);
-    }
-  }
-
-  // 🔁 Fallback (older browsers / WebView)
-  if (brand === "Unknown") {
-    if (/Samsung|SM-/i.test(ua)) brand = "Samsung";
-    else if (/HUAWEI|HONOR/i.test(ua)) brand = "Huawei";
-    else if (/Xiaomi|Redmi|POCO/i.test(ua)) brand = "Xiaomi";
-    else if (/OPPO/i.test(ua)) brand = "OPPO";
-    else if (/VIVO/i.test(ua)) brand = "VIVO";
-  }
-
-  return {
-    brand,
-    model,
-    os,
-    platform,
-    userAgent: ua,
-    isStandalone:
-      window.matchMedia("(display-mode: standalone)").matches ||
-      window.navigator.standalone === true
-  };
 }
 
 dateFilter.value = getTodayPH();
@@ -398,7 +302,6 @@ searchBox.addEventListener("input", e => {
 let DRIVER_ID = localStorage.getItem("driverId");
 while (!DRIVER_ID) DRIVER_ID = prompt("Enter Driver ID");
 localStorage.setItem("driverId", DRIVER_ID);
-sendDeviceProfileToFirebase(DRIVER_ID);
 
 document.getElementById("settingsBtn").onclick = () => {
   const choice = prompt(
@@ -426,21 +329,7 @@ document.getElementById("settingsBtn").onclick = () => {
 let gpsWatchId = null;
 
 appVersion.innerText = `Driver: ${DRIVER_ID} | ${VERSION}`;
-(async () => {
-  const deviceInfo = await ensureDeviceInfo();
-
-  await update(ref(db, `driverStatus/${DRIVER_ID}`), {
-    deviceBrand: deviceInfo.brand,
-    deviceModel: deviceInfo.model,
-    osVersion: deviceInfo.os,
-    platform: deviceInfo.platform,
-    isPWA: deviceInfo.isStandalone,
-    appVersion: VERSION,
-    lastSeen: new Date().toISOString()
-  });
-
-  startGPSTracking(DRIVER_ID);
-})();
+startGPSTracking(DRIVER_ID);
 
 async function loadDriverUI(jobType) {
   // 1️⃣ Memory cache
@@ -695,14 +584,12 @@ function startGPSTracking(driverId) {
           `📡 GPS locked (±${Math.round(pos.coords.accuracy)}m)`;
       }
 
-      const payload = {
+      update(ref(db, `driverStatus/${driverId}`), {
         latitude: pos.coords.latitude,
         longitude: pos.coords.longitude,
         accuracy: pos.coords.accuracy || null,
         lastSeen: new Date().toISOString()
-      };
-      
-      update(ref(db, `driverStatus/${driverId}`), payload);
+      });
     },
     handleGPSError,
     {
@@ -909,9 +796,8 @@ cameraInput.onchange = async e => {
     setQueue(q);
 
     delete PHOTO_BUFFER[taskKey];
-    delete processingStartTime[taskKey]; // ✅ clear watchdog
     ACTIVE_CAPTURE_TASK = null;
-    
+
     loadTasks();
     submitLock[taskKey] = false;
     if (btn) {
@@ -926,7 +812,6 @@ cameraInput.onchange = async e => {
   // ==============================
 
   processingMap[taskKey] = true;
-  processingStartTime[taskKey] = Date.now(); // ⏱ start watchdog
   loadTasks();
 
   try {
@@ -956,7 +841,6 @@ cameraInput.onchange = async e => {
     
     delete PHOTO_BUFFER[taskKey];
     delete processingMap[taskKey];
-    delete processingStartTime[taskKey]; // ✅ clear watchdog
     ACTIVE_CAPTURE_TASK = null;
     
     setTimeout(() => {
@@ -1019,39 +903,6 @@ function resolveStatus(task) {
   return task.status || "PENDING";
 }
 
-function checkProcessingTimeouts() {
-  const now = Date.now();
-
-  for (const taskKey in processingMap) {
-    const started = processingStartTime[taskKey];
-    if (!started) continue;
-
-    if (now - started > PROCESSING_TIMEOUT_MS) {
-      console.warn("⏱ Processing timeout → force offline:", taskKey);
-
-      let cachedTasks =
-        JSON.parse(localStorage.getItem(TASK_CACHE_KEY) || "[]");
-
-      cachedTasks = cachedTasks.filter(t => t._key !== taskKey);
-      cachedTasks.push({
-        _key: taskKey,
-        status: "OFFLINE_PENDING",
-        finalized: false
-      });
-
-      localStorage.setItem(
-        TASK_CACHE_KEY,
-        JSON.stringify(cachedTasks)
-      );
-
-      delete processingMap[taskKey];
-      delete processingStartTime[taskKey];
-
-      loadTasks();
-    }
-  }
-}
-
 async function uploadNow(
     taskKey,
     blob,
@@ -1062,8 +913,6 @@ async function uploadNow(
     photoIndex,
     isLastPhoto
   ) {
-  // 🔒 Mark uploading state
-  uploadingMap[taskKey] = true;
   /* ===============================
      STEP 6: PAUSE GPS DURING UPLOAD
   =============================== */
@@ -1155,13 +1004,12 @@ localStorage.setItem(
 /* ================= FIX #3 END ================= */
   
   updateRefreshLock();
-  // 🔓 Clear uploading state
-  delete uploadingMap[taskKey];
-  
-  // ✅ Force GPS resume safely
-  if (!gpsWatchId) {
-    startGPSTracking(DRIVER_ID);
-  }  
+  // 🔁 Resume GPS after upload
+  setTimeout(() => {
+    if (!gpsWatchId) {
+      startGPSTracking(DRIVER_ID);
+    }
+  }, LOW_END_DEVICE ? 3000 : 1000);
 }
 
 async function preloadDriverUIConfig(tasks) {
@@ -1328,8 +1176,6 @@ const filtered = tasks
     taskList.innerHTML = "⚠️ Failed to load tasks. Pull to refresh.";
   }
 }
-
-setInterval(checkProcessingTimeouts, 5000);
 
 async function detectGPSPermission() {
   if (!navigator.permissions) return;
@@ -1789,14 +1635,6 @@ async function processOfflineQueue() {
       uploadingMap[item.taskKey] = true;
       loadTasks();
 
-      const remaining = getQueue().filter(
-        q => q.taskKey === item.taskKey
-      );
-      
-      const isLast =
-        remaining.length === 1 &&
-        remaining[0].photoIndex === item.photoIndex;
-      
       await uploadNow(
         item.taskKey,
         blob,
@@ -1805,7 +1643,7 @@ async function processOfflineQueue() {
         item.deliveryData || {},
         item.gps,
         item.photoIndex,
-        isLast
+        true   // ✅ last photo during offline replay
       );
 
       let q2 = getQueue();
