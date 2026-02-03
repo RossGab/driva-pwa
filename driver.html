@@ -175,7 +175,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebas
 import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.5.12.5.1-DYNAMIC";
+const VERSION = "Driver v3.5.12.5.2-DYNAMIC";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -206,7 +206,13 @@ const processingMap = {};
 const uploadingMap = {};
 let SEARCH_TERM = "";
 const dateFilter = document.getElementById("dateFilter");
-let DEVICE_INFO_SENT = false;
+let DEVICE_INFO = null;
+
+async function ensureDeviceInfo() {
+  if (DEVICE_INFO) return DEVICE_INFO;
+  DEVICE_INFO = await getDeviceInfo();
+  return DEVICE_INFO;
+}
 
 /* ===============================
    DEVICE CAPABILITY DETECTION
@@ -286,7 +292,7 @@ if (!sessionStorage.getItem("deviceProfileLogged")) {
   sessionStorage.setItem("deviceProfileLogged", "1");
 }
 
-function getDeviceInfo() {
+async function getDeviceInfo() {
   const ua = navigator.userAgent || "";
   const platform = navigator.platform || "";
 
@@ -294,38 +300,40 @@ function getDeviceInfo() {
   let model = "Unknown";
   let os = "Unknown";
 
-  // Android detection
+  // OS
   if (/Android/i.test(ua)) {
     os = ua.match(/Android\s([\d.]+)/)?.[1] || "Android";
+  }
 
-    // Huawei
-    if (/HUAWEI|HONOR/i.test(ua)) {
-      brand = "Huawei";
-      model =
-        ua.match(/(HUAWEI|HONOR)[-_ ]?([A-Z0-9]+)/i)?.[2] ||
-        ua.match(/;\s?([A-Z0-9\-]+)\sBuild/i)?.[1] ||
-        "Unknown";
-    }
+  // ✅ Modern Chrome (ALL devices)
+  if (navigator.userAgentData?.getHighEntropyValues) {
+    try {
+      const uaData = await navigator.userAgentData.getHighEntropyValues([
+        "platform",
+        "platformVersion",
+        "model",
+        "fullVersionList"
+      ]);
 
-    // Samsung
-    else if (/SM-/i.test(ua)) {
-      brand = "Samsung";
-      model = ua.match(/SM-[A-Z0-9]+/i)?.[0] || "Unknown";
-    }
+      if (uaData.model) model = uaData.model;
 
-    // Xiaomi / Redmi
-    else if (/Mi|Redmi|POCO/i.test(ua)) {
-      brand = "Xiaomi";
-      model =
-        ua.match(/(Mi|Redmi|POCO)\s?[A-Z0-9 ]+/i)?.[0] || "Unknown";
-    }
+      const brandEntry = uaData.fullVersionList
+        ?.find(b => !/Chromium|Google Chrome/i.test(b.brand));
 
-    // Oppo / Vivo
-    else if (/OPPO|VIVO/i.test(ua)) {
-      brand = "OPPO/VIVO";
-      model =
-        ua.match(/(OPPO|VIVO)[-_ ]?[A-Z0-9]+/i)?.[0] || "Unknown";
+      if (brandEntry) brand = brandEntry.brand;
+
+    } catch (e) {
+      console.warn("UA-CH blocked", e);
     }
+  }
+
+  // 🔁 Fallback (older browsers / WebView)
+  if (brand === "Unknown") {
+    if (/Samsung|SM-/i.test(ua)) brand = "Samsung";
+    else if (/HUAWEI|HONOR/i.test(ua)) brand = "Huawei";
+    else if (/Xiaomi|Redmi|POCO/i.test(ua)) brand = "Xiaomi";
+    else if (/OPPO/i.test(ua)) brand = "OPPO";
+    else if (/VIVO/i.test(ua)) brand = "VIVO";
   }
 
   return {
@@ -403,7 +411,21 @@ document.getElementById("settingsBtn").onclick = () => {
 let gpsWatchId = null;
 
 appVersion.innerText = `Driver: ${DRIVER_ID} | ${VERSION}`;
-startGPSTracking(DRIVER_ID);
+(async () => {
+  const deviceInfo = await ensureDeviceInfo();
+
+  await update(ref(db, `driverStatus/${DRIVER_ID}`), {
+    deviceBrand: deviceInfo.brand,
+    deviceModel: deviceInfo.model,
+    osVersion: deviceInfo.os,
+    platform: deviceInfo.platform,
+    isPWA: deviceInfo.isStandalone,
+    appVersion: VERSION,
+    lastSeen: new Date().toISOString()
+  });
+
+  startGPSTracking(DRIVER_ID);
+})();
 
 async function loadDriverUI(jobType) {
   // 1️⃣ Memory cache
@@ -664,20 +686,6 @@ function startGPSTracking(driverId) {
         accuracy: pos.coords.accuracy || null,
         lastSeen: new Date().toISOString()
       };
-      
-      // ✅ Send device info ONCE
-      if (!DEVICE_INFO_SENT) {
-        const deviceInfo = getDeviceInfo();
-      
-        payload.deviceBrand = deviceInfo.brand;
-        payload.deviceModel = deviceInfo.model;
-        payload.osVersion = deviceInfo.os;
-        payload.platform = deviceInfo.platform;
-        payload.isPWA = deviceInfo.isStandalone;
-        payload.appVersion = VERSION;
-      
-        DEVICE_INFO_SENT = true;
-      }
       
       update(ref(db, `driverStatus/${driverId}`), payload);
     },
