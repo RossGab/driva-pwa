@@ -161,7 +161,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebas
 import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.5.12.4.11-DYNAMIC";
+const VERSION = "Driver v3.5.12.4.12-DYNAMIC";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -237,15 +237,26 @@ while (!DRIVER_ID) DRIVER_ID = prompt("Enter Driver ID");
 localStorage.setItem("driverId", DRIVER_ID);
 
 document.getElementById("settingsBtn").onclick = () => {
-  const current = localStorage.getItem("driverId") || "";
+  const choice = prompt(
+    "⚙️ Settings\n\n" +
+    "1 — Change Driver ID\n" +
+    "2 — Clear Cache\n\n" +
+    "Type 1 or 2:"
+  );
 
-  const next = prompt("Enter new Driver ID", current);
-  if (!next) return;
-  if (next === current) return;
+  if (choice === "1") {
+    const current = localStorage.getItem("driverId") || "";
+    const next = prompt("Enter new Driver ID", current);
+    if (!next || next === current) return;
 
-  localStorage.setItem("driverId", next);
-  alert("Driver ID changed. Reloading…");
-  location.reload();
+    localStorage.setItem("driverId", next);
+    alert("Driver ID changed. Reloading…");
+    location.reload();
+  }
+
+  if (choice === "2") {
+    clearDriverCache();
+  }
 };
 
 let gpsWatchId = null;
@@ -353,6 +364,30 @@ async function loadDriverUI(jobType) {
 
 //   return data;
 // }
+
+function clearDriverCache() {
+  if (!confirm(
+    "This will clear cached tasks, offline uploads, and UI config.\n\n" +
+    "Server data will NOT be affected.\n\nContinue?"
+  )) return;
+
+  // 🔥 LocalStorage keys
+  localStorage.removeItem("cachedTasks");
+  localStorage.removeItem("offlineQueue");
+  localStorage.removeItem("driverUIConfigCache");
+
+  // 🔥 In-memory objects
+  for (const k in PHOTO_BUFFER) delete PHOTO_BUFFER[k];
+  for (const k in processingMap) delete processingMap[k];
+  for (const k in uploadingMap) delete uploadingMap[k];
+  for (const k in BILLING_CACHE) delete BILLING_CACHE[k];
+  for (const k in DRIVER_UI_CACHE) delete DRIVER_UI_CACHE[k];
+
+  ACTIVE_CAPTURE_TASK = null;
+
+  alert("✅ Cache cleared.\n\nReloading app…");
+  location.reload();
+}
 
 function disablePullToRefresh() {
   document.body.style.overscrollBehaviorY = "contain";
