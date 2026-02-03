@@ -225,9 +225,27 @@ const LOW_END_DEVICE =
 const BAD_NETWORK =
   ["slow-2g", "2g"].includes(DEVICE_PROFILE.network);
 
-console.log("📱 DEVICE PROFILE", DEVICE_PROFILE);
-console.log("⚠️ L E?", LOW_END_DEVICE);
-console.log("📶 BAD NETWORK?", BAD_NETWORK);
+async function sendDeviceProfileToFirebase(driverId) {
+  const key = `deviceProfileSent_${driverId}`;
+  if (localStorage.getItem(key)) return; // send once only
+
+  try {
+    await update(ref(db, `deviceProfiles/${driverId}`), {
+      memoryGB: DEVICE_PROFILE.memory,
+      cpuCores: DEVICE_PROFILE.cores,
+      networkType: DEVICE_PROFILE.network,
+      lowEndDevice: LOW_END_DEVICE,
+      badNetwork: BAD_NETWORK,
+      standalone: DEVICE_PROFILE.standalone,
+      appVersion: VERSION,
+      lastReported: new Date().toISOString()
+    });
+
+    localStorage.setItem(key, "1");
+  } catch (e) {
+    console.warn("Device profile upload failed", e);
+  }
+}
 
 /* ===============================
    LOW PERFORMANCE MODE INDICATOR
@@ -302,6 +320,7 @@ searchBox.addEventListener("input", e => {
 let DRIVER_ID = localStorage.getItem("driverId");
 while (!DRIVER_ID) DRIVER_ID = prompt("Enter Driver ID");
 localStorage.setItem("driverId", DRIVER_ID);
+sendDeviceProfileToFirebase(DRIVER_ID);
 
 document.getElementById("settingsBtn").onclick = () => {
   const choice = prompt(
