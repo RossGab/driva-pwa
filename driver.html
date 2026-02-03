@@ -161,7 +161,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebas
 import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.5.12.4.11-DYNAMIC";
+const VERSION = "Driver v3.5.14-DYNAMIC";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -190,6 +190,46 @@ const QUEUE_KEY = "offlineQueue";
 const TASK_CACHE_KEY = "cachedTasks";
 const processingMap = {};
 const uploadingMap = {};
+const DB_NAME = "driver_uploads";
+const DB_VERSION = 1;
+const STORE = "photos";
+
+function openDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
+
+    req.onupgradeneeded = e => {
+      const db = e.target.result;
+      if (!db.objectStoreNames.contains(STORE)) {
+        db.createObjectStore(STORE, { keyPath: "id" });
+      }
+    };
+
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function savePhotoToDB(record) {
+  const db = await openDB();
+  const tx = db.transaction(STORE, "readwrite");
+  tx.objectStore(STORE).put(record);
+}
+
+async function getAllPhotosFromDB() {
+  const db = await openDB();
+  return new Promise(resolve => {
+    const tx = db.transaction(STORE, "readonly");
+    const req = tx.objectStore(STORE).getAll();
+    req.onsuccess = () => resolve(req.result || []);
+  });
+}
+
+async function deletePhotoFromDB(id) {
+  const db = await openDB();
+  const tx = db.transaction(STORE, "readwrite");
+  tx.objectStore(STORE).delete(id);
+}
 let SEARCH_TERM = "";
 const dateFilter = document.getElementById("dateFilter");
 
@@ -577,6 +617,16 @@ cameraInput.onchange = async e => {
     gps,
     deliveryData: BILLING_CACHE[CURRENT_TASK] || {}
   };
+
+  await savePhotoToDB({
+  id: `${CURRENT_TASK}_${CURRENT_PHOTO_INDEX}`,
+  taskKey: CURRENT_TASK,
+  photoIndex: CURRENT_PHOTO_INDEX,
+  blob,
+  takenAt: new Date().toISOString(),
+  gps,
+  deliveryData: BILLING_CACHE[CURRENT_TASK] || {}
+});
   
   
 
@@ -656,19 +706,9 @@ cameraInput.onchange = async e => {
 
     const indices = Object.keys(photos).map(Number).sort((a,b)=>a-b);
 
-    for (const i of indices) {
-      const p = photos[i];
-    
-      q.push({
-        taskKey,
-        photoIndex: i,
-        image: p.previewURL,
-        takenAt: p.takenAt,
-        deliveryData: p.deliveryData,
-        gps: p.gps
-      });
-    }
-
+    // Photos already saved in IndexedDB at capture time
+    // Queue only tracks task intent
+    q.push({ taskKey });
     setQueue(q);
 
     delete PHOTO_BUFFER[taskKey];
@@ -1467,62 +1507,66 @@ function validateDynamic(taskKey) {
 }  
 loadTasks();
 
+// 🔁 Resume offline uploads AFTER UI is ready
+setTimeout(processOfflineQueue, 1500);
+
+let OFFLINE_REPLAY_RUNNING = false;
 async function processOfflineQueue() {
+  if (OFFLINE_REPLAY_RUNNING) return;
+  OFFLINE_REPLAY_RUNNING = true;
 
-  const unique = {};
-  const cleanQueue = [];
+  try {
+    if (!navigator.onLine) return;
 
-  for (const item of getQueue()) {
-    const key = item.taskKey + "_" + item.photoIndex;
-    if (!unique[key]) {
-      unique[key] = true;
-      cleanQueue.push(item);
+    const records = await getAllPhotosFromDB();
+    if (!records.length) return;
+
+    console.log("🔁 Replaying offline photos:", records.length);
+
+    for (const p of records) {
+      try {
+        uploadingMap[p.taskKey] = true;
+        loadTasks();
+    
+        await uploadNow(
+          p.taskKey,
+          p.blob,
+          p.takenAt,
+          null,
+          p.deliveryData || {},
+          p.gps,
+          p.photoIndex,
+          true
+        );
+    
+        await deletePhotoFromDB(p.id);
+    
+        delete uploadingMap[p.taskKey];
+        delete processingMap[p.taskKey];
+        loadTasks();
+    
+      } catch (e) {
+        console.error("❌ Offline replay failed for", p.taskKey, e);
+    
+        // 🔒 IMPORTANT:
+        // - DO NOT delete IndexedDB record
+        // - DO NOT stop the loop
+        // - DO NOT clear the queue
+    
+        delete uploadingMap[p.taskKey];
+        loadTasks();
+    
+        continue; // ✅ move to next record safely
+      }
     }
-  }
 
-  setQueue(cleanQueue);
-
-  const q = getQueue();
-  if (!q.length) return;
-
-  console.log("🔁 Processing offline queue:", q.length);
-
-  for (const item of q) {
-    try {
-      const blob = await fetch(item.image).then(r => r.blob());
-
-      uploadingMap[item.taskKey] = true;
-      loadTasks();
-
-      await uploadNow(
-        item.taskKey,
-        blob,
-        item.takenAt,
-        null,
-        item.deliveryData || {},
-        item.gps,
-        item.photoIndex,
-        true   // ✅ last photo during offline replay
-      );
-
-      let q2 = getQueue();
-      q2 = q2.filter(q =>
-        !(q.taskKey === item.taskKey && q.photoIndex === item.photoIndex)
-      );
-      setQueue(q2);
-
-      delete uploadingMap[item.taskKey];
-      delete processingMap[item.taskKey];
-
-      loadTasks();
-
-    } catch (e) {
-      console.error("❌ Offline upload failed", e);
-      return;
+    const remaining = await getAllPhotosFromDB();
+    if (remaining.length === 0) {
+      setQueue([]); // ✅ only clear queue if EVERYTHING uploaded
     }
+  } finally {
+    OFFLINE_REPLAY_RUNNING = false;
   }
-
-  setQueue([]);
 }
 
 window.addEventListener("online", async () => {
