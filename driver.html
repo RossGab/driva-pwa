@@ -128,6 +128,11 @@ img { width:100%;margin-top:8px;border-radius:6px; }
         margin-bottom:10px;border-radius:6px;font-weight:bold;">
 </div>
 <div id="offlineBanner">⚠ Offline — photos will upload automatically</div>
+<div id="uploadCounter"
+  style="background:#fff;padding:8px;text-align:center;
+         margin-bottom:10px;border-radius:6px;
+         font-weight:bold;color:#f39c12;">
+</div>
 
 <input
   type="date"
@@ -161,7 +166,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebas
 import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.5.14.1-DYNAMIC";
+const VERSION = "Driver v3.5.14.2-DYNAMIC";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -705,6 +710,7 @@ cameraInput.onchange = async e => {
   
   // 🧠 Photos already saved to IndexedDB at capture time
   delete PHOTO_BUFFER[taskKey];
+  delete processingMap[taskKey];
   ACTIVE_CAPTURE_TASK = null;
   
   loadTasks();
@@ -1023,6 +1029,7 @@ async function loadTasks() {
     });
     
     updateRemainingCounter(tasks);
+    updateUploadCounter(tasks);
     renderJobTypeFilters(tasks);
     const selectedDate = dateFilter.value; // YYYY-MM-DD
 // 🔒 HIDE OTHER TASKS WHILE CAPTURING
@@ -1111,6 +1118,30 @@ function handleGPSError(err) {
   }
 
   if (gpsStatus) gpsStatus.innerText = msg;
+}
+
+function updateUploadCounter(tasks) {
+  if (!Array.isArray(tasks)) return;
+  const uploadingCount = tasks.filter(t => {
+    const status = resolveStatus(t);
+    return (
+      status === "SYNC_PENDING" ||
+      status === "PROCESSING" ||
+      status === "UPLOADING"
+    );
+  }).length;
+
+  const el = document.getElementById("uploadCounter");
+
+  if (!el) return;
+
+  if (uploadingCount > 0) {
+    el.innerText = `⏫ Pending Uploads: ${uploadingCount}`;
+    el.style.display = "block";
+  } else {
+    el.innerText = "";
+    el.style.display = "none";
+  }
 }
   
 function updateRemainingCounter(tasks) {
@@ -1522,18 +1553,23 @@ let OFFLINE_REPLAY_RUNNING = false;
   
 async function processOfflineQueue() {
   if (OFFLINE_REPLAY_RUNNING) return;
-  OFFLINE_REPLAY_RUNNING = true;
+      OFFLINE_REPLAY_RUNNING = true;
+    
+      try {
+        if (!navigator.onLine || !canUploadNow()) {
+      console.log("⏸ Upload paused — will retry");
+      OFFLINE_REPLAY_RUNNING = false;
+    
+      // 🔁 auto-retry later even if no network event fires
+      setTimeout(processOfflineQueue, 5000);
+      return;
+    }
 
-  try {
-    if (!canUploadNow()) {
-      console.log("⏸ Skipping upload — connection too weak");
+    const records = await getAllPhotosFromDB();
+    if (!records.length) {
       OFFLINE_REPLAY_RUNNING = false;
       return;
     }
-    if (!navigator.onLine) return;
-
-    const records = await getAllPhotosFromDB();
-    if (!records.length) return;
 
     // ✅ GROUP BY TASK
     const grouped = {};
@@ -1543,6 +1579,7 @@ async function processOfflineQueue() {
     }
 
     for (const taskKey of Object.keys(grouped)) {
+      if (!canUploadNow()) break;
       const photos = grouped[taskKey]
         .sort((a, b) => a.photoIndex - b.photoIndex);
 
