@@ -175,7 +175,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebas
 import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.5.12.5.0-DYNAMIC";
+const VERSION = "Driver v3.5.12.5.1-DYNAMIC";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -206,6 +206,7 @@ const processingMap = {};
 const uploadingMap = {};
 let SEARCH_TERM = "";
 const dateFilter = document.getElementById("dateFilter");
+let DEVICE_INFO_SENT = false;
 
 /* ===============================
    DEVICE CAPABILITY DETECTION
@@ -283,6 +284,60 @@ if (!sessionStorage.getItem("deviceProfileLogged")) {
     badNetwork: BAD_NETWORK
   });
   sessionStorage.setItem("deviceProfileLogged", "1");
+}
+
+function getDeviceInfo() {
+  const ua = navigator.userAgent || "";
+  const platform = navigator.platform || "";
+
+  let brand = "Unknown";
+  let model = "Unknown";
+  let os = "Unknown";
+
+  // Android detection
+  if (/Android/i.test(ua)) {
+    os = ua.match(/Android\s([\d.]+)/)?.[1] || "Android";
+
+    // Huawei
+    if (/HUAWEI|HONOR/i.test(ua)) {
+      brand = "Huawei";
+      model =
+        ua.match(/(HUAWEI|HONOR)[-_ ]?([A-Z0-9]+)/i)?.[2] ||
+        ua.match(/;\s?([A-Z0-9\-]+)\sBuild/i)?.[1] ||
+        "Unknown";
+    }
+
+    // Samsung
+    else if (/SM-/i.test(ua)) {
+      brand = "Samsung";
+      model = ua.match(/SM-[A-Z0-9]+/i)?.[0] || "Unknown";
+    }
+
+    // Xiaomi / Redmi
+    else if (/Mi|Redmi|POCO/i.test(ua)) {
+      brand = "Xiaomi";
+      model =
+        ua.match(/(Mi|Redmi|POCO)\s?[A-Z0-9 ]+/i)?.[0] || "Unknown";
+    }
+
+    // Oppo / Vivo
+    else if (/OPPO|VIVO/i.test(ua)) {
+      brand = "OPPO/VIVO";
+      model =
+        ua.match(/(OPPO|VIVO)[-_ ]?[A-Z0-9]+/i)?.[0] || "Unknown";
+    }
+  }
+
+  return {
+    brand,
+    model,
+    os,
+    platform,
+    userAgent: ua,
+    isStandalone:
+      window.matchMedia("(display-mode: standalone)").matches ||
+      window.navigator.standalone === true
+  };
 }
 
 dateFilter.value = getTodayPH();
@@ -603,12 +658,28 @@ function startGPSTracking(driverId) {
           `📡 GPS locked (±${Math.round(pos.coords.accuracy)}m)`;
       }
 
-      update(ref(db, `driverStatus/${driverId}`), {
+      const payload = {
         latitude: pos.coords.latitude,
         longitude: pos.coords.longitude,
         accuracy: pos.coords.accuracy || null,
         lastSeen: new Date().toISOString()
-      });
+      };
+      
+      // ✅ Send device info ONCE
+      if (!DEVICE_INFO_SENT) {
+        const deviceInfo = getDeviceInfo();
+      
+        payload.deviceBrand = deviceInfo.brand;
+        payload.deviceModel = deviceInfo.model;
+        payload.osVersion = deviceInfo.os;
+        payload.platform = deviceInfo.platform;
+        payload.isPWA = deviceInfo.isStandalone;
+        payload.appVersion = VERSION;
+      
+        DEVICE_INFO_SENT = true;
+      }
+      
+      update(ref(db, `driverStatus/${driverId}`), payload);
     },
     handleGPSError,
     {
