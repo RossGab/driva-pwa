@@ -118,20 +118,6 @@ img { width:100%;margin-top:8px;border-radius:6px; }
 </button>
 
 <div id="appVersion"></div>
-<div id="perfMode"
-  style="
-    display:none;
-    background:#f39c12;
-    color:#000;
-    padding:6px;
-    text-align:center;
-    margin-bottom:6px;
-    border-radius:6px;
-    font-size:13px;
-    font-weight:bold;
-  ">
-  ⚠️ Low Performance Mode Enabled
-</div>
 <div id="gpsStatus"
   style="background:#fff;padding:6px;text-align:center;
          margin-bottom:6px;border-radius:6px;font-size:13px;">
@@ -175,7 +161,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebas
 import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.5.12.6.1-DYNAMIC";
+const VERSION = "Driver v3.5.12.4.11-DYNAMIC";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -207,64 +193,11 @@ const uploadingMap = {};
 let SEARCH_TERM = "";
 const dateFilter = document.getElementById("dateFilter");
 
-/* ===============================
-   DEVICE CAPABILITY DETECTION
-=============================== */
-const DEVICE_PROFILE = {
-  memory: navigator.deviceMemory || 2,                 // GB (approx)
-  cores: navigator.hardwareConcurrency || 4,
-  network: navigator.connection?.effectiveType || "unknown",
-  saveData: navigator.connection?.saveData || false,
-  standalone: window.matchMedia("(display-mode: standalone)").matches
-};
-
-const LOW_END_DEVICE =
-  DEVICE_PROFILE.memory <= 2 ||
-  DEVICE_PROFILE.cores <= 4;
-
-const BAD_NETWORK =
-  ["slow-2g", "2g"].includes(DEVICE_PROFILE.network);
-
-console.log("📱 DEVICE PROFILE", DEVICE_PROFILE);
-console.log("⚠️ L E?", LOW_END_DEVICE);
-console.log("📶 BAD NETWORK?", BAD_NETWORK);
-
-/* ===============================
-   LOW PERFORMANCE MODE INDICATOR
-=============================== */
-const perfModeEl = document.getElementById("perfMode");
-
-if (LOW_END_DEVICE && perfModeEl) {
-  perfModeEl.style.display = "block";
-}
-
-/* ===============================
-   STEP 4: NETWORK DEGRADATION
-=============================== */
-function isEffectivelyOffline() {
-  return (
-    !navigator.onLine ||
-    BAD_NETWORK ||
-    navigator.connection?.saveData === true
-  );
-}
-
 // ✅ Default to today
 function getTodayPH() {
   return new Date().toLocaleDateString("en-CA", {
     timeZone: "Asia/Manila"
   });
-}
-/* ===============================
-   STEP 7: ONE-TIME DEVICE LOG
-=============================== */
-if (!sessionStorage.getItem("deviceProfileLogged")) {
-  console.log("📱 DEVICE PROFILE", {
-    ...DEVICE_PROFILE,
-    lowEnd: LOW_END_DEVICE,
-    badNetwork: BAD_NETWORK
-  });
-  sessionStorage.setItem("deviceProfileLogged", "1");
 }
 
 dateFilter.value = getTodayPH();
@@ -303,54 +236,22 @@ let DRIVER_ID = localStorage.getItem("driverId");
 while (!DRIVER_ID) DRIVER_ID = prompt("Enter Driver ID");
 localStorage.setItem("driverId", DRIVER_ID);
 
-document.getElementById("settingsBtn").onclick = async () => {
-  const choice = prompt(
-    "⚙️ Settings\n\n" +
-    "1 — Change Driver ID\n" +
-    "2 — Clear Cache\n" +
-    "3 — Retry Uploads\n\n" +
-    "Type 1, 2, or 3:"
-  );
+document.getElementById("settingsBtn").onclick = () => {
+  const current = localStorage.getItem("driverId") || "";
 
-  if (choice === "1") {
-    const current = localStorage.getItem("driverId") || "";
-    const next = prompt("Enter new Driver ID", current);
-    if (!next || next === current) return;
+  const next = prompt("Enter new Driver ID", current);
+  if (!next) return;
+  if (next === current) return;
 
-    localStorage.setItem("driverId", next);
-    alert("Driver ID changed. Reloading…");
-    location.reload();
-  }
-
-  if (choice === "2") {
-    clearDriverCache();
-  }
-
-  if (choice === "3") {
-    if (!navigator.onLine) {
-      alert("📴 You are offline.\nConnect to the internet and try again.");
-      return;
-    }
-
-    alert("🔁 Retrying pending uploads…");
-
-    try {
-      await processOfflineQueue();
-      await recoverStuckTasks();
-      loadTasks();
-      alert("✅ Retry completed.");
-    } catch (e) {
-      console.error("Retry failed", e);
-      alert("❌ Retry failed. Please try again.");
-    }
-  }
+  localStorage.setItem("driverId", next);
+  alert("Driver ID changed. Reloading…");
+  location.reload();
 };
 
 let gpsWatchId = null;
 
 appVersion.innerText = `Driver: ${DRIVER_ID} | ${VERSION}`;
 startGPSTracking(DRIVER_ID);
-  
 
 async function loadDriverUI(jobType) {
   // 1️⃣ Memory cache
@@ -452,30 +353,6 @@ async function loadDriverUI(jobType) {
 
 //   return data;
 // }
-
-function clearDriverCache() {
-  if (!confirm(
-    "This will clear cached tasks, offline uploads, and UI config.\n\n" +
-    "Server data will NOT be affected.\n\nContinue?"
-  )) return;
-
-  // 🔥 LocalStorage keys
-  localStorage.removeItem("cachedTasks");
-  localStorage.removeItem("offlineQueue");
-  localStorage.removeItem("driverUIConfigCache");
-
-  // 🔥 In-memory objects
-  for (const k in PHOTO_BUFFER) delete PHOTO_BUFFER[k];
-  for (const k in processingMap) delete processingMap[k];
-  for (const k in uploadingMap) delete uploadingMap[k];
-  for (const k in BILLING_CACHE) delete BILLING_CACHE[k];
-  for (const k in DRIVER_UI_CACHE) delete DRIVER_UI_CACHE[k];
-
-  ACTIVE_CAPTURE_TASK = null;
-
-  alert("✅ Cache cleared.\n\nReloading app…");
-  location.reload();
-}
 
 function disablePullToRefresh() {
   document.body.style.overscrollBehaviorY = "contain";
@@ -638,36 +515,15 @@ function compressImage(file) {
   return new Promise(resolve => {
     const img = new Image();
     const r = new FileReader();
-
     r.onload = e => img.src = e.target.result;
-
     img.onload = () => {
       const c = document.createElement("canvas");
-
-      // 🔥 ADAPTIVE SIZE
-      const MAX_WIDTH = LOW_END_DEVICE ? 960 : 1280;
-      const QUALITY   = LOW_END_DEVICE ? 0.55 : 0.65;
-
-      let w = img.width;
-      let h = img.height;
-
-      if (w > MAX_WIDTH) {
-        h *= MAX_WIDTH / w;
-        w = MAX_WIDTH;
-      }
-
-      c.width = w;
-      c.height = h;
-
+      let w = img.width, h = img.height;
+      if (w > 1280) { h *= 1280 / w; w = 1280; }
+      c.width = w; c.height = h;
       c.getContext("2d").drawImage(img, 0, 0, w, h);
-
-      c.toBlob(
-        blob => resolve(blob),
-        "image/jpeg",
-        QUALITY
-      );
+      c.toBlob(b => resolve(b), "image/jpeg", 0.65);
     };
-
     r.readAsDataURL(file);
   });
 }
@@ -738,10 +594,9 @@ cameraInput.onchange = async e => {
   }, 150);
   
   // ✅ Delay UI refresh to prevent Android camera crash
-  setTimeout(
-    () => loadTasks(),
-    LOW_END_DEVICE ? 800 : 300
-  );
+  setTimeout(() => {
+    loadTasks();
+  }, 300);
   } catch (err) {
       console.error("📸 Camera handler crash:", err);
       alert("Camera error — please retry.");
@@ -773,7 +628,7 @@ cameraInput.onchange = async e => {
   // ==============================
   // ✅ OFFLINE MODE HANDLING
   // ==============================
-  if (isEffectivelyOffline()) {
+  if (!navigator.onLine) {
 
     let cachedTasks =
       JSON.parse(localStorage.getItem(TASK_CACHE_KEY) || "[]");
@@ -864,9 +719,7 @@ cameraInput.onchange = async e => {
     delete processingMap[taskKey];
     ACTIVE_CAPTURE_TASK = null;
     
-    setTimeout(() => {
-      loadTasks();
-    }, 800);
+    loadTasks();
 
   } catch (e) {
     console.error(e);
@@ -934,13 +787,6 @@ async function uploadNow(
     photoIndex,
     isLastPhoto
   ) {
-  /* ===============================
-     STEP 6: PAUSE GPS DURING UPLOAD
-  =============================== */
-  if (gpsWatchId !== null) {
-    navigator.geolocation.clearWatch(gpsWatchId);
-    gpsWatchId = null;
-  }
   const taskSnap = await get(ref(db, `tasks/${taskKey}`));
   const task = taskSnap.val() || {};
 
@@ -963,9 +809,7 @@ async function uploadNow(
     .slice(0,14)}.jpg`;
 
   // ✅ SAVE FINAL IMAGE TO LOCAL GALLERY
-  if (navigator.onLine) {
-    saveToGallery(blob, filename);
-  }
+  saveToGallery(blob, filename);
 
   // ===== UPLOAD =====
   const imgRef = sRef(storage, `tasks/${taskKey}/${filename}`);
@@ -1025,12 +869,6 @@ localStorage.setItem(
 /* ================= FIX #3 END ================= */
   
   updateRefreshLock();
-  // 🔁 Resume GPS after upload
-  setTimeout(() => {
-    if (!gpsWatchId) {
-      startGPSTracking(DRIVER_ID);
-    }
-  }, LOW_END_DEVICE ? 3000 : 1000);
 }
 
 async function preloadDriverUIConfig(tasks) {
@@ -1531,48 +1369,6 @@ function getCurrentLocation() {
   });
 }
 
-// 🔥 RECOVERY WATCHDOG — fix stuck PROCESSING tasks
-async function recoverStuckTasks() {
-  const tasks =
-    JSON.parse(localStorage.getItem(TASK_CACHE_KEY) || "[]");
-
-  const queue =
-    JSON.parse(localStorage.getItem(QUEUE_KEY) || "[]");
-
-  let changed = false;
-
-  for (const t of tasks) {
-    if (!t || !t._key) continue;
-
-    // Only recover PROCESSING
-    if (t.status !== "PROCESSING") continue;
-
-    const hasPhotoBuffer = !!PHOTO_BUFFER[t._key];
-    const hasQueueData = queue.some(q => q.taskKey === t._key);
-
-    // ❌ No data left → RESET SAFELY
-    if (!hasPhotoBuffer && !hasQueueData) {
-      console.warn("♻️ Recovering stuck task:", t._key);
-
-      t.status = "PENDING";
-      t.finalized = false;
-
-      delete processingMap[t._key];
-      delete uploadingMap[t._key];
-
-      changed = true;
-    }
-  }
-
-  if (changed) {
-    localStorage.setItem(
-      TASK_CACHE_KEY,
-      JSON.stringify(tasks)
-    );
-    loadTasks();
-  }
-}
-
 function dedupeTasks(tasks) {
   const map = new Map();
 
@@ -1671,9 +1467,6 @@ function validateDynamic(taskKey) {
 }  
 loadTasks();
 
-// 🔁 Safety recovery AFTER initial load (online or offline)
-setTimeout(recoverStuckTasks, 2500);
-
 async function processOfflineQueue() {
 
   const unique = {};
@@ -1735,7 +1528,6 @@ async function processOfflineQueue() {
 window.addEventListener("online", async () => {
   await processOfflineQueue();
   loadTasks();
-  setTimeout(recoverStuckTasks, 2000);
 });
 
 let startY = 0;
