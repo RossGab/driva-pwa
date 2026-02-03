@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Device Monitor</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<style>
+body {
+  font-family: Arial, sans-serif;
+  background:#f4f4f4;
+  padding:12px;
+}
+h2 { text-align:center; }
+
+table {
+  width:100%;
+  border-collapse:collapse;
+  background:#fff;
+  font-size:13px;
+}
+th, td {
+  padding:8px;
+  border-bottom:1px solid #eee;
+  text-align:left;
+}
+th {
+  background:#f1f1f1;
+}
+.bad { color:#c0392b; font-weight:bold; }
+.good { color:#27ae60; font-weight:bold; }
+.small { font-size:12px; color:#666; }
+</style>
+</head>
+
+<body>
+
+<h2>📱 Driver Device Monitor</h2>
+
+<table>
+<thead>
+<tr>
+  <th>Driver</th>
+  <th>Device</th>
+  <th>Network</th>
+  <th>App Version</th>
+  <th>Last Seen</th>
+</tr>
+</thead>
+<tbody id="rows">
+<tr><td colspan="5">Loading…</td></tr>
+</tbody>
+</table>
+
+<script type="module">
+import { initializeApp } from
+  "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import { getDatabase, ref, get } from
+  "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyDFW61pnwLvh6HGKWt10zLYNr860fI8vkg",
+  authDomain: "driva-pwa.firebaseapp.com",
+  databaseURL: "https://driva-pwa-default-rtdb.firebaseio.com",
+  projectId: "driva-pwa",
+  storageBucket: "driva-pwa.firebasestorage.app",
+  messagingSenderId: "299138219722",
+  appId: "1:299138219722:web:623ff6b0a067ea822dfe33"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
+const tbody = document.getElementById("rows");
+
+function formatTime(ts) {
+  if (!ts) return "—";
+  return new Date(ts).toLocaleString("en-PH", {
+    timeZone:"Asia/Manila"
+  });
+}
+
+async function loadDevices() {
+  const snap = await get(ref(db, "deviceProfiles"));
+  const data = snap.val() || {};
+
+  tbody.innerHTML = "";
+
+  Object.entries(data).forEach(([driverId, d]) => {
+    const tr = document.createElement("tr");
+
+    const deviceStatus =
+      d.lowEndDevice
+        ? `<span class="bad">Low-end</span>`
+        : `<span class="good">Normal</span>`;
+
+    const netStatus =
+      d.badNetwork
+        ? `<span class="bad">${d.networkType}</span>`
+        : `<span class="good">${d.networkType}</span>`;
+
+    tr.innerHTML = `
+      <td><b>${driverId}</b></td>
+      <td>
+        ${deviceStatus}<br>
+        <span class="small">
+          ${d.memoryGB || "?"}GB · ${d.cpuCores || "?"} cores
+        </span>
+      </td>
+      <td>${netStatus}</td>
+      <td>${d.appVersion || "—"}</td>
+      <td>${formatTime(d.lastReported)}</td>
+    `;
+
+    tbody.appendChild(tr);
+  });
+
+  if (!tbody.children.length) {
+    tbody.innerHTML =
+      `<tr><td colspan="5">No device data yet</td></tr>`;
+  }
+}
+
+loadDevices();
+</script>
+
+</body>
+</html>
