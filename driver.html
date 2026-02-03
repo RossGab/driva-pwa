@@ -118,6 +118,20 @@ img { width:100%;margin-top:8px;border-radius:6px; }
 </button>
 
 <div id="appVersion"></div>
+<div id="perfMode"
+  style="
+    display:none;
+    background:#f39c12;
+    color:#000;
+    padding:6px;
+    text-align:center;
+    margin-bottom:6px;
+    border-radius:6px;
+    font-size:13px;
+    font-weight:bold;
+  ">
+  ⚠️ Low Performance Mode Enabled
+</div>
 <div id="gpsStatus"
   style="background:#fff;padding:6px;text-align:center;
          margin-bottom:6px;border-radius:6px;font-size:13px;">
@@ -161,7 +175,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebas
 import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.5.12.4.12-DYNAMIC";
+const VERSION = "Driver v3.5.12.5.0-DYNAMIC";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -193,11 +207,64 @@ const uploadingMap = {};
 let SEARCH_TERM = "";
 const dateFilter = document.getElementById("dateFilter");
 
+/* ===============================
+   DEVICE CAPABILITY DETECTION
+=============================== */
+const DEVICE_PROFILE = {
+  memory: navigator.deviceMemory || 2,                 // GB (approx)
+  cores: navigator.hardwareConcurrency || 4,
+  network: navigator.connection?.effectiveType || "unknown",
+  saveData: navigator.connection?.saveData || false,
+  standalone: window.matchMedia("(display-mode: standalone)").matches
+};
+
+const LOW_END_DEVICE =
+  DEVICE_PROFILE.memory <= 2 ||
+  DEVICE_PROFILE.cores <= 4;
+
+const BAD_NETWORK =
+  ["slow-2g", "2g"].includes(DEVICE_PROFILE.network);
+
+console.log("📱 DEVICE PROFILE", DEVICE_PROFILE);
+console.log("⚠️ L E?", LOW_END_DEVICE);
+console.log("📶 BAD NETWORK?", BAD_NETWORK);
+
+/* ===============================
+   LOW PERFORMANCE MODE INDICATOR
+=============================== */
+const perfModeEl = document.getElementById("perfMode");
+
+if (LOW_END_DEVICE && perfModeEl) {
+  perfModeEl.style.display = "block";
+}
+
+/* ===============================
+   STEP 4: NETWORK DEGRADATION
+=============================== */
+function isEffectivelyOffline() {
+  return (
+    !navigator.onLine ||
+    BAD_NETWORK ||
+    navigator.connection?.saveData === true
+  );
+}
+
 // ✅ Default to today
 function getTodayPH() {
   return new Date().toLocaleDateString("en-CA", {
     timeZone: "Asia/Manila"
   });
+}
+/* ===============================
+   STEP 7: ONE-TIME DEVICE LOG
+=============================== */
+if (!sessionStorage.getItem("deviceProfileLogged")) {
+  console.log("📱 DEVICE PROFILE", {
+    ...DEVICE_PROFILE,
+    lowEnd: LOW_END_DEVICE,
+    badNetwork: BAD_NETWORK
+  });
+  sessionStorage.setItem("deviceProfileLogged", "1");
 }
 
 dateFilter.value = getTodayPH();
@@ -550,15 +617,36 @@ function compressImage(file) {
   return new Promise(resolve => {
     const img = new Image();
     const r = new FileReader();
+
     r.onload = e => img.src = e.target.result;
+
     img.onload = () => {
       const c = document.createElement("canvas");
-      let w = img.width, h = img.height;
-      if (w > 1280) { h *= 1280 / w; w = 1280; }
-      c.width = w; c.height = h;
+
+      // 🔥 ADAPTIVE SIZE
+      const MAX_WIDTH = LOW_END_DEVICE ? 960 : 1280;
+      const QUALITY   = LOW_END_DEVICE ? 0.55 : 0.65;
+
+      let w = img.width;
+      let h = img.height;
+
+      if (w > MAX_WIDTH) {
+        h *= MAX_WIDTH / w;
+        w = MAX_WIDTH;
+      }
+
+      c.width = w;
+      c.height = h;
+
       c.getContext("2d").drawImage(img, 0, 0, w, h);
-      c.toBlob(b => resolve(b), "image/jpeg", 0.65);
+
+      c.toBlob(
+        blob => resolve(blob),
+        "image/jpeg",
+        QUALITY
+      );
     };
+
     r.readAsDataURL(file);
   });
 }
@@ -629,9 +717,10 @@ cameraInput.onchange = async e => {
   }, 150);
   
   // ✅ Delay UI refresh to prevent Android camera crash
-  setTimeout(() => {
-    loadTasks();
-  }, 300);
+  setTimeout(
+    () => loadTasks(),
+    LOW_END_DEVICE ? 800 : 300
+  );
   } catch (err) {
       console.error("📸 Camera handler crash:", err);
       alert("Camera error — please retry.");
@@ -663,7 +752,7 @@ cameraInput.onchange = async e => {
   // ==============================
   // ✅ OFFLINE MODE HANDLING
   // ==============================
-  if (!navigator.onLine) {
+  if (isEffectivelyOffline()) {
 
     let cachedTasks =
       JSON.parse(localStorage.getItem(TASK_CACHE_KEY) || "[]");
@@ -754,7 +843,9 @@ cameraInput.onchange = async e => {
     delete processingMap[taskKey];
     ACTIVE_CAPTURE_TASK = null;
     
-    loadTasks();
+    setTimeout(() => {
+      loadTasks();
+    }, 800);
 
   } catch (e) {
     console.error(e);
@@ -822,6 +913,13 @@ async function uploadNow(
     photoIndex,
     isLastPhoto
   ) {
+  /* ===============================
+     STEP 6: PAUSE GPS DURING UPLOAD
+  =============================== */
+  if (gpsWatchId !== null) {
+    navigator.geolocation.clearWatch(gpsWatchId);
+    gpsWatchId = null;
+  }
   const taskSnap = await get(ref(db, `tasks/${taskKey}`));
   const task = taskSnap.val() || {};
 
@@ -844,7 +942,9 @@ async function uploadNow(
     .slice(0,14)}.jpg`;
 
   // ✅ SAVE FINAL IMAGE TO LOCAL GALLERY
-  saveToGallery(blob, filename);
+  if (navigator.onLine) {
+    saveToGallery(blob, filename);
+  }
 
   // ===== UPLOAD =====
   const imgRef = sRef(storage, `tasks/${taskKey}/${filename}`);
@@ -904,6 +1004,12 @@ localStorage.setItem(
 /* ================= FIX #3 END ================= */
   
   updateRefreshLock();
+  // 🔁 Resume GPS after upload
+  setTimeout(() => {
+    if (!gpsWatchId) {
+      startGPSTracking(DRIVER_ID);
+    }
+  }, LOW_END_DEVICE ? 3000 : 1000);
 }
 
 async function preloadDriverUIConfig(tasks) {
