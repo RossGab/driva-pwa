@@ -175,7 +175,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebas
 import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.5.12.5.0-DYNAMIC";
+const VERSION = "Driver v3.5.12.6.0-DYNAMIC";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -330,6 +330,7 @@ let gpsWatchId = null;
 
 appVersion.innerText = `Driver: ${DRIVER_ID} | ${VERSION}`;
 startGPSTracking(DRIVER_ID);
+  
 
 async function loadDriverUI(jobType) {
   // 1️⃣ Memory cache
@@ -1510,6 +1511,48 @@ function getCurrentLocation() {
   });
 }
 
+// 🔥 RECOVERY WATCHDOG — fix stuck PROCESSING tasks
+async function recoverStuckTasks() {
+  const tasks =
+    JSON.parse(localStorage.getItem(TASK_CACHE_KEY) || "[]");
+
+  const queue =
+    JSON.parse(localStorage.getItem(QUEUE_KEY) || "[]");
+
+  let changed = false;
+
+  for (const t of tasks) {
+    if (!t || !t._key) continue;
+
+    // Only recover PROCESSING
+    if (t.status !== "PROCESSING") continue;
+
+    const hasPhotoBuffer = !!PHOTO_BUFFER[t._key];
+    const hasQueueData = queue.some(q => q.taskKey === t._key);
+
+    // ❌ No data left → RESET SAFELY
+    if (!hasPhotoBuffer && !hasQueueData) {
+      console.warn("♻️ Recovering stuck task:", t._key);
+
+      t.status = "PENDING";
+      t.finalized = false;
+
+      delete processingMap[t._key];
+      delete uploadingMap[t._key];
+
+      changed = true;
+    }
+  }
+
+  if (changed) {
+    localStorage.setItem(
+      TASK_CACHE_KEY,
+      JSON.stringify(tasks)
+    );
+    loadTasks();
+  }
+}
+
 function dedupeTasks(tasks) {
   const map = new Map();
 
@@ -1608,6 +1651,9 @@ function validateDynamic(taskKey) {
 }  
 loadTasks();
 
+// 🔁 Safety recovery AFTER initial load (online or offline)
+setTimeout(recoverStuckTasks, 2500);
+
 async function processOfflineQueue() {
 
   const unique = {};
@@ -1669,6 +1715,7 @@ async function processOfflineQueue() {
 window.addEventListener("online", async () => {
   await processOfflineQueue();
   loadTasks();
+  setTimeout(recoverStuckTasks, 2000);
 });
 
 let startY = 0;
