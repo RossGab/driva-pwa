@@ -27,8 +27,11 @@ th, td {
 th {
   background:#f1f1f1;
 }
+
 .bad { color:#c0392b; font-weight:bold; }
 .good { color:#27ae60; font-weight:bold; }
+.warn { color:#f39c12; font-weight:bold; }
+
 .small { font-size:12px; color:#666; }
 </style>
 </head>
@@ -58,6 +61,7 @@ import { initializeApp } from
 import { getDatabase, ref, get } from
   "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
+/* ===== FIREBASE CONFIG ===== */
 const firebaseConfig = {
   apiKey: "AIzaSyDFW61pnwLvh6HGKWt10zLYNr860fI8vkg",
   authDomain: "driva-pwa.firebaseapp.com",
@@ -72,43 +76,76 @@ const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 const tbody = document.getElementById("rows");
 
+/* ===== TIME FORMAT ===== */
 function formatTime(ts) {
   if (!ts) return "—";
   return new Date(ts).toLocaleString("en-PH", {
-    timeZone:"Asia/Manila"
+    timeZone: "Asia/Manila"
   });
 }
 
+/* ===== LOAD DEVICES ===== */
 async function loadDevices() {
-  const snap = await get(ref(db, "deviceProfiles"));
-  const data = snap.val() || {};
+  const [profileSnap, statusSnap] = await Promise.all([
+    get(ref(db, "deviceProfiles")),
+    get(ref(db, "driverStatus"))
+  ]);
+
+  const profiles = profileSnap.val() || {};
+  const statuses = statusSnap.val() || {};
 
   tbody.innerHTML = "";
 
-  Object.entries(data).forEach(([driverId, d]) => {
-    const tr = document.createElement("tr");
+  const drivers = new Set([
+    ...Object.keys(profiles),
+    ...Object.keys(statuses)
+  ]);
+
+  drivers.forEach(driverId => {
+    const p = profiles[driverId] || {};
+    const s = statuses[driverId] || {};
+
+    /* ===== DEVICE INFO ===== */
+    const deviceName =
+      `${s.deviceBrand || "Unknown"} ${s.deviceModel || ""}`.trim();
 
     const deviceStatus =
-      d.lowEndDevice
+      p.lowEndDevice
         ? `<span class="bad">Low-end</span>`
         : `<span class="good">Normal</span>`;
 
+    /* ===== NETWORK ===== */
     const netStatus =
-      d.badNetwork
-        ? `<span class="bad">${d.networkType}</span>`
-        : `<span class="good">${d.networkType}</span>`;
+      p.badNetwork
+        ? `<span class="bad">${p.networkType || "?"}</span>`
+        : `<span class="good">${p.networkType || "?"}</span>`;
 
+    /* ===== LAST SEEN HEALTH ===== */
+    let lastSeenClass = "good";
+    if (s.lastSeen) {
+      const diff = Date.now() - new Date(s.lastSeen).getTime();
+      if (diff > 30 * 60 * 1000) lastSeenClass = "bad";     // 30 mins
+      else if (diff > 10 * 60 * 1000) lastSeenClass = "warn";
+    }
+
+    const tr = document.createElement("tr");
     tr.innerHTML = `
       <td><b>${driverId}</b></td>
+
       <td>
-        ${deviceStatus}<br>
+        ${deviceName || "—"}<br>
         <span class="small">
-          ${d.memoryGB || "?"}GB · ${d.cpuCores || "?"} cores
+          ${deviceStatus} · ${p.memoryGB || "?"}GB · ${p.cpuCores || "?"} cores
         </span>
       </td>
+
       <td>${netStatus}</td>
-      <td>${d.appVersion || "—"}</td>
-      <td>${formatTime(d.lastReported)}</td>
+
+      <td>${s.appVersion || p.appVersion || "—"}</td>
+
+      <td class="${lastSeenClass}">
+        ${formatTime(s.lastSeen || p.lastReported)}
+      </td>
     `;
 
     tbody.appendChild(tr);
@@ -120,7 +157,11 @@ async function loadDevices() {
   }
 }
 
+/* ===== INITIAL LOAD ===== */
 loadDevices();
+
+/* ===== AUTO REFRESH EVERY 30s ===== */
+setInterval(loadDevices, 30000);
 </script>
 
 </body>
