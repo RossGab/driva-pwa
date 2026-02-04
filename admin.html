@@ -269,7 +269,7 @@ button {
 <div class="admin-header" style="justify-content:space-between;">
   <div style="display:flex;align-items:center;gap:14px;">
     <img src="./logo.jpg" class="admin-logo" alt="Company Logo">
-    <h1>Admin Dashboard <span class="version">V2.4.23</span></h1>
+    <h1>Admin Dashboard <span class="version">V2.5.1.1</span></h1>
   </div>
 
   <!-- 📅 DATE FILTER -->
@@ -450,18 +450,21 @@ function getTodayPH() {
   });
 }
 
+/* ===== DATE HANDLING ===== */
 let SELECTED_DATE = getTodayPH();
 
-const adminDateFilter = document.getElementById("adminDateFilter");
+// restore saved date on load
+const savedDate = localStorage.getItem("ADMIN_SELECTED_DATE");
+if (savedDate) {
+  SELECTED_DATE = savedDate;
+}
 
+const adminDateFilter = document.getElementById("adminDateFilter");
 adminDateFilter.value = SELECTED_DATE;
 
 adminDateFilter.addEventListener("change", async e => {
   SELECTED_DATE = e.target.value;
-
-  // ✅ persist selected date
   localStorage.setItem("ADMIN_SELECTED_DATE", SELECTED_DATE);
-
   await hardRefresh();
 });
 
@@ -714,7 +717,7 @@ window.clearSearch = function () {
   
 /* ===== DASHBOARD ===== */
 window.refreshDashboard = async function () {
-  const snap = await withTimeout(get(ref(db,"tasks")), 60000);
+  const snap = await get(ref(db, "tasks"));
   const tasks = Object.values(snap.val()||{});
   let open=0,done=0,ok=0,warn=0,breach=0;
 
@@ -1000,7 +1003,7 @@ window.loadTasks = async function (status) {
   // 🔁 FETCH ONLY IF NO CACHE
   if (!allTasks) {
     try {
-      const snap = await withTimeout(get(ref(db, "tasks")), 60000);
+      const snap = await get(ref(db, "tasks"));
       const raw = snap.val() || {};
       allTasks = Object.keys(raw).map(k => ({ _key: k, ...raw[k] }));
       setCachedTasks(allTasks);
@@ -1016,7 +1019,7 @@ window.loadTasks = async function (status) {
     normalizeDate(t.createdAt) === SELECTED_DATE
   );
 
-  window.ALL_TASKS = tasks;
+  window.ALL_TASKS = allTasks;
 
   // Driver filter
   if (FILTER_DRIVER) {
@@ -1363,7 +1366,7 @@ function renderDriverList(statusData = {}) {
 }
   
 async function buildTaskStats() {
-  const snap = await withTimeout(get(ref(db, "tasks")), 8000);
+  const snap = await get(ref(db, "tasks"));
   const tasks = snap.val() || {};
 
   const stats = {};
@@ -1386,7 +1389,7 @@ async function buildTaskStats() {
 }
 
 async function buildTaskStatsLive() {
-  const snap = await withTimeout(get(ref(db, "tasks")), 8000);
+  const snap = await get(ref(db, "tasks"));
   const tasks = snap.val() || {};
 
   const stats = {};
@@ -1410,7 +1413,7 @@ async function buildTaskStatsLive() {
 }
 
 async function buildDriverBAMapLive() {
-  const snap = await withTimeout(get(ref(db, "tasks")), 8000);
+  const snap = await get(ref(db, "tasks"));
   const tasks = snap.val() || {};
 
   const map = {};
