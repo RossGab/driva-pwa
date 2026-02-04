@@ -269,7 +269,7 @@ button {
 <div class="admin-header" style="justify-content:space-between;">
   <div style="display:flex;align-items:center;gap:14px;">
     <img src="./logo.jpg" class="admin-logo" alt="Company Logo">
-    <h1>Admin Dashboard <span class="version">V2.5.2</span></h1>
+    <h1>Admin Dashboard <span class="version">V2.5.3</span></h1>
   </div>
 
   <!-- 📅 DATE FILTER -->
@@ -1400,11 +1400,8 @@ function setLoaderText(txt) {
 
     showLoader("Loading driver config…");
     await loadDriverUIConfig();
-    showLoader("Loading dashboard…");
-    refreshDashboard();
-
     showLoader("Loading tasks…");
-    loadTasks("PENDING");
+    await hardRefresh();   // 🔥 THIS FILLS THE CACHE
   } catch (e) {
     alert("Dashboard failed to load. Please refresh.");
   } finally {
