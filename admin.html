@@ -269,7 +269,7 @@ button {
 <div class="admin-header" style="justify-content:space-between;">
   <div style="display:flex;align-items:center;gap:14px;">
     <img src="./logo.jpg" class="admin-logo" alt="Company Logo">
-    <h1>Admin Dashboard <span class="version">V2.4.23</span></h1>
+    <h1>Admin Dashboard <span class="version">V2.5</span></h1>
   </div>
 
   <!-- 📅 DATE FILTER -->
@@ -478,28 +478,6 @@ function showLoader(text = "Loading…") {
   el.style.display = "flex";
 }
 
-function reloadAllAdminViews() {
-  refreshDashboard();
-
-  if (MAP_VISIBLE) {
-    refreshMap();
-  } else if (CURRENT_STATUS) {
-    loadTasks(CURRENT_STATUS);
-  }
-}
-
-function normalizeDate(dateStr) {
-  if (!dateStr) return null;
-
-  const d = new Date(dateStr);
-
-  if (isNaN(d.getTime())) return null;
-
-  return d.toLocaleDateString("en-CA", {
-    timeZone: "Asia/Manila"
-  });
-}
-
 function buildLiveMapBAFilters() {
   const box = document.getElementById("mapBACheckboxes");
   box.innerHTML = "";
@@ -641,7 +619,7 @@ function buildBAFilters(allTasks) {
 
   allTasks.forEach(t => {
     if (t.status !== CURRENT_STATUS) return;
-    if (normalizeDate(t.createdAt) !== SELECTED_DATE) return;
+    if (!isSamePHDate(t.createdAt, SELECTED_DATE)) return;
     if (!t.BA) return;
 
     baCount[t.BA] = (baCount[t.BA] || 0) + 1;
@@ -713,35 +691,35 @@ window.clearSearch = function () {
 };
   
 /* ===== DASHBOARD ===== */
-window.refreshDashboard = async function () {
-  const snap = await withTimeout(get(ref(db,"tasks")), 60000);
-  const tasks = Object.values(snap.val()||{});
-  let open=0,done=0,ok=0,warn=0,breach=0;
+window.refreshDashboard = function () {
+  const tasks = getCachedTasks() || [];
+
+  let open=0, done=0, ok=0, warn=0, breach=0;
 
   tasks.forEach(t => {
-  if (normalizeDate(t.createdAt) !== SELECTED_DATE) return;
-  if (t.status === "COMPLETED") {
-    done++;
-    return;
-  }
+    if (!isSamePHDate(t.createdAt, SELECTED_DATE)) return;
 
-  if (t.status === "PENDING") {
-    open++;
+    if (t.status === "COMPLETED") {
+      done++;
+      return;
+    }
 
-    const sla = getSLA(t);
-    if (!sla) return;
+    if (t.status === "PENDING") {
+      open++;
+      const sla = getSLA(t);
+      if (!sla) return;
 
-    if (sla.cls === "sla-ok") ok++;
-    else if (sla.cls === "sla-warn") warn++;
-    else breach++;
-  }
-});
-  
-  openCount.innerText=open;
-  doneCount.innerText=done;
-  slaOk.innerText=ok;
-  slaWarn.innerText=warn;
-  slaBreach.innerText=breach;
+      if (sla.cls === "sla-ok") ok++;
+      else if (sla.cls === "sla-warn") warn++;
+      else breach++;
+    }
+  });
+
+  openCount.innerText = open;
+  doneCount.innerText = done;
+  slaOk.innerText = ok;
+  slaWarn.innerText = warn;
+  slaBreach.innerText = breach;
 };
 
 /* ===== TASK LIST ===== */
@@ -954,162 +932,92 @@ window.showAllOpenTasks = function () {
 
   loadTasks("PENDING");
 };
-  
-window.hardRefresh = async function () {
+  window.hardRefresh = async function () {
   clearTaskCache();
-
-  showLoader("Refreshing all data…");
-
-  // ✅ Preserve BA filter selections (especially for Live Map)
-  const preservedBA = new Set(FILTER_BA);
+  showLoader("Refreshing data…");
 
   try {
-    await loadDrivers();
-    await refreshDashboard();
-    await loadTasks(CURRENT_STATUS || "PENDING");
+    const snap = await withTimeout(get(ref(db, "tasks")), 60000);
+    const raw = snap.val() || {};
+    const tasks = Object.keys(raw).map(k => ({ _key: k, ...raw[k] }));
+
+    setCachedTasks(tasks);
+    window.ALL_TASKS = tasks;
+
+    refreshDashboard();
+    loadTasks(CURRENT_STATUS || "PENDING");
+
     await buildDriverBAMapLive();
     await buildTaskStatsLive();
 
-    // 🔁 Restore BA selections
-    FILTER_BA = new Set(preservedBA);
-
-    // Only rebuild BA UI when NOT in live map
-    if (!MAP_VISIBLE) {
-      buildBAFilters(window.ALL_TASKS || []);
-    }
-
-    // Refresh live map if visible
     if (MAP_VISIBLE) {
-      buildLiveMapBAFilters();  // 🔥 rebuild checkbox UI
-      await refreshMap();       // 🔥 reapply BA filter
+      buildLiveMapBAFilters();
+      refreshMap();
     }
-
-  } catch (err) {
-    alert("Refresh failed. Please try again.");
-    console.error(err);
+  } catch (e) {
+    alert("Refresh failed");
+    console.error(e);
   } finally {
     hideLoader();
   }
 };
-window.loadTasks = async function (status) {
+  
+window.loadTasks = function (status) {
   CURRENT_STATUS = status;
   taskList.innerHTML = "Loading...";
 
-  let allTasks = getCachedTasks();
+  const allTasks = getCachedTasks() || [];
+  window.ALL_TASKS = allTasks;
 
-  // 🔁 FETCH ONLY IF NO CACHE
-  if (!allTasks) {
-    try {
-      const snap = await withTimeout(get(ref(db, "tasks")), 60000);
-      const raw = snap.val() || {};
-      allTasks = Object.keys(raw).map(k => ({ _key: k, ...raw[k] }));
-      setCachedTasks(allTasks);
-    } catch (e) {
-      taskList.innerHTML = "⚠️ Failed to load tasks";
-      return;
-    }
-  }
-
-  // ✅ FILTER LOCALLY (FAST)
   let tasks = allTasks.filter(t =>
     t.status === status &&
-    normalizeDate(t.createdAt) === SELECTED_DATE
+    isSamePHDate(t.createdAt, SELECTED_DATE)
   );
 
-  window.ALL_TASKS = tasks;
-
-  // Driver filter
-  if (FILTER_DRIVER) {
+  if (FILTER_DRIVER)
     tasks = tasks.filter(t => t.driverId === FILTER_DRIVER);
-  }
 
-  // Search filter
-  if (SEARCH_TERM) {
-    const term = SEARCH_TERM.toLowerCase();
+  if (SEARCH_TERM)
     tasks = tasks.filter(t =>
-      JSON.stringify(t).toLowerCase().includes(term)
+      JSON.stringify(t).toLowerCase().includes(SEARCH_TERM)
     );
-  }
 
-  // BA filters
-  if (!MAP_VISIBLE) {
-    buildBAFilters(allTasks);
-  }
-  if (FILTER_BA.size) {
+  if (FILTER_BA.size)
     tasks = tasks.filter(t => FILTER_BA.has(t.BA));
-  }
 
-  // 🔽 render (your existing logic untouched)
   taskList.innerHTML = "";
   if (!tasks.length) {
     taskList.innerHTML = "No tasks found";
     return;
   }
-
   tasks.forEach(t => {
-    const sla = getSLA(t);
+  const sla = getSLA(t);
 
-    const div = document.createElement("div");
-    div.className = `task ${status === "COMPLETED" ? "completed" : "pending"}`;
+  const div = document.createElement("div");
+  div.className = `task ${status === "COMPLETED" ? "completed" : "pending"}`;
 
-    div.innerHTML = `
-      <div class="task-header">
-        <b>${t.CUSTOMERNAME || ""}</b>
-        <div class="small">${t.ADDRESS || ""}</div>
-        <div class="small">Driver: ${t.driverId || "—"}</div>
-        ${sla ? `<div class="small ${sla.cls}">⏱ ${sla.text}</div>` : ""}
-      </div>
+  div.innerHTML = `
+    <div class="task-header">
+      <b>${t.CUSTOMERNAME || ""}</b>
+      <div class="small">${t.ADDRESS || ""}</div>
+      <div class="small">Driver: ${t.driverId || "—"}</div>
+      ${sla ? `<div class="small ${sla.cls}">⏱ ${sla.text}</div>` : ""}
+    </div>
 
-      <div class="task-details" data-task-id="${t._key}" style="display:none">
-        ${renderTaskDetails(t)}
+    <div class="task-details" data-task-id="${t._key}" style="display:none">
+      ${renderTaskDetails(t)}
+      ${t.status === "COMPLETED" ? renderDynamicCompletedFields(t) : ""}
+    </div>
+  `;
 
-        ${t.status === "COMPLETED" ? renderDynamicCompletedFields(t) : ""}
-        ${t.status === "COMPLETED" ? `
-          <button class="deleteBtn"
-            onclick="revertToPending('${t._key}')">
-            🔁 Back to Pending (Reset)
-          </button>
-        ` : ""}
+  const header = div.querySelector(".task-header");
+  const details = div.querySelector(".task-details");
+  header.onclick = () =>
+    details.style.display =
+      details.style.display === "none" ? "block" : "none";
 
-        ${t.status === "COMPLETED" ? `
-          <div style="
-            display:grid;
-            grid-template-columns:repeat(3,1fr);
-            gap:6px;
-            margin-top:10px;
-          ">
-            ${[1,2,3].map(i => {
-              const url = t[`photo${i}Url`];
-              if (!url) return "";
-              return `
-                <img src="${url}"
-                  onclick="window.open('${url}','_blank')"
-                  style="
-                    width:100%;
-                    height:90px;
-                    object-fit:cover;
-                    border-radius:6px;
-                    border:2px solid #28a745;
-                    cursor:pointer;
-                  ">
-              `;
-            }).join("")}
-          </div>
-        ` : ""}
-
-        <div class="form-actions">
-          <button class="toggleBtn" onclick="enableEdit(this)">✏ Modify Task</button>
-        </div>
-      </div>
-    `;
-
-    const header = div.querySelector(".task-header");
-    const details = div.querySelector(".task-details");
-    header.onclick = () =>
-      details.style.display = details.style.display === "none" ? "block" : "none";
-
-    taskList.appendChild(div);
-  });
+  taskList.appendChild(div);
+});
 };
 
 
@@ -1172,7 +1080,6 @@ window.saveEdit = async function (btn) {
     payload.AGENTID = "";
     payload.AGENTNAME = "";
   }
-  alert(JSON.stringify(payload, null, 2));
   await update(ref(db, `tasks/${taskId}`), payload);
 
   /* 🔥 ADD THIS BLOCK — UPDATE LOCAL CACHE */
@@ -1239,6 +1146,11 @@ window.showDriverOpenTasks = function (driverId) {
   // Load open tasks for this driver
   loadTasks("PENDING");
 };
+
+function isSamePHDate(createdAt, date) {
+  if (!createdAt) return false;
+  return createdAt.startsWith(date);
+}
   
 function initMap(){
   if(map) return;
@@ -1361,38 +1273,14 @@ function renderDriverList(statusData = {}) {
     `;
   }
 }
-  
-async function buildTaskStats() {
-  const snap = await withTimeout(get(ref(db, "tasks")), 8000);
-  const tasks = snap.val() || {};
-
-  const stats = {};
-
-  Object.values(tasks).forEach(t => {
-    if (!t.driverId) return;
-
-    if (!stats[t.driverId]) {
-      stats[t.driverId] = { open: 0, completed: 0 };
-    }
-
-    if (t.status === "COMPLETED") {
-      stats[t.driverId].completed++;
-    } else {
-      stats[t.driverId].open++;
-    }
-  });
-
-  TASK_STATS = stats;
-}
 
 async function buildTaskStatsLive() {
-  const snap = await withTimeout(get(ref(db, "tasks")), 8000);
-  const tasks = snap.val() || {};
+  const tasks = window.ALL_TASKS || [];
 
   const stats = {};
 
   Object.values(tasks).forEach(t => {
-  if (normalizeDate(t.createdAt) !== SELECTED_DATE) return;
+  if (!isSamePHDate(t.createdAt, SELECTED_DATE)) return;
     if (!t.driverId) return;
 
     if (!stats[t.driverId]) {
@@ -1416,7 +1304,7 @@ async function buildDriverBAMapLive() {
   const map = {};
 
   Object.values(tasks).forEach(t => {
-    if (normalizeDate(t.createdAt) !== SELECTED_DATE) return;
+    if (!isSamePHDate(t.createdAt, SELECTED_DATE)) return;
     if (!t.driverId || !t.BA) return;
 
     if (!map[t.driverId]) {
@@ -1547,12 +1435,11 @@ function setLoaderText(txt) {
 
     showLoader("Loading driver config…");
     await loadDriverUIConfig();
-
     showLoader("Loading dashboard…");
-    await refreshDashboard();
+    refreshDashboard();
 
     showLoader("Loading tasks…");
-    await loadTasks("PENDING");
+    loadTasks("PENDING");
   } catch (e) {
     alert("Dashboard failed to load. Please refresh.");
   } finally {
