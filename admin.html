@@ -269,7 +269,7 @@ button {
 <div class="admin-header" style="justify-content:space-between;">
   <div style="display:flex;align-items:center;gap:14px;">
     <img src="./logo.jpg" class="admin-logo" alt="Company Logo">
-    <h1>Admin Dashboard <span class="version">V2.5.1.4</span></h1>
+    <h1>Admin Dashboard <span class="version">V2.5.1.5</span></h1>
   </div>
 
   <!-- 📅 DATE FILTER -->
@@ -667,7 +667,7 @@ function buildBAFilters(allTasks) {
 
   allTasks.forEach(t => {
     if (t.status !== CURRENT_STATUS) return;
-    if (normalizeDate(t.createdAt) !== SELECTED_DATE) return;
+    if (t.createdAt && normalizeDate(t.createdAt) !== SELECTED_DATE) return;
     if (!t.BA) return;
 
     baCount[t.BA] = (baCount[t.BA] || 0) + 1;
@@ -745,7 +745,7 @@ window.refreshDashboard = function () {
   let open=0, done=0, ok=0, warn=0, breach=0;
 
   tasks.forEach(t => {
-    if (normalizeDate(t.createdAt) !== SELECTED_DATE) return;
+    if (t.createdAt && normalizeDate(t.createdAt) !== SELECTED_DATE) return;
 
     if (t.status === "COMPLETED") {
       done++;
@@ -1048,7 +1048,7 @@ window.loadTasks = async function (status) {
   // ✅ FILTER LOCALLY (FAST)
   let tasks = allTasks.filter(t =>
     t.status === status &&
-    normalizeDate(t.createdAt) === SELECTED_DATE
+    (!t.createdAt || normalizeDate(t.createdAt) === SELECTED_DATE)
   );
 
   window.ALL_TASKS = allTasks;
@@ -1403,7 +1403,7 @@ async function buildTaskStatsLive() {
   const stats = {};
 
   tasks.forEach(t => {
-    if (normalizeDate(t.createdAt) !== SELECTED_DATE) return;
+    if (t.createdAt && normalizeDate(t.createdAt) !== SELECTED_DATE) return;
     if (!t.driverId) return;
 
     if (!stats[t.driverId]) {
@@ -1421,11 +1421,11 @@ async function buildTaskStatsLive() {
 }
 
 async function buildDriverBAMapLive() {
-  const tasks = getCachedTasks() || {};
+  const tasks = getCachedTasks() || [];
   const map = {};
 
   tasks.forEach(t => {
-    if (normalizeDate(t.createdAt) !== SELECTED_DATE) return;
+    if (t.createdAt && normalizeDate(t.createdAt) !== SELECTED_DATE) return;
     if (!t.driverId || !t.BA) return;
 
     if (!map[t.driverId]) map[t.driverId] = [];
