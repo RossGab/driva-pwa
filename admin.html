@@ -269,7 +269,7 @@ button {
 <div class="admin-header" style="justify-content:space-between;">
   <div style="display:flex;align-items:center;gap:14px;">
     <img src="./logo.jpg" class="admin-logo" alt="Company Logo">
-    <h1>Admin Dashboard <span class="version">V2.5.1.2</span></h1>
+    <h1>Admin Dashboard <span class="version">V2.5.1.3</span></h1>
   </div>
 
   <!-- 📅 DATE FILTER -->
@@ -480,21 +480,28 @@ function showLoader(text = "Loading…") {
   el.classList.remove("hide");
   el.style.display = "flex";
 }
+let DATE_LOADING = false;
 
-function onAdminDateChangeFast() {
+async function onAdminDateChangeFast() {
+  if (DATE_LOADING) return;
+  DATE_LOADING = true;
+
   showLoader("Updating view…");
+  await new Promise(r => requestAnimationFrame(r));
 
-  // DO NOT clear cache
-  refreshDashboard(); // already filters by SELECTED_DATE
-  loadTasks(CURRENT_STATUS || "PENDING");
+  try {
+    await refreshDashboard();
+    await loadTasks(CURRENT_STATUS || "PENDING");
 
-  if (MAP_VISIBLE) {
-    buildDriverBAMapLive();
-    buildTaskStatsLive();
-    refreshMap();
+    if (MAP_VISIBLE) {
+      await buildDriverBAMapLive();
+      await buildTaskStatsLive();
+      await refreshMap();
+    }
+  } finally {
+    hideLoader();
+    DATE_LOADING = false;
   }
-
-  hideLoader();
 }
 
 function reloadAllAdminViews() {
@@ -732,35 +739,35 @@ window.clearSearch = function () {
 };
   
 /* ===== DASHBOARD ===== */
-window.refreshDashboard = async function () {
-  const snap = await get(ref(db, "tasks"));
-  const tasks = Object.values(snap.val()||{});
-  let open=0,done=0,ok=0,warn=0,breach=0;
+window.refreshDashboard = function () {
+  const tasks = getCachedTasks() || [];
+
+  let open=0, done=0, ok=0, warn=0, breach=0;
 
   tasks.forEach(t => {
-  if (normalizeDate(t.createdAt) !== SELECTED_DATE) return;
-  if (t.status === "COMPLETED") {
-    done++;
-    return;
-  }
+    if (normalizeDate(t.createdAt) !== SELECTED_DATE) return;
 
-  if (t.status === "PENDING") {
-    open++;
+    if (t.status === "COMPLETED") {
+      done++;
+      return;
+    }
 
-    const sla = getSLA(t);
-    if (!sla) return;
+    if (t.status === "PENDING") {
+      open++;
+      const sla = getSLA(t);
+      if (!sla) return;
 
-    if (sla.cls === "sla-ok") ok++;
-    else if (sla.cls === "sla-warn") warn++;
-    else breach++;
-  }
-});
-  
-  openCount.innerText=open;
-  doneCount.innerText=done;
-  slaOk.innerText=ok;
-  slaWarn.innerText=warn;
-  slaBreach.innerText=breach;
+      if (sla.cls === "sla-ok") ok++;
+      else if (sla.cls === "sla-warn") warn++;
+      else breach++;
+    }
+  });
+
+  openCount.innerText = open;
+  doneCount.innerText = done;
+  slaOk.innerText = ok;
+  slaWarn.innerText = warn;
+  slaBreach.innerText = breach;
 };
 
 /* ===== TASK LIST ===== */
@@ -975,41 +982,55 @@ window.showAllOpenTasks = function () {
 };
   
 window.hardRefresh = async function () {
-  clearTaskCache();
-
   showLoader("Refreshing all data…");
 
-  // ✅ Preserve BA filter selections (especially for Live Map)
+  // Preserve BA filter selections
   const preservedBA = new Set(FILTER_BA);
 
   try {
+    // 1️⃣ Clear cache FIRST
+    clearTaskCache();
+
+    // 2️⃣ Reload drivers (network)
     await loadDrivers();
-    await refreshDashboard();
-    await loadTasks(CURRENT_STATUS || "PENDING");
+
+    // 3️⃣ 🔥 FORCE RELOAD TASKS FROM FIREBASE
+    const snap = await get(ref(db, "tasks"));
+    const raw = snap.val() || {};
+    const tasks = Object.keys(raw).map(k => ({ _key: k, ...raw[k] }));
+    setCachedTasks(tasks);
+    window.ALL_TASKS = tasks;
+
+    // 4️⃣ Rebuild dashboard + task list FROM CACHE
+    refreshDashboard();
+    loadTasks(CURRENT_STATUS || "PENDING");
+
+    // 5️⃣ Live Map data (only if needed)
     await buildDriverBAMapLive();
     await buildTaskStatsLive();
 
-    // 🔁 Restore BA selections
+    // 6️⃣ Restore BA selections
     FILTER_BA = new Set(preservedBA);
 
-    // Only rebuild BA UI when NOT in live map
+    // 7️⃣ Rebuild BA UI
     if (!MAP_VISIBLE) {
       buildBAFilters(window.ALL_TASKS || []);
     }
 
-    // Refresh live map if visible
+    // 8️⃣ Refresh live map safely
     if (MAP_VISIBLE) {
-      buildLiveMapBAFilters();  // 🔥 rebuild checkbox UI
-      await refreshMap();       // 🔥 reapply BA filter
+      buildLiveMapBAFilters();
+      await refreshMap();
     }
 
   } catch (err) {
-    alert("Refresh failed. Please try again.");
     console.error(err);
+    alert("Refresh failed. Please try again.");
   } finally {
     hideLoader();
   }
 };
+  
 window.loadTasks = async function (status) {
   CURRENT_STATUS = status;
   taskList.innerHTML = "Loading...";
@@ -1380,38 +1401,14 @@ function renderDriverList(statusData = {}) {
     `;
   }
 }
-  
-async function buildTaskStats() {
-  const snap = await get(ref(db, "tasks"));
-  const tasks = snap.val() || {};
 
-  const stats = {};
-
-  Object.values(tasks).forEach(t => {
-    if (!t.driverId) return;
-
-    if (!stats[t.driverId]) {
-      stats[t.driverId] = { open: 0, completed: 0 };
-    }
-
-    if (t.status === "COMPLETED") {
-      stats[t.driverId].completed++;
-    } else {
-      stats[t.driverId].open++;
-    }
-  });
-
-  TASK_STATS = stats;
-}
 
 async function buildTaskStatsLive() {
-  const snap = await get(ref(db, "tasks"));
-  const tasks = snap.val() || {};
-
+  const tasks = getCachedTasks() || [];
   const stats = {};
 
-  Object.values(tasks).forEach(t => {
-  if (normalizeDate(t.createdAt) !== SELECTED_DATE) return;
+  tasks.forEach(t => {
+    if (normalizeDate(t.createdAt) !== SELECTED_DATE) return;
     if (!t.driverId) return;
 
     if (!stats[t.driverId]) {
@@ -1429,19 +1426,14 @@ async function buildTaskStatsLive() {
 }
 
 async function buildDriverBAMapLive() {
-  const snap = await get(ref(db, "tasks"));
-  const tasks = snap.val() || {};
-
+  const tasks = getCachedTasks() || {};
   const map = {};
 
-  Object.values(tasks).forEach(t => {
+  tasks.forEach(t => {
     if (normalizeDate(t.createdAt) !== SELECTED_DATE) return;
     if (!t.driverId || !t.BA) return;
 
-    if (!map[t.driverId]) {
-      map[t.driverId] = [];
-    }
-
+    if (!map[t.driverId]) map[t.driverId] = [];
     if (!map[t.driverId].includes(t.BA)) {
       map[t.driverId].push(t.BA);
     }
@@ -1568,10 +1560,17 @@ function setLoaderText(txt) {
     await loadDriverUIConfig();
 
     showLoader("Loading dashboard…");
-    await refreshDashboard();
+    
 
     showLoader("Loading tasks…");
-    await loadTasks("PENDING");
+    const snap = await get(ref(db, "tasks"));
+    const raw = snap.val() || {};
+    const tasks = Object.keys(raw).map(k => ({ _key: k, ...raw[k] }));
+    setCachedTasks(tasks);
+    window.ALL_TASKS = tasks;
+    
+    refreshDashboard();
+    loadTasks("PENDING");
   } catch (e) {
     alert("Dashboard failed to load. Please refresh.");
   } finally {
