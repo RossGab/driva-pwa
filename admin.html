@@ -269,7 +269,7 @@ button {
 <div class="admin-header" style="justify-content:space-between;">
   <div style="display:flex;align-items:center;gap:14px;">
     <img src="./logo.jpg" class="admin-logo" alt="Company Logo">
-    <h1>Admin Dashboard <span class="version">V2.5.1.3</span></h1>
+    <h1>Admin Dashboard <span class="version">V2.5.1.4</span></h1>
   </div>
 
   <!-- 📅 DATE FILTER -->
@@ -984,48 +984,43 @@ window.showAllOpenTasks = function () {
 window.hardRefresh = async function () {
   showLoader("Refreshing all data…");
 
-  // Preserve BA filter selections
+  // Preserve BA filters
   const preservedBA = new Set(FILTER_BA);
 
   try {
     // 1️⃣ Clear cache FIRST
     clearTaskCache();
 
-    // 2️⃣ Reload drivers (network)
-    await loadDrivers();
-
-    // 3️⃣ 🔥 FORCE RELOAD TASKS FROM FIREBASE
+    // 2️⃣ Reload tasks (THIS IS THE CORE)
     const snap = await get(ref(db, "tasks"));
     const raw = snap.val() || {};
     const tasks = Object.keys(raw).map(k => ({ _key: k, ...raw[k] }));
     setCachedTasks(tasks);
     window.ALL_TASKS = tasks;
 
-    // 4️⃣ Rebuild dashboard + task list FROM CACHE
+    // 3️⃣ Rebuild UI from cache (NEVER FAIL)
     refreshDashboard();
     loadTasks(CURRENT_STATUS || "PENDING");
 
-    // 5️⃣ Live Map data (only if needed)
-    await buildDriverBAMapLive();
-    await buildTaskStatsLive();
-
-    // 6️⃣ Restore BA selections
+    // 4️⃣ Restore BA selections
     FILTER_BA = new Set(preservedBA);
 
-    // 7️⃣ Rebuild BA UI
-    if (!MAP_VISIBLE) {
-      buildBAFilters(window.ALL_TASKS || []);
-    }
-
-    // 8️⃣ Refresh live map safely
+    // 5️⃣ OPTIONAL: refresh live map data (DO NOT BREAK REFRESH)
     if (MAP_VISIBLE) {
-      buildLiveMapBAFilters();
-      await refreshMap();
+      try {
+        await loadDrivers();
+        await buildDriverBAMapLive();
+        await buildTaskStatsLive();
+        buildLiveMapBAFilters();
+        await refreshMap();
+      } catch (e) {
+        console.warn("Live map refresh skipped:", e);
+      }
     }
 
   } catch (err) {
-    console.error(err);
-    alert("Refresh failed. Please try again.");
+    console.error("Hard refresh failed:", err);
+    alert("⚠️ Data refreshed partially. Please try again if needed.");
   } finally {
     hideLoader();
   }
