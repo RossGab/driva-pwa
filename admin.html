@@ -269,7 +269,7 @@ button {
 <div class="admin-header" style="justify-content:space-between;">
   <div style="display:flex;align-items:center;gap:14px;">
     <img src="./logo.jpg" class="admin-logo" alt="Company Logo">
-    <h1>Admin Dashboard <span class="version">V2.4.22</span></h1>
+    <h1>Admin Dashboard <span class="version">V2.4.23</span></h1>
   </div>
 
   <!-- 📅 DATE FILTER -->
@@ -394,7 +394,22 @@ button {
       max-height:420px;
       box-shadow:0 0 4px rgba(0,0,0,.1);
     ">
+    
       <b>🚗 Drivers</b>
+    
+      <!-- ✅ ONLINE FILTER -->
+      <label style="
+        display:flex;
+        align-items:center;
+        gap:6px;
+        font-size:12px;
+        margin:6px 0 8px;
+        cursor:pointer;
+      ">
+        <input type="checkbox" id="onlineOnlyToggle">
+        Show online drivers only
+      </label>
+    
       <div id="driverItems" style="margin-top:8px;">
         Loading drivers…
       </div>
@@ -591,6 +606,7 @@ let CURRENT_STATUS = null;
 let FILTER_BA = new Set();
 let SEARCH_TERM = "";
 let MAP_VISIBLE = false;
+let SHOW_ONLINE_ONLY = false;
 let TASK_STATS = {};
 let FILTER_DRIVER = null;
 let DRIVER_BA_MAP = {};
@@ -1198,6 +1214,11 @@ window.toggleLiveMap = async function () {
 
   if (!MAP_VISIBLE) return;
 
+  // ✅ apply online filter immediately
+  if (SHOW_ONLINE_ONLY) {
+    refreshMap();
+  }
+
   initMap();
   setTimeout(() => map.invalidateSize(), 200);
 
@@ -1265,6 +1286,10 @@ function renderDriverList(statusData = {}) {
 
     const driverStatus = getDriverStatus(status.lastSeen);
     const stats = TASK_STATS[driverId] || { open: 0, completed: 0 };
+    // ✅ Online-only filter
+    if (SHOW_ONLINE_ONLY && driverStatus.label !== "Active") {
+      return;
+    }
 
     const row = document.createElement("div");
     row.style.cssText = `
@@ -1426,6 +1451,14 @@ async function refreshMap() {
 
     const pos = [d.latitude, d.longitude];
     const status = getDriverStatus(d.lastSeen);
+    // ✅ Online-only filter (map markers)
+    if (SHOW_ONLINE_ONLY && status.label !== "Active") {
+      if (markers[id]) {
+        map.removeLayer(markers[id]);
+        delete markers[id];
+      }
+      return;
+    }
 
     const icon = L.divIcon({
       html: `<div style="
@@ -1523,6 +1556,18 @@ function setLoaderText(txt) {
   } catch (e) {
     alert("Dashboard failed to load. Please refresh.");
   } finally {
+    // ✅ Online-only driver toggle (Live Map)
+    const onlineToggle = document.getElementById("onlineOnlyToggle");
+    
+    if (onlineToggle) {
+      onlineToggle.addEventListener("change", e => {
+        SHOW_ONLINE_ONLY = e.target.checked;
+    
+        if (MAP_VISIBLE) {
+          refreshMap(); // 🔥 re-filter drivers + markers
+        }
+      });
+    }
     hideLoader();
   }
 })();
