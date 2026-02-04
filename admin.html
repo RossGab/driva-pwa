@@ -269,7 +269,7 @@ button {
 <div class="admin-header" style="justify-content:space-between;">
   <div style="display:flex;align-items:center;gap:14px;">
     <img src="./logo.jpg" class="admin-logo" alt="Company Logo">
-    <h1>Admin Dashboard <span class="version">V2.5.1.1</span></h1>
+    <h1>Admin Dashboard <span class="version">V2.5.1.2</span></h1>
   </div>
 
   <!-- 📅 DATE FILTER -->
@@ -462,10 +462,10 @@ if (savedDate) {
 const adminDateFilter = document.getElementById("adminDateFilter");
 adminDateFilter.value = SELECTED_DATE;
 
-adminDateFilter.addEventListener("change", async e => {
+adminDateFilter.addEventListener("change", e => {
   SELECTED_DATE = e.target.value;
   localStorage.setItem("ADMIN_SELECTED_DATE", SELECTED_DATE);
-  await hardRefresh();
+  onAdminDateChangeFast();
 });
 
 async function loadDriverUIConfig() {
@@ -479,6 +479,22 @@ function showLoader(text = "Loading…") {
   setLoaderText(text);
   el.classList.remove("hide");
   el.style.display = "flex";
+}
+
+function onAdminDateChangeFast() {
+  showLoader("Updating view…");
+
+  // DO NOT clear cache
+  refreshDashboard(); // already filters by SELECTED_DATE
+  loadTasks(CURRENT_STATUS || "PENDING");
+
+  if (MAP_VISIBLE) {
+    buildDriverBAMapLive();
+    buildTaskStatsLive();
+    refreshMap();
+  }
+
+  hideLoader();
 }
 
 function reloadAllAdminViews() {
