@@ -81,7 +81,7 @@ select, input[type="date"] {
 
 <body>
 
-<h2>Manage Tasks V4.0.8.7</h2>
+<h2>Manage Tasks V4.0.9</h2>
 
 <button onclick="location.href='admin.html'" class="small-btn">⬅ Back</button>
 
@@ -115,7 +115,7 @@ select, input[type="date"] {
 
 <!-- TASK TABLE -->
 <div class="panel">
-  <b>📝 Pending Tasks</b>
+  <b>📝Open Tasks</b>
   <div style="overflow:auto;margin-top:6px;">
     <table>
       <thead>
@@ -127,6 +127,7 @@ select, input[type="date"] {
           <th>JobType</th>
           <th>BA</th>
           <th>Created Date Time</th>
+          <th>Status</th>
         </tr>
       </thead>
       <tbody id="taskTable"></tbody>
@@ -226,8 +227,9 @@ async function loadTasks() {
   const snap = await get(ref(db,"tasks"));
   const raw = snap.val() || {};
 
-  TASKS = Object.keys(raw).map(k=>({ _key:k, ...raw[k] }))
-    .filter(t=>t.status==="PENDING");
+  TASKS = Object.keys(raw)
+  .map(k => ({ _key: k, ...raw[k] }))
+  .filter(t => t.status !== "COMPLETED");
 
   buildFilterLists();
   applyFilters();
@@ -333,13 +335,23 @@ function renderTable(data) {
   data.forEach(t=>{
     const tr = document.createElement("tr");
     tr.innerHTML = `
-      <td><input type="checkbox" data-id="${t._key}" onchange="checkSelection()"></td>
+      <td>
+        <input type="checkbox"
+          data-id="${t._key}"
+          ${t.status === "CANCELLED" ? "disabled" : ""}
+          onchange="checkSelection()">
+      </td>
       <td>${t.CUSTOMERNAME||""}</td>
       <td>${t.ADDRESS||""}</td>
       <td>${t.driverId||"—"}</td>
       <td>${t.JOBTYPE||""}</td>
       <td>${t.BA||""}</td>
       <td>${toPHTime(t.createdAt)}</td>
+      <td>
+        <b style="color:${t.status === 'CANCELLED' ? '#c0392b' : '#333'}">
+          ${t.status || "PENDING"}
+        </b>
+      </td>
     `;
     table.appendChild(tr);
   });
@@ -363,10 +375,18 @@ window.openBulkActions = function () {
   const ids = [...document.querySelectorAll("#taskTable input:checked")]
     .map(cb => cb.dataset.id);
 
-  const action = prompt("Type: TRANSFER or DELETE");
+  if (!ids.length) return;
 
-  if(action === "DELETE") bulkDelete(ids);
-  else if(action === "TRANSFER") bulkTransfer(ids);
+  const action = prompt("Type: TRANSFER, DELETE, or CANCEL");
+
+  if (!action) return;
+
+  const cmd = action.toUpperCase().trim();
+
+  if (cmd === "DELETE") bulkDelete(ids);
+  else if (cmd === "TRANSFER") bulkTransfer(ids);
+  else if (cmd === "CANCEL") bulkCancel(ids);
+  else alert("Invalid action. Use TRANSFER, DELETE, or CANCEL.");
 };
 
 async function bulkDelete(ids) {
@@ -384,6 +404,21 @@ async function bulkTransfer(ids) {
   const updates={};
   ids.forEach(id=>updates[`tasks/${id}/driverId`]=newDriver);
   await update(ref(db),updates);
+  loadTasks();
+}
+
+async function bulkCancel(ids) {
+  if (!confirm(`Cancel ${ids.length} tasks?`)) return;
+
+  const updates = {};
+  const now = new Date().toISOString();
+
+  ids.forEach(id => {
+    updates[`tasks/${id}/status`] = "CANCELLED";
+    updates[`tasks/${id}/cancelledAt`] = now;
+  });
+
+  await update(ref(db), updates);
   loadTasks();
 }
 
