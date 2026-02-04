@@ -269,7 +269,7 @@ button {
 <div class="admin-header" style="justify-content:space-between;">
   <div style="display:flex;align-items:center;gap:14px;">
     <img src="./logo.jpg" class="admin-logo" alt="Company Logo">
-    <h1>Admin Dashboard <span class="version">V2.5.1</span></h1>
+    <h1>Admin Dashboard <span class="version">V2.5.2</span></h1>
   </div>
 
   <!-- 📅 DATE FILTER -->
@@ -961,63 +961,28 @@ window.showAllOpenTasks = function () {
     hideLoader();
   }
 };
-  
-window.loadTasks = function (status) {
-  CURRENT_STATUS = status;
-  taskList.innerHTML = "Loading...";
-
+  window.loadTasks = function () {
   const allTasks = getCachedTasks() || [];
-  window.ALL_TASKS = allTasks;
-
-  let tasks = allTasks.filter(t =>
-    t.status === status &&
-    isSamePHDate(t.createdAt, SELECTED_DATE)
-  );
-
-  if (FILTER_DRIVER)
-    tasks = tasks.filter(t => t.driverId === FILTER_DRIVER);
-
-  if (SEARCH_TERM)
-    tasks = tasks.filter(t =>
-      JSON.stringify(t).toLowerCase().includes(SEARCH_TERM)
-    );
-
-  if (FILTER_BA.size)
-    tasks = tasks.filter(t => FILTER_BA.has(t.BA));
-
   taskList.innerHTML = "";
-  if (!tasks.length) {
-    taskList.innerHTML = "No tasks found";
+
+  console.log("ALL TASKS:", allTasks);
+
+  if (!allTasks.length) {
+    taskList.innerHTML = "❌ Cache is empty";
     return;
   }
-  tasks.forEach(t => {
-  const sla = getSLA(t);
 
-  const div = document.createElement("div");
-  div.className = `task ${status === "COMPLETED" ? "completed" : "pending"}`;
-
-  div.innerHTML = `
-    <div class="task-header">
-      <b>${t.CUSTOMERNAME || ""}</b>
-      <div class="small">${t.ADDRESS || ""}</div>
-      <div class="small">Driver: ${t.driverId || "—"}</div>
-      ${sla ? `<div class="small ${sla.cls}">⏱ ${sla.text}</div>` : ""}
-    </div>
-
-    <div class="task-details" data-task-id="${t._key}" style="display:none">
-      ${renderTaskDetails(t)}
-      ${t.status === "COMPLETED" ? renderDynamicCompletedFields(t) : ""}
-    </div>
-  `;
-
-  const header = div.querySelector(".task-header");
-  const details = div.querySelector(".task-details");
-  header.onclick = () =>
-    details.style.display =
-      details.style.display === "none" ? "block" : "none";
-
-  taskList.appendChild(div);
-});
+  allTasks.forEach(t => {
+    const div = document.createElement("div");
+    div.className = "task pending";
+    div.innerHTML = `
+      <b>${t.CUSTOMERNAME || "NO NAME"}</b><br>
+      Status: ${t.status}<br>
+      Created: ${t.createdAt}<br>
+      Key: ${t._key}
+    `;
+    taskList.appendChild(div);
+  });
 };
 
 
