@@ -81,7 +81,7 @@ select, input[type="date"] {
 
 <body>
 
-<h2>Manage Tasks V4.1.1</h2>
+<h2>Manage Tasks V4.1.2</h2>
 
 <button onclick="location.href='admin.html'" class="small-btn">⬅ Back</button>
 
@@ -434,10 +434,25 @@ window.openBulkActions = function () {
 };
 
 async function bulkDelete(ids) {
-  if(!confirm(`Delete ${ids.length} tasks?`)) return;
-  const updates={};
-  ids.forEach(id=>updates[`tasks/${id}`]=null);
-  await update(ref(db),updates);
+  if (!confirm(`Delete ${ids.length} tasks?`)) return;
+
+  const updates = {};
+
+  ids.forEach(id => {
+    const task = TASKS.find(t => t._key === id);
+    if (!task || !task.createdAt) return;
+
+    const dateKey = normalizeDate(task.createdAt)?.replace(/-/g, "");
+    if (!dateKey) return;
+
+    // 1️⃣ remove task
+    updates[`tasks/${id}`] = null;
+
+    // 2️⃣ remove date index
+    updates[`tasksByDate/${dateKey}/${id}`] = null;
+  });
+
+  await update(ref(db), updates);
   loadTasks();
 }
 
