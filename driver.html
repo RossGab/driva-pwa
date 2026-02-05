@@ -198,7 +198,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebas
 import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.5.14.3.0-DYNAMIC";
+const VERSION = "Driver v3.5.14.3.1-DYNAMIC";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -696,14 +696,15 @@ cameraInput.onchange = async e => {
   };
 
   await savePhotoToDB({
-  id: `${CURRENT_TASK}_${CURRENT_PHOTO_INDEX}`,
-  taskKey: CURRENT_TASK,
-  photoIndex: CURRENT_PHOTO_INDEX,
-  blob,
-  takenAt: new Date().toISOString(),
-  gps,
-  deliveryData: BILLING_CACHE[CURRENT_TASK] || {}
-});
+    id: `${CURRENT_TASK}_${CURRENT_PHOTO_INDEX}`,
+    taskKey: CURRENT_TASK,
+    photoIndex: CURRENT_PHOTO_INDEX,
+    blob,
+    takenAt: new Date().toISOString(),
+    gps,
+    deliveryData: BILLING_CACHE[CURRENT_TASK] || {},
+    submitIntent: false   // 🔒 NEW: draft by default
+  });
   
   checkStorageQuota();
 
@@ -731,6 +732,11 @@ cameraInput.onchange = async e => {
   };
   
   window.submitTask = async function(taskKey) {
+
+  if (processingMap[taskKey] || uploadingMap[taskKey]) {
+    alert("Upload already in progress");
+    return;
+  }
 
   if (submitLock[taskKey]) return;
   submitLock[taskKey] = true;
@@ -782,7 +788,6 @@ cameraInput.onchange = async e => {
   
   // 🧠 Photos already saved to IndexedDB at capture time
   delete PHOTO_BUFFER[taskKey];
-  delete processingMap[taskKey];
   ACTIVE_CAPTURE_TASK = null;
   
   loadTasks();
@@ -792,6 +797,30 @@ cameraInput.onchange = async e => {
     btn.disabled = false;
     btn.innerText = "✅ Submit Task";
   }
+
+  /* =====================================================
+   🔓 MARK ALL INDEXEDDB RECORDS FOR THIS TASK AS SUBMITTED
+   ===================================================== */
+  const db = await openDB();
+  const tx = db.transaction(STORE, "readwrite");
+  const store = tx.objectStore(STORE);
+  
+  const all = await getAllPhotosFromDB();
+  all
+    .filter(r => r.taskKey === taskKey)
+    .forEach(r => {
+      store.put({
+        ...r,
+        submitIntent: true
+      });
+    });
+  
+  // ✅ WAIT until IndexedDB finishes writing
+  await new Promise((res, rej) => {
+    tx.oncomplete = res;
+    tx.onerror = rej;
+  });
+  /* ===================================================== */
   
   // 🚀 Let background uploader handle it
   setTimeout(processOfflineQueue, 1500);
@@ -987,6 +1016,16 @@ localStorage.setItem(
 );
 
 /* ================= FIX #3 END ================= */
+
+  if (isLastPhoto) {
+    const leftovers = (await getAllPhotosFromDB())
+      .filter(r => r.taskKey === taskKey);
+  
+    for (const r of leftovers) {
+      await deletePhotoFromDB(r.id);
+    }
+  }
+  
   // ✅ CLEAR FORM CACHE AFTER SUCCESS
   const forms = loadFormCache();
   delete forms[taskKey];
@@ -1715,7 +1754,11 @@ async function processOfflineQueue() {
       return;
     }
 
-    const records = await getAllPhotosFromDB();
+    const records = (await getAllPhotosFromDB()).filter(r =>
+      // ✅ allow legacy tasks
+      r.submitIntent !== false
+    );
+    
     if (!records.length) {
       OFFLINE_REPLAY_RUNNING = false;
       return;
