@@ -198,7 +198,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebas
 import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.5.14.4.0-DYNAMIC";
+const VERSION = "Driver v3.5.14.3.0.1-DYNAMIC";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -723,7 +723,7 @@ cameraInput.onchange = async e => {
   
   // ✅ Delay UI refresh to prevent Android camera crash
   setTimeout(() => {
-    safeLoadTasks("photo captured");
+    loadTasks();
   }, 300);
   } catch (err) {
       console.error("📸 Camera handler crash:", err);
@@ -810,7 +810,7 @@ cameraInput.onchange = async e => {
   delete processingMap[taskKey];
   ACTIVE_CAPTURE_TASK = null;
   
-  //loadTasks();
+  loadTasks();
   
   submitLock[taskKey] = false;
   if (btn) {
@@ -888,21 +888,6 @@ function saveToGallery(blob, filename) {
 
 window.CURRENT_TASK = null;
 
-function safeLoadTasks(reason = "") {
-  // ❌ Do not refresh while user is answering a task
-  if (ACTIVE_CAPTURE_TASK) {
-    console.log("⛔ loadTasks blocked (active capture)", reason);
-    return;
-  }
-
-  // ❌ Do not refresh while background upload is running
-  if (OFFLINE_REPLAY_RUNNING) {
-    console.log("⛔ loadTasks blocked (upload running)", reason);
-    return;
-  }
-
-  loadTasks();
-}
 
   
 function updateRefreshLock() {
@@ -1786,7 +1771,7 @@ async function processOfflineQueue() {
         .sort((a, b) => a.photoIndex - b.photoIndex);
 
       uploadingMap[taskKey] = true;
-      safeLoadTasks("upload start");
+      loadTasks();
 
       for (let i = 0; i < photos.length; i++) {
         const p = photos[i];
@@ -1814,7 +1799,7 @@ async function processOfflineQueue() {
             // ✅ CLEAN UP STATE SO UI DOES NOT GET STUCK
             delete uploadingMap[p.taskKey];
             delete processingMap[p.taskKey];
-            safeLoadTasks("upload error cleanup");
+            loadTasks();
           
             continue; // ⛔ stop this task, retry later
           }
@@ -1822,7 +1807,7 @@ async function processOfflineQueue() {
 
       delete uploadingMap[taskKey];
       delete processingMap[taskKey];
-      safeLoadTasks("upload finished");
+      loadTasks();
     }
     checkStorageQuota();
 
@@ -1850,12 +1835,12 @@ window.manualRetryUploads = async function () {
   alert("🔁 Retrying pending uploads…\n\nPlease keep the app open.");
 
   await processOfflineQueue();
-  safeLoadTasks("manual retry finished"); // ✅
+  loadTasks();
 };
 
 window.addEventListener("online", async () => {
   await processOfflineQueue();
-  safeLoadTasks("back online");
+  loadTasks();
 });
 
 let startY = 0;
