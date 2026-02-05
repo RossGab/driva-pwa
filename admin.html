@@ -269,7 +269,7 @@ button {
 <div class="admin-header" style="justify-content:space-between;">
   <div style="display:flex;align-items:center;gap:14px;">
     <img src="./logo.jpg" class="admin-logo" alt="Company Logo">
-    <h1>Admin Dashboard <span class="version">V2.7.3</span></h1>
+    <h1>Admin Dashboard <span class="version">V2.7.3.1</span></h1>
   </div>
 
   <!-- 📅 DATE FILTER -->
@@ -1751,7 +1751,7 @@ function startMapAutoRefresh() {
     // Optional: re-render driver list so numbers update visually
     const statusSnap = await get(ref(db, "driverStatus"));
     renderDriverList(statusSnap.val() || {});
-  }, 60000); // 🔥 every 60 seconds
+  }, 600000); // 🔥 every 60 seconds
 }
 
 function stopMapAutoRefresh() {
