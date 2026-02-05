@@ -198,7 +198,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebas
 import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.5.14.2.4-DYNAMIC";
+const VERSION = "Driver v3.5.14.2.5-DYNAMIC";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -639,7 +639,7 @@ function compressImage(file) {
       if (w > 1280) { h *= 1280 / w; w = 1280; }
       c.width = w; c.height = h;
       c.getContext("2d").drawImage(img, 0, 0, w, h);
-      c.toBlob(b => resolve(b), "image/jpeg", 0.65);
+      c.toBlob(b => resolve(b), "image/jpeg", 0.55);
     };
     r.readAsDataURL(file);
   });
@@ -1728,7 +1728,7 @@ async function processOfflineQueue() {
         const isLast = i === photos.length - 1;
 
         try {
-          await new Promise(r => setTimeout(r, 300));
+          await new Promise(r => setTimeout(r, 120));
           
           await uploadNow(
             p.taskKey,
