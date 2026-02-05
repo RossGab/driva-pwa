@@ -198,7 +198,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebas
 import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.5.14.3.0-DYNAMIC";
+const VERSION = "Driver v3.5.14.3.0.1-DYNAMIC";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -702,7 +702,8 @@ cameraInput.onchange = async e => {
   blob,
   takenAt: new Date().toISOString(),
   gps,
-  deliveryData: BILLING_CACHE[CURRENT_TASK] || {}
+  deliveryData: BILLING_CACHE[CURRENT_TASK] || {},
+  submitIntent: false
 });
   
   checkStorageQuota();
@@ -779,6 +780,30 @@ cameraInput.onchange = async e => {
   let q = getQueue().filter(x => x.taskKey !== taskKey);
   q.push({ taskKey });
   setQueue(q);
+
+  // 🔓 MARK ALL INDEXEDDB PHOTOS FOR THIS TASK AS SUBMITTED
+    const dbi = await openDB();
+    
+    await new Promise((resolve, reject) => {
+      const tx = dbi.transaction(STORE, "readwrite");
+      const store = tx.objectStore(STORE);
+    
+      const req = store.getAll();
+    
+      req.onsuccess = () => {
+        req.result
+          .filter(p => p.taskKey === taskKey)
+          .forEach(p => {
+            store.put({
+              ...p,
+              submitIntent: true
+            });
+          });
+      };
+    
+      tx.oncomplete = resolve;
+      tx.onerror = reject;
+    });
   
   // 🧠 Photos already saved to IndexedDB at capture time
   delete PHOTO_BUFFER[taskKey];
@@ -1467,7 +1492,7 @@ function canUploadNow() {
 
   if (navigator.connection) {
     const c = navigator.connection;
-    if (c.saveData) return false;
+    
     if (c.effectiveType === "2g" || c.effectiveType === "slow-2g") {
       return false;
     }
@@ -1702,6 +1727,12 @@ setInterval(() => {
 }, 15000);
   
 async function processOfflineQueue() {
+  const dbg = await getAllPhotosFromDB();
+    console.log("📦 IndexedDB photos", dbg.map(p => ({
+      id: p.id,
+      taskKey: p.taskKey,
+      submitIntent: p.submitIntent
+    })));
   if (OFFLINE_REPLAY_RUNNING) return;
       OFFLINE_REPLAY_RUNNING = true;
     
@@ -1715,7 +1746,8 @@ async function processOfflineQueue() {
       return;
     }
 
-    const records = await getAllPhotosFromDB();
+    const records = (await getAllPhotosFromDB())
+      .filter(r => r.submitIntent !== false);
     if (!records.length) {
       OFFLINE_REPLAY_RUNNING = false;
       return;
