@@ -180,7 +180,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebas
 import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.5.14.2.2-DYNAMIC";
+const VERSION = "Driver v3.5.14.2.3-DYNAMIC";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -1638,10 +1638,31 @@ function validateDynamic(taskKey) {
 }  
 loadTasks();
 
+let OFFLINE_REPLAY_RUNNING = false;
+
 // 🔁 Resume offline uploads AFTER UI is ready
 setTimeout(processOfflineQueue, 1500);
 
-let OFFLINE_REPLAY_RUNNING = false;
+
+
+// 🔁 Resume uploads when app returns to foreground
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) {
+    processOfflineQueue();
+  }
+});
+
+// 🔁 Resume uploads when app gains focus
+window.addEventListener("focus", () => {
+  processOfflineQueue();
+});
+
+// 🔁 Safety retry while app is open
+setInterval(() => {
+  if (!OFFLINE_REPLAY_RUNNING && canUploadNow()) {
+    processOfflineQueue();
+  }
+}, 15000);
   
 async function processOfflineQueue() {
   if (OFFLINE_REPLAY_RUNNING) return;
