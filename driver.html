@@ -147,6 +147,24 @@ img { width:100%;margin-top:8px;border-radius:6px; }
          margin-bottom:10px;border-radius:6px;
          font-weight:bold;color:#f39c12;">
 </div>
+<button
+  id="retryUploadBtn"
+  style="
+    display:none;
+    width:100%;
+    padding:10px;
+    margin-bottom:10px;
+    border-radius:6px;
+    border:none;
+    font-size:14px;
+    font-weight:bold;
+    background:#e67e22;
+    color:#fff;
+  "
+  onclick="manualRetryUploads()"
+>
+  🔁 Retry Pending Uploads
+</button>
 
 <input
   type="date"
@@ -180,7 +198,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebas
 import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.5.14.2.3-DYNAMIC";
+const VERSION = "Driver v3.5.14.2.4-DYNAMIC";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -1181,6 +1199,7 @@ function handleGPSError(err) {
 
 function updateUploadCounter(tasks) {
   if (!Array.isArray(tasks)) return;
+
   const uploadingCount = tasks.filter(t => {
     const status = resolveStatus(t);
     return (
@@ -1191,15 +1210,20 @@ function updateUploadCounter(tasks) {
   }).length;
 
   const el = document.getElementById("uploadCounter");
+  const retryBtn = document.getElementById("retryUploadBtn");
 
   if (!el) return;
 
   if (uploadingCount > 0) {
     el.innerText = `⏫ Pending Uploads: ${uploadingCount}`;
     el.style.display = "block";
+
+    if (retryBtn) retryBtn.style.display = "block";
   } else {
     el.innerText = "";
     el.style.display = "none";
+
+    if (retryBtn) retryBtn.style.display = "none";
   }
 }
   
@@ -1746,6 +1770,23 @@ async function processOfflineQueue() {
     OFFLINE_REPLAY_RUNNING = false;
   }
 }
+
+window.manualRetryUploads = async function () {
+  if (OFFLINE_REPLAY_RUNNING) {
+    alert("⏳ Upload already in progress");
+    return;
+  }
+
+  if (!navigator.onLine) {
+    alert("📴 You are offline. Connect to the internet first.");
+    return;
+  }
+
+  alert("🔁 Retrying pending uploads…\n\nPlease keep the app open.");
+
+  await processOfflineQueue();
+  loadTasks();
+};
 
 window.addEventListener("online", async () => {
   await processOfflineQueue();
