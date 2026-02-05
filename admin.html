@@ -269,7 +269,7 @@ button {
 <div class="admin-header" style="justify-content:space-between;">
   <div style="display:flex;align-items:center;gap:14px;">
     <img src="./logo.jpg" class="admin-logo" alt="Company Logo">
-    <h1>Admin Dashboard <span class="version">V2.7.1</span></h1>
+    <h1>Admin Dashboard <span class="version">V2.7.2</span></h1>
   </div>
 
   <!-- 📅 DATE FILTER -->
@@ -603,6 +603,23 @@ function clearTaskCache() {
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 
+const EDITABLE_FIELDS = [
+  "driverId",
+  "JOBTYPE",
+  "BA",
+  "DMZ",
+  "MRU",
+  "SEQUENCE",
+  "METERNUMBER",
+  "ACCOUNTNUMBER",
+  "CUSTOMERNAME",
+  "ADDRESS",
+  "ZIPCODE",
+  "LATITUDE",
+  "LONGITUDE",
+  "deliveryType"
+];
+
 
 let CURRENT_STATUS = null;
 let FILTER_BA = new Set();
@@ -928,39 +945,92 @@ function renderTaskDetails(t) {
 window.revertToPending = async function (taskKey) {
   if (!confirm("Reset task and send back to pending?")) return;
 
-  const snap = await get(ref(db, `tasks/${taskKey}`));
-  if (!snap.exists()) return alert("Task not found");
+  showLoader("Resetting task…");
 
-  const original = snap.val();
+  try {
+    const snap = await get(ref(db, `tasks/${taskKey}`));
+    if (!snap.exists()) {
+      alert("Task not found");
+      return;
+    }
 
-  const CORE_FIELDS = [
-    "JOBTYPE","BA","DMZ","MRU","SEQUENCE","METERNUMBER",
-    "ACCOUNTNUMBER","CUSTOMERNAME","ADDRESS","ZIPCODE",
-    "LATITUDE","LONGITUDE","AGENTID","AGENTNAME",
-    "driverId","rowIndex","createdAt"
-  ];
+    const original = snap.val();
 
-  const rebuilt = {};
+    // 1️⃣ Fields to CLEAR (completion-only data)
+    const RESET_FIELDS = [
+      "deliveryType",
+      "result",
+      "remarks",
+      "finalized"
+    ];
 
-  CORE_FIELDS.forEach(k => {
-    if (original[k] !== undefined) rebuilt[k] = original[k];
-  });
+    // Also clear any dynamic form fields
+    Object.keys(original).forEach(k => {
+      if (
+        k.startsWith("photo") === false &&
+        k !== "createdAt" &&
+        k !== "driverId" &&
+        k !== "JOBTYPE" &&
+        k !== "BA" &&
+        k !== "DMZ" &&
+        k !== "MRU" &&
+        k !== "SEQUENCE" &&
+        k !== "METERNUMBER" &&
+        k !== "ACCOUNTNUMBER" &&
+        k !== "CUSTOMERNAME" &&
+        k !== "ADDRESS" &&
+        k !== "ZIPCODE" &&
+        k !== "LATITUDE" &&
+        k !== "LONGITUDE" &&
+        k !== "AGENTID" &&
+        k !== "AGENTNAME" &&
+        k !== "rowIndex" &&
+        k !== "status"
+      ) {
+        RESET_FIELDS.push(k);
+      }
+    });
 
-  Object.assign(rebuilt, {
-    status: "PENDING",
-    finalized: false,
-    forceReopen: true,   
-    reopenedAt: new Date().toISOString()
-  });
+    const updates = {};
 
-  await set(ref(db, `tasks/${taskKey}`), rebuilt);
+    RESET_FIELDS.forEach(k => {
+      updates[k] = null;
+    });
 
-  clearTaskCache();
+    // 2️⃣ Force safe pending state
+    Object.assign(updates, {
+      status: "PENDING",
+      finalized: false,
+      forceReopen: true,
+      reopenedAt: new Date().toISOString()
+    });
 
-  alert("✅ Task reset. Driver receives clean task.");
+    // 3️⃣ Apply LIGHT update
+    await update(ref(db, `tasks/${taskKey}`), updates);
 
-  refreshDashboard();
-  loadTasks("PENDING");
+    // 4️⃣ Update local cache
+    const cached = getCachedTasks() || [];
+    const idx = cached.findIndex(t => t._key === taskKey);
+
+    if (idx !== -1) {
+      cached[idx] = {
+        ...cached[idx],
+        ...updates
+      };
+      setCachedTasks(cached);
+    }
+
+    alert("✅ Task reset to pending");
+
+    refreshDashboard();
+    loadTasks("PENDING");
+
+  } catch (err) {
+    console.error(err);
+    alert("Failed to reset task");
+  } finally {
+    hideLoader();
+  }
 };
   
 window.showCompletedTasks = function () {
@@ -1229,64 +1299,100 @@ window.loadTaskPhotos = async function (taskId, btn) {
   box.innerHTML = html || "No photos";
 };
 
-  
-window.saveEdit = async function (btn) {
+  window.saveEdit = async function (btn) {
   const details = btn.closest(".task-details");
   const taskId = details.dataset.taskId;
 
-  alert("Saving task: " + taskId);
+  showLoader("Saving changes…");
 
-  const fields = details.querySelectorAll("input, textarea, select");
-  const payload = {};
-  let selectedDriverId = null;
-
-  fields.forEach(el => {
-    payload[el.dataset.field] = el.value;
-    el.disabled = true;
-
-    if (el.dataset.field === "driverId") {
-      selectedDriverId = el.value;
+  try {
+    // 1️⃣ Read original task (source of truth)
+    const snap = await get(ref(db, `tasks/${taskId}`));
+    if (!snap.exists()) {
+      alert("Task not found");
+      return;
     }
-  });
 
-  if (selectedDriverId && DRIVER_CACHE[selectedDriverId]) {
-    payload.AGENTID = selectedDriverId;
-    payload.AGENTNAME = DRIVER_CACHE[selectedDriverId].name || "";
-  } else {
-    payload.AGENTID = "";
-    payload.AGENTNAME = "";
-  }
-  alert(JSON.stringify(payload, null, 2));
-  await update(ref(db, `tasks/${taskId}`), payload);
+    const original = snap.val();
 
-  /* 🔥 ADD THIS BLOCK — UPDATE LOCAL CACHE */
-  const cached = getCachedTasks() || [];
-  const idx = cached.findIndex(t => t._key === taskId);
-  
-  if (idx !== -1) {
-    cached[idx] = {
-    ...cached[idx],
-    ...payload,
-    photo1Url: undefined,
-    photo2Url: undefined,
-    photo3Url: undefined
-  };
-    setCachedTasks(cached);
+    // 2️⃣ Allowlist editable fields
+    const EDITABLE_FIELDS = [
+      "driverId",
+      "JOBTYPE",
+      "BA",
+      "DMZ",
+      "MRU",
+      "SEQUENCE",
+      "METERNUMBER",
+      "ACCOUNTNUMBER",
+      "CUSTOMERNAME",
+      "ADDRESS",
+      "ZIPCODE",
+      "LATITUDE",
+      "LONGITUDE",
+      "deliveryType"
+    ];
+
+    const fields = details.querySelectorAll("input, textarea, select");
+    const payload = {};
+
+    fields.forEach(el => {
+      const key = el.dataset.field;
+      if (!EDITABLE_FIELDS.includes(key)) return;
+
+      payload[key] = el.value;
+      el.disabled = true;
+    });
+
+    // 3️⃣ Preserve critical fields (ABSOLUTE)
+    payload.createdAt = original.createdAt;
+    payload.status = original.status;
+    payload.finalized = original.finalized || false;
+
+    // 4️⃣ Handle agent name safely
+    if (payload.driverId && DRIVER_CACHE[payload.driverId]) {
+      payload.AGENTID = payload.driverId;
+      payload.AGENTNAME = DRIVER_CACHE[payload.driverId].name || "";
+    } else {
+      payload.AGENTID = "";
+      payload.AGENTNAME = "";
+    }
+
+    // 5️⃣ Update Firebase (light write)
+    await update(ref(db, `tasks/${taskId}`), payload);
+
+    // 6️⃣ Update LOCAL CACHE only (NO refetch)
+    const cached = getCachedTasks() || [];
+    const idx = cached.findIndex(t => t._key === taskId);
+
+    if (idx !== -1) {
+      cached[idx] = {
+        ...cached[idx],
+        ...payload
+      };
+      setCachedTasks(cached);
+    }
+
+    alert("✅ Task updated");
+
+    // 7️⃣ Restore UI
+    details.querySelector(".form-actions").innerHTML = `
+      <button class="toggleBtn" onclick="enableEdit(this)">
+        ✏ Modify Task
+      </button>
+    `;
+
+    refreshDashboard();
+    loadTasks(CURRENT_STATUS);
+
+  } catch (err) {
+    console.error(err);
+    alert("Failed to save task");
+  } finally {
+    hideLoader();
   }
-  /* 🔥 END CACHE UPDATE */
-  
-  alert("✅ Task updated");
-  
-  details.querySelector(".form-actions").innerHTML = `
-    <button class="toggleBtn" onclick="enableEdit(this)">
-      ✏ Modify Task
-    </button>
-  `;
-  
-  refreshDashboard();
-  loadTasks(CURRENT_STATUS);
-  
 };
+  
 /* ===== LIVE MAP ===== */
 let map, markers={};
 
