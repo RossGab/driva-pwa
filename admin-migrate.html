@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Task Date Index Migration</title>
+</head>
+<body>
+  <h2>Running task date migration…</h2>
+  <pre id="log"></pre>
+
+<script type="module">
+import { initializeApp } from
+  "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import {
+  getDatabase, ref, get, update
+} from
+  "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyDFW61pnwLvh6HGKWt10zLYNr860fI8vkg",
+  authDomain: "driva-pwa.firebaseapp.com",
+  databaseURL: "https://driva-pwa-default-rtdb.firebaseio.com",
+  projectId: "driva-pwa",
+  storageBucket: "driva-pwa.firebasestorage.app",
+  messagingSenderId: "299138219722",
+  appId: "1:299138219722:web:623ff6b0a067ea822dfe33"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
+const log = msg => {
+  document.getElementById("log").textContent += msg + "\n";
+  console.log(msg);
+};
+
+async function migrate() {
+  log("📥 Loading tasks…");
+
+  const snap = await get(ref(db, "tasks"));
+  const tasks = snap.val() || {};
+
+  const updates = {};
+  let indexed = 0;
+  let skipped = 0;
+
+  for (const [taskId, task] of Object.entries(tasks)) {
+    let dateKey = null;
+
+    // 1️⃣ Use createdAt if available
+    if (task.createdAt) {
+      const d = new Date(task.createdAt);
+      if (!isNaN(d.getTime())) {
+        dateKey = d.toLocaleDateString("en-CA", {
+          timeZone: "Asia/Manila"
+        }).replace(/-/g, "");
+      }
+    }
+
+    // 2️⃣ Fallback: extract timestamp from TASK_XXXXXXXX
+    if (!dateKey && taskId.startsWith("TASK_")) {
+      const ts = Number(taskId.split("_")[1]);
+      if (!isNaN(ts)) {
+        const d = new Date(ts);
+        dateKey = d.toLocaleDateString("en-CA", {
+          timeZone: "Asia/Manila"
+        }).replace(/-/g, "");
+      }
+    }
+
+    if (!dateKey) {
+      skipped++;
+      continue;
+    }
+
+    updates[`tasksByDate/${dateKey}/${taskId}`] = true;
+    indexed++;
+  }
+
+  if (indexed === 0) {
+    log("⚠️ No tasks indexed. Nothing to update.");
+    return;
+  }
+
+  log(`🚀 Writing ${indexed} date indexes…`);
+  await update(ref(db), updates);
+
+  log(`✅ Migration complete`);
+  log(`Indexed: ${indexed}`);
+  log(`Skipped: ${skipped}`);
+}
+
+migrate();
+</script>
+</body>
+</html>
