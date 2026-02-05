@@ -269,7 +269,7 @@ button {
 <div class="admin-header" style="justify-content:space-between;">
   <div style="display:flex;align-items:center;gap:14px;">
     <img src="./logo.jpg" class="admin-logo" alt="Company Logo">
-    <h1>Admin Dashboard <span class="version">V2.7.2</span></h1>
+    <h1>Admin Dashboard <span class="version">V2.7.3</span></h1>
   </div>
 
   <!-- 📅 DATE FILTER -->
@@ -1741,9 +1741,17 @@ let MAP_REFRESH_TIMER = null;
 
 function startMapAutoRefresh() {
   if (MAP_REFRESH_TIMER) return;
-  MAP_REFRESH_TIMER = setInterval(() => {
-    if (MAP_VISIBLE) refreshMap();
-  }, 120000); // every 2 minutes
+
+  MAP_REFRESH_TIMER = setInterval(async () => {
+    if (!MAP_VISIBLE) return;
+
+    await refreshMap();          // GPS + markers
+    await buildTaskStatsLive();  // 🔥 Open / Done counts per driver
+
+    // Optional: re-render driver list so numbers update visually
+    const statusSnap = await get(ref(db, "driverStatus"));
+    renderDriverList(statusSnap.val() || {});
+  }, 60000); // 🔥 every 60 seconds
 }
 
 function stopMapAutoRefresh() {
