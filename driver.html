@@ -198,7 +198,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebas
 import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.5.14.3.6-DYNAMIC";
+const VERSION = "Driver v3.5.14.3.0-DYNAMIC";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -261,22 +261,6 @@ async function getAllPhotosFromDB() {
     const req = tx.objectStore(STORE).getAll();
     req.onsuccess = () => resolve(req.result || []);
   });
-}
-
-function markTaskCompletedLocally(taskKey) {
-  const cachedTasks =
-    JSON.parse(localStorage.getItem(TASK_CACHE_KEY) || "[]");
-
-  const idx = cachedTasks.findIndex(t => t._key === taskKey);
-  if (idx !== -1) {
-    cachedTasks[idx].status = "COMPLETED";
-    cachedTasks[idx].finalized = true;
-  }
-
-  localStorage.setItem(
-    TASK_CACHE_KEY,
-    JSON.stringify(cachedTasks)
-  );
 }
 
 async function deletePhotoFromDB(id) {
@@ -346,11 +330,6 @@ function isBusy() {
     Object.keys(processingMap).length > 0 ||
     Object.keys(uploadingMap).length > 0
   );
-}
-
-function cleanupStuckTasks() {
-  for (const k in uploadingMap) delete uploadingMap[k];
-  for (const k in processingMap) delete processingMap[k];
 }
 
 searchBox.addEventListener("input", e => {
@@ -717,16 +696,14 @@ cameraInput.onchange = async e => {
   };
 
   await savePhotoToDB({
-    id: `${CURRENT_TASK}_${CURRENT_PHOTO_INDEX}`,
-    taskKey: CURRENT_TASK,
-    photoIndex: CURRENT_PHOTO_INDEX,
-    blob,
-    takenAt: new Date().toISOString(),
-    gps,
-    deliveryData: BILLING_CACHE[CURRENT_TASK] || {},
-    submitIntent: false
-
-  });
+  id: `${CURRENT_TASK}_${CURRENT_PHOTO_INDEX}`,
+  taskKey: CURRENT_TASK,
+  photoIndex: CURRENT_PHOTO_INDEX,
+  blob,
+  takenAt: new Date().toISOString(),
+  gps,
+  deliveryData: BILLING_CACHE[CURRENT_TASK] || {}
+});
   
   checkStorageQuota();
 
@@ -754,11 +731,6 @@ cameraInput.onchange = async e => {
   };
   
   window.submitTask = async function(taskKey) {
-
-  if (processingMap[taskKey] || uploadingMap[taskKey]) {
-    alert("Upload already in progress");
-    return;
-  }
 
   if (submitLock[taskKey]) return;
   submitLock[taskKey] = true;
@@ -810,6 +782,7 @@ cameraInput.onchange = async e => {
   
   // 🧠 Photos already saved to IndexedDB at capture time
   delete PHOTO_BUFFER[taskKey];
+  delete processingMap[taskKey];
   ACTIVE_CAPTURE_TASK = null;
   
   loadTasks();
@@ -819,30 +792,6 @@ cameraInput.onchange = async e => {
     btn.disabled = false;
     btn.innerText = "✅ Submit Task";
   }
-
-  /* =====================================================
-   🔓 MARK ALL INDEXEDDB RECORDS FOR THIS TASK AS SUBMITTED
-   ===================================================== */
-  const db = await openDB();
-  const tx = db.transaction(STORE, "readwrite");
-  const store = tx.objectStore(STORE);
-  
-  const all = await getAllPhotosFromDB();
-  all
-    .filter(r => r.taskKey === taskKey)
-    .forEach(r => {
-      store.put({
-        ...r,
-        submitIntent: true
-      });
-    });
-  
-  // ✅ WAIT until IndexedDB finishes writing
-  await new Promise((res, rej) => {
-    tx.oncomplete = res;
-    tx.onerror = rej;
-  });
-  /* ===================================================== */
   
   // 🚀 Let background uploader handle it
   setTimeout(processOfflineQueue, 1500);
@@ -1038,16 +987,6 @@ localStorage.setItem(
 );
 
 /* ================= FIX #3 END ================= */
-
-  if (isLastPhoto) {
-    const leftovers = (await getAllPhotosFromDB())
-      .filter(r => r.taskKey === taskKey);
-  
-    for (const r of leftovers) {
-      await deletePhotoFromDB(r.id);
-    }
-  }
-  
   // ✅ CLEAR FORM CACHE AFTER SUCCESS
   const forms = loadFormCache();
   delete forms[taskKey];
@@ -1768,33 +1707,16 @@ async function processOfflineQueue() {
     
       try {
         if (!navigator.onLine || !canUploadNow()) {
-            console.log("⏸ Upload paused — will retry");
-          
-            // 🔥 FIX: unlock stuck tasks
-            cleanupStuckTasks();
-            loadTasks();
-          
-            OFFLINE_REPLAY_RUNNING = false;
-            setTimeout(processOfflineQueue, 5000);
-            return;
-          }
-
-        // 🔍 DEBUG: INSPECT INDEXEDDB CONTENTS
-    const allPhotos = await getAllPhotosFromDB();
-    console.log("📦 IndexedDB photos:", allPhotos.map(p => ({
-      id: p.id,
-      taskKey: p.taskKey,
-      submitIntent: p.submitIntent
-    })));
-
-    const records = allPhotos.filter(r =>
-      r.submitIntent === true || r.submitIntent === undefined
-    );
+      console.log("⏸ Upload paused — will retry");
+      OFFLINE_REPLAY_RUNNING = false;
     
+      // 🔁 auto-retry later even if no network event fires
+      setTimeout(processOfflineQueue, 5000);
+      return;
+    }
+
+    const records = await getAllPhotosFromDB();
     if (!records.length) {
-      cleanupStuckTasks();
-      loadTasks();
-    
       OFFLINE_REPLAY_RUNNING = false;
       return;
     }
@@ -1851,13 +1773,8 @@ async function processOfflineQueue() {
           }
       }
 
-      // ✅ MARK TASK AS COMPLETED LOCALLY
-      markTaskCompletedLocally(taskKey);
-      
-      // ✅ CLEAR RUNTIME LOCKS
       delete uploadingMap[taskKey];
       delete processingMap[taskKey];
-      
       loadTasks();
     }
     checkStorageQuota();
