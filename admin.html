@@ -269,7 +269,7 @@ button {
 <div class="admin-header" style="justify-content:space-between;">
   <div style="display:flex;align-items:center;gap:14px;">
     <img src="./logo.jpg" class="admin-logo" alt="Company Logo">
-    <h1>Admin Dashboard <span class="version">V2.4.23</span></h1>
+    <h1>Admin Dashboard <span class="version">V2.7.0</span></h1>
   </div>
 
   <!-- 📅 DATE FILTER -->
@@ -426,7 +426,9 @@ import {
 } from
   "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
-const TASK_CACHE_KEY = "ADMIN_TASK_CACHE_V1";
+function getTaskCacheKey() {
+  return `ADMIN_TASK_CACHE_${SELECTED_DATE}`;
+}
 
 /* ===== FIREBASE ===== */
 const firebaseConfig = {
@@ -581,7 +583,7 @@ window.openReport = function () {
 
 function getCachedTasks() {
   try {
-    const raw = localStorage.getItem(TASK_CACHE_KEY);
+    const raw = localStorage.getItem(getTaskCacheKey())
     return raw ? JSON.parse(raw) : null;
   } catch {
     return null;
@@ -590,12 +592,12 @@ function getCachedTasks() {
 
 function setCachedTasks(tasks) {
   try {
-    localStorage.setItem(TASK_CACHE_KEY, JSON.stringify(tasks));
+    localStorage.setItem(getTaskCacheKey(), JSON.stringify(tasks));
   } catch {}
 }
 
 function clearTaskCache() {
-  localStorage.removeItem(TASK_CACHE_KEY);
+  localStorage.removeItem(getTaskCacheKey())
 }
 
 const app = initializeApp(firebaseConfig);
@@ -712,36 +714,70 @@ window.clearSearch = function () {
   }
 };
   
-/* ===== DASHBOARD ===== */
+/* ===== DASHBOARD (OPTIMIZED BY DATE INDEX) ===== */
 window.refreshDashboard = async function () {
-  const snap = await withTimeout(get(ref(db,"tasks")), 60000);
-  const tasks = Object.values(snap.val()||{});
-  let open=0,done=0,ok=0,warn=0,breach=0;
+  let open = 0, done = 0, ok = 0, warn = 0, breach = 0;
 
-  tasks.forEach(t => {
-  if (normalizeDate(t.createdAt) !== SELECTED_DATE) return;
-  if (t.status === "COMPLETED") {
-    done++;
-    return;
+  // Convert YYYY-MM-DD → YYYYMMDD
+  const dateKey = SELECTED_DATE.replace(/-/g, "");
+
+  try {
+    // 1️⃣ Get task IDs for selected date
+    const indexSnap = await withTimeout(
+      get(ref(db, `tasksByDate/${dateKey}`)),
+      10000
+    );
+
+    const ids = indexSnap.val();
+
+    if (!ids) {
+      // No tasks for this date
+      openCount.innerText = 0;
+      doneCount.innerText = 0;
+      slaOk.innerText = 0;
+      slaWarn.innerText = 0;
+      slaBreach.innerText = 0;
+      return;
+    }
+
+    // 2️⃣ Fetch ONLY those tasks
+    const reads = Object.keys(ids).map(id =>
+      get(ref(db, `tasks/${id}`)).then(s =>
+        s.exists() ? s.val() : null
+      )
+    );
+
+    const tasks = (await Promise.all(reads)).filter(Boolean);
+
+    // 3️⃣ Count
+    tasks.forEach(t => {
+      if (t.status === "COMPLETED") {
+        done++;
+        return;
+      }
+
+      if (t.status === "PENDING") {
+        open++;
+
+        const sla = getSLA(t);
+        if (!sla) return;
+
+        if (sla.cls === "sla-ok") ok++;
+        else if (sla.cls === "sla-warn") warn++;
+        else breach++;
+      }
+    });
+
+  } catch (err) {
+    console.error("Dashboard load failed", err);
   }
 
-  if (t.status === "PENDING") {
-    open++;
-
-    const sla = getSLA(t);
-    if (!sla) return;
-
-    if (sla.cls === "sla-ok") ok++;
-    else if (sla.cls === "sla-warn") warn++;
-    else breach++;
-  }
-});
-  
-  openCount.innerText=open;
-  doneCount.innerText=done;
-  slaOk.innerText=ok;
-  slaWarn.innerText=warn;
-  slaBreach.innerText=breach;
+  // 4️⃣ Render
+  openCount.innerText = open;
+  doneCount.innerText = done;
+  slaOk.innerText = ok;
+  slaWarn.innerText = warn;
+  slaBreach.innerText = breach;
 };
 
 /* ===== TASK LIST ===== */
@@ -997,18 +1033,30 @@ window.loadTasks = async function (status) {
 
   let allTasks = getCachedTasks();
 
-  // 🔁 FETCH ONLY IF NO CACHE
-  if (!allTasks) {
-    try {
-      const snap = await withTimeout(get(ref(db, "tasks")), 60000);
-      const raw = snap.val() || {};
-      allTasks = Object.keys(raw).map(k => ({ _key: k, ...raw[k] }));
-      setCachedTasks(allTasks);
-    } catch (e) {
-      taskList.innerHTML = "⚠️ Failed to load tasks";
-      return;
-    }
+if (!allTasks) {
+  const dateKey = SELECTED_DATE.replace(/-/g, "");
+
+  const indexSnap = await withTimeout(
+    get(ref(db, `tasksByDate/${dateKey}`)),
+    15000
+  );
+
+  const ids = indexSnap.val();
+
+  if (!ids) {
+    allTasks = [];
+  } else {
+    const reads = Object.keys(ids).map(id =>
+      get(ref(db, `tasks/${id}`)).then(s =>
+        s.exists() ? { _key: id, ...s.val() } : null
+      )
+    );
+
+    allTasks = (await Promise.all(reads)).filter(Boolean);
   }
+
+  setCachedTasks(allTasks);
+}
 
   // ✅ FILTER LOCALLY (FAST)
   let tasks = allTasks.filter(t =>
@@ -1212,7 +1260,12 @@ window.toggleLiveMap = async function () {
   // Optional: also hide BA filters on map
   baFilters.style.display = MAP_VISIBLE ? "none" : "block";
 
-  if (!MAP_VISIBLE) return;
+  if (!MAP_VISIBLE) {
+    stopMapAutoRefresh();
+    return;
+  }
+  
+  startMapAutoRefresh();
 
   // ✅ apply online filter immediately
   if (SHOW_ONLINE_ONLY) {
@@ -1386,47 +1439,89 @@ async function buildTaskStats() {
 }
 
 async function buildTaskStatsLive() {
-  const snap = await withTimeout(get(ref(db, "tasks")), 8000);
-  const tasks = snap.val() || {};
-
   const stats = {};
+  const dateKey = SELECTED_DATE.replace(/-/g, "");
 
-  Object.values(tasks).forEach(t => {
-  if (normalizeDate(t.createdAt) !== SELECTED_DATE) return;
-    if (!t.driverId) return;
+  try {
+    const indexSnap = await withTimeout(
+      get(ref(db, `tasksByDate/${dateKey}`)),
+      10000
+    );
 
-    if (!stats[t.driverId]) {
-      stats[t.driverId] = { open: 0, completed: 0 };
+    const ids = indexSnap.val();
+    if (!ids) {
+      TASK_STATS = {};
+      return;
     }
 
-    if (t.status === "COMPLETED") {
-      stats[t.driverId].completed++;
-    } else {
-      stats[t.driverId].open++;
-    }
-  });
+    const reads = Object.keys(ids).map(id =>
+      get(ref(db, `tasks/${id}`)).then(s =>
+        s.exists() ? s.val() : null
+      )
+    );
+
+    const tasks = (await Promise.all(reads)).filter(Boolean);
+
+    tasks.forEach(t => {
+      if (!t.driverId) return;
+
+      if (!stats[t.driverId]) {
+        stats[t.driverId] = { open: 0, completed: 0 };
+      }
+
+      if (t.status === "COMPLETED") {
+        stats[t.driverId].completed++;
+      } else {
+        stats[t.driverId].open++;
+      }
+    });
+
+  } catch (e) {
+    console.error("buildTaskStatsLive failed", e);
+  }
 
   TASK_STATS = stats;
 }
 
 async function buildDriverBAMapLive() {
-  const snap = await withTimeout(get(ref(db, "tasks")), 8000);
-  const tasks = snap.val() || {};
-
   const map = {};
+  const dateKey = SELECTED_DATE.replace(/-/g, "");
 
-  Object.values(tasks).forEach(t => {
-    if (normalizeDate(t.createdAt) !== SELECTED_DATE) return;
-    if (!t.driverId || !t.BA) return;
+  try {
+    const indexSnap = await withTimeout(
+      get(ref(db, `tasksByDate/${dateKey}`)),
+      10000
+    );
 
-    if (!map[t.driverId]) {
-      map[t.driverId] = [];
+    const ids = indexSnap.val();
+    if (!ids) {
+      DRIVER_BA_MAP = {};
+      return;
     }
 
-    if (!map[t.driverId].includes(t.BA)) {
-      map[t.driverId].push(t.BA);
-    }
-  });
+    const reads = Object.keys(ids).map(id =>
+      get(ref(db, `tasks/${id}`)).then(s =>
+        s.exists() ? s.val() : null
+      )
+    );
+
+    const tasks = (await Promise.all(reads)).filter(Boolean);
+
+    tasks.forEach(t => {
+      if (!t.driverId || !t.BA) return;
+
+      if (!map[t.driverId]) {
+        map[t.driverId] = [];
+      }
+
+      if (!map[t.driverId].includes(t.BA)) {
+        map[t.driverId].push(t.BA);
+      }
+    });
+
+  } catch (e) {
+    console.error("buildDriverBAMapLive failed", e);
+  }
 
   DRIVER_BA_MAP = map;
 }
@@ -1494,7 +1589,21 @@ async function refreshMap() {
   });
 }
 
-setInterval(()=>{ if(MAP_VISIBLE) refreshMap(); },60000);
+let MAP_REFRESH_TIMER = null;
+
+function startMapAutoRefresh() {
+  if (MAP_REFRESH_TIMER) return;
+  MAP_REFRESH_TIMER = setInterval(() => {
+    if (MAP_VISIBLE) refreshMap();
+  }, 120000); // every 2 minutes
+}
+
+function stopMapAutoRefresh() {
+  if (MAP_REFRESH_TIMER) {
+    clearInterval(MAP_REFRESH_TIMER);
+    MAP_REFRESH_TIMER = null;
+  }
+}
 
 /* ===== SCROLL TO TOP BUTTON ===== */
 const scrollTopBtn = document.getElementById("scrollTopBtn");
