@@ -81,7 +81,7 @@ select, input[type="date"] {
 
 <body>
 
-<h2>Manage Tasks V4.1.0</h2>
+<h2>Manage Tasks V4.1.1</h2>
 
 <button onclick="location.href='admin.html'" class="small-btn">⬅ Back</button>
 
@@ -183,9 +183,10 @@ let TASKS = [];
 const today = getTodayPH();
 filterDateFrom.value = today;
 filterDateTo.value = today;
-  
 filterDateFrom.onchange =
-filterDateTo.onchange =
+filterDateTo.onchange = () => {
+  loadTasks();   // 🔥 fetch by date
+};
 filterDriver.onchange =
 filterJob.onchange =
 filterBA.onchange =
