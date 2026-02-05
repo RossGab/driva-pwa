@@ -269,7 +269,7 @@ button {
 <div class="admin-header" style="justify-content:space-between;">
   <div style="display:flex;align-items:center;gap:14px;">
     <img src="./logo.jpg" class="admin-logo" alt="Company Logo">
-    <h1>Admin Dashboard <span class="version">V2.4.24</span></h1>
+    <h1>Admin Dashboard <span class="version">V2.4.23</span></h1>
   </div>
 
   <!-- 📅 DATE FILTER -->
@@ -640,16 +640,7 @@ function buildBAFilters(allTasks) {
   const baCount = {};
 
   allTasks.forEach(t => {
-    if (
-      CURRENT_STATUS === "PENDING"
-        ? !(
-            t.status === "PENDING" ||
-            t.status === "OFFLINE_PENDING" ||
-            t.status === "PROCESSING" ||
-            t.status === "UPLOADING"
-          )
-        : t.status !== CURRENT_STATUS
-    ) return;
+    if (t.status !== CURRENT_STATUS) return;
     if (normalizeDate(t.createdAt) !== SELECTED_DATE) return;
     if (!t.BA) return;
 
@@ -734,15 +725,10 @@ window.refreshDashboard = async function () {
     return;
   }
 
-  if (
-      t.status === "PENDING" ||
-      t.status === "OFFLINE_PENDING" ||
-      t.status === "PROCESSING" ||
-      t.status === "UPLOADING"
-    ) {
-      open++;
+  if (t.status === "PENDING") {
+    open++;
 
-    const sla = t.status === "PENDING" ? getSLA(t) : null;
+    const sla = getSLA(t);
     if (!sla) return;
 
     if (sla.cls === "sla-ok") ok++;
@@ -1026,16 +1012,7 @@ window.loadTasks = async function (status) {
 
   // ✅ FILTER LOCALLY (FAST)
   let tasks = allTasks.filter(t =>
-    (
-      status === "PENDING"
-        ? (
-            t.status === "PENDING" ||
-            t.status === "OFFLINE_PENDING" ||
-            t.status === "PROCESSING" ||
-            t.status === "UPLOADING"
-          )
-        : t.status === status
-    ) &&
+    t.status === status &&
     normalizeDate(t.createdAt) === SELECTED_DATE
   );
 
@@ -1070,7 +1047,7 @@ window.loadTasks = async function (status) {
   }
 
   tasks.forEach(t => {
-    const sla = t.status === "PENDING" ? getSLA(t) : null;
+    const sla = getSLA(t);
 
     const div = document.createElement("div");
     div.className = `task ${status === "COMPLETED" ? "completed" : "pending"}`;
@@ -1358,10 +1335,6 @@ function renderDriverList(statusData = {}) {
             🟠 Open: ${stats.open}
           </span>
           |
-          <span style="color:#007bff;font-weight:bold">
-            ⬆️ For Upload: ${stats.uploading || 0}
-          </span>
-          |
           <span style="color:green">
             ✅ Done: ${stats.completed}
           </span>
@@ -1423,24 +1396,12 @@ async function buildTaskStatsLive() {
     if (!t.driverId) return;
 
     if (!stats[t.driverId]) {
-      stats[t.driverId] = {
-        open: 0,
-        uploading: 0,
-        completed: 0
-      };
+      stats[t.driverId] = { open: 0, completed: 0 };
     }
-    
+
     if (t.status === "COMPLETED") {
       stats[t.driverId].completed++;
-    }
-    else if (
-      t.status === "OFFLINE_PENDING" ||
-      t.status === "PROCESSING" ||
-      t.status === "UPLOADING"
-    ) {
-      stats[t.driverId].uploading++;
-    }
-    else {
+    } else {
       stats[t.driverId].open++;
     }
   });
