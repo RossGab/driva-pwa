@@ -81,7 +81,7 @@ select, input[type="date"] {
 
 <body>
 
-<h2>Manage Tasks V4.0.9</h2>
+<h2>Manage Tasks V4.1.0</h2>
 
 <button onclick="location.href='admin.html'" class="small-btn">⬅ Back</button>
 
@@ -224,12 +224,55 @@ function toPHTime(ts) {
 
 /* ===== LOAD TASKS ===== */
 async function loadTasks() {
-  const snap = await get(ref(db,"tasks"));
-  const raw = snap.val() || {};
+  TASKS = [];
 
-  TASKS = Object.keys(raw)
-  .map(k => ({ _key: k, ...raw[k] }))
-  .filter(t => t.status !== "COMPLETED");
+  const from = filterDateFrom.value;
+  const to   = filterDateTo.value;
+
+  if (!from || !to) {
+    alert("Select date range");
+    return;
+  }
+
+  const start = from.replace(/-/g, "");
+  const end   = to.replace(/-/g, "");
+
+  const dateKeys = [];
+  for (let d = new Date(from); d <= new Date(to); d.setDate(d.getDate() + 1)) {
+    dateKeys.push(
+      d.toLocaleDateString("en-CA", { timeZone: "Asia/Manila" })
+       .replace(/-/g, "")
+    );
+  }
+
+  const taskIds = new Set();
+
+  // 1️⃣ Collect task IDs by date
+  for (const dk of dateKeys) {
+    const snap = await get(ref(db, `tasksByDate/${dk}`));
+    const ids = snap.val();
+    if (!ids) continue;
+    Object.keys(ids).forEach(id => taskIds.add(id));
+  }
+
+  if (taskIds.size === 0) {
+    applyFilters();
+    return;
+  }
+
+  // 2️⃣ Fetch ONLY needed tasks
+  const reads = [];
+  for (const id of taskIds) {
+    reads.push(
+      get(ref(db, `tasks/${id}`)).then(s =>
+        s.exists() ? { _key: id, ...s.val() } : null
+      )
+    );
+  }
+
+  TASKS = (await Promise.all(reads))
+    .filter(Boolean)
+    .filter(t => t.status !== "COMPLETED");
 
   buildFilterLists();
   applyFilters();
@@ -440,6 +483,15 @@ const REQUIRED_HEADERS = [
   "AGENTNAME"
 ];
 
+function appendTasksToLocalState(newTasks) {
+  const existing = new Set(TASKS.map(t => t._key));
+  const unique = newTasks.filter(t => !existing.has(t._key));
+
+  TASKS.push(...unique);
+  buildFilterLists();
+  applyFilters();
+}
+
 window.uploadCSV = async function(btn){
   const file = document.getElementById("csvFile").files[0];
 
@@ -492,6 +544,8 @@ window.uploadCSV = async function(btn){
           timeZone: "Asia/Manila"
         }).replace(" ", "T");
 
+        const dateKey = now.slice(0, 10).replace(/-/g, "")// example: "20260122"
+
         rows.forEach((task, index) => {
           const taskId = `TASK_${base}_${index}`;
 
@@ -503,13 +557,32 @@ window.uploadCSV = async function(btn){
             uploadBatch: base,
             createdAt: now
           };
+
+          updates[`tasksByDate/${dateKey}/${taskId}`] = true;
         });
 
         await update(ref(db), updates);
 
+        // ✅ Build local task objects (NO DB READ)
+        const newTasks = rows.map((task, index) => ({
+          _key: `TASK_${base}_${index}`,
+          ...task,
+          driverId: task.AGENTID || "",
+          status: "PENDING",
+          rowIndex: index + 1,
+          uploadBatch: base,
+          createdAt: now
+        }));
+        
+        // ✅ Inject directly into UI state
+        appendTasksToLocalState(newTasks);
+
+        // 🔁 Ensure filters include upload date
+        filterDateFrom.value = now.slice(0, 10);
+        filterDateTo.value   = now.slice(0, 10);
+        
         alert(`✅ Upload successful!\n\n${rows.length} tasks added.`);
         btn.innerText = "✔ Done";
-        loadTasks();
       }
     });
 
