@@ -269,7 +269,7 @@ button {
 <div class="admin-header" style="justify-content:space-between;">
   <div style="display:flex;align-items:center;gap:14px;">
     <img src="./logo.jpg" class="admin-logo" alt="Company Logo">
-    <h1>Admin Dashboard <span class="version">V2.7.0</span></h1>
+    <h1>Admin Dashboard <span class="version">V2.7.1</span></h1>
   </div>
 
   <!-- 📅 DATE FILTER -->
@@ -1053,6 +1053,12 @@ if (!allTasks) {
     );
 
     allTasks = (await Promise.all(reads)).filter(Boolean);
+    // 🔥 STRIP PHOTO URLS FROM MEMORY & CACHE
+    allTasks.forEach(t => {
+      delete t.photo1Url;
+      delete t.photo2Url;
+      delete t.photo3Url;
+    });
   }
 
   setCachedTasks(allTasks);
@@ -1120,28 +1126,11 @@ if (!allTasks) {
         ` : ""}
 
         ${t.status === "COMPLETED" ? `
-          <div style="
-            display:grid;
-            grid-template-columns:repeat(3,1fr);
-            gap:6px;
-            margin-top:10px;
-          ">
-            ${[1,2,3].map(i => {
-              const url = t[`photo${i}Url`];
-              if (!url) return "";
-              return `
-                <img src="${url}"
-                  onclick="window.open('${url}','_blank')"
-                  style="
-                    width:100%;
-                    height:90px;
-                    object-fit:cover;
-                    border-radius:6px;
-                    border:2px solid #28a745;
-                    cursor:pointer;
-                  ">
-              `;
-            }).join("")}
+          <div class="photoBox" data-task="${t._key}">
+            <button class="toggleBtn"
+              onclick="loadTaskPhotos('${t._key}', this)">
+              📷 Load Photos
+            </button>
           </div>
         ` : ""}
 
@@ -1153,8 +1142,10 @@ if (!allTasks) {
 
     const header = div.querySelector(".task-header");
     const details = div.querySelector(".task-details");
-    header.onclick = () =>
-      details.style.display = details.style.display === "none" ? "block" : "none";
+    header.onclick = () => {
+      const isOpen = details.style.display !== "none";
+      details.style.display = isOpen ? "none" : "block";
+    };
 
     taskList.appendChild(div);
   });
@@ -1193,6 +1184,51 @@ window.cancelEdit = function (btn) {
   `;
 };
 
+window.loadTaskPhotos = async function (taskId, btn) {
+  if (btn.dataset.loaded === "1") return;
+  
+  btn.dataset.loaded = "1";
+  btn.disabled = true;
+  btn.innerText = "Loading photos…";
+
+  const snap = await get(ref(db, `tasks/${taskId}`));
+  if (!snap.exists()) {
+    btn.innerText = "No photos";
+    return;
+  }
+
+  const t = snap.val();
+  const box = btn.parentElement;
+
+  let html = `<div style="
+    display:grid;
+    grid-template-columns:repeat(3,1fr);
+    gap:6px;
+    margin-top:10px;
+  ">`;
+
+  [1,2,3].forEach(i => {
+    const url = t[`photo${i}Url`];
+    if (!url) return;
+
+    html += `
+      <img src="${url}"
+        onclick="window.open('${url}','_blank')"
+        style="
+          width:100%;
+          height:90px;
+          object-fit:cover;
+          border-radius:6px;
+          border:2px solid #28a745;
+          cursor:pointer;
+        ">
+    `;
+  });
+
+  html += `</div>`;
+  box.innerHTML = html || "No photos";
+};
+
   
 window.saveEdit = async function (btn) {
   const details = btn.closest(".task-details");
@@ -1228,7 +1264,13 @@ window.saveEdit = async function (btn) {
   const idx = cached.findIndex(t => t._key === taskId);
   
   if (idx !== -1) {
-    cached[idx] = { ...cached[idx], ...payload };
+    cached[idx] = {
+    ...cached[idx],
+    ...payload,
+    photo1Url: undefined,
+    photo2Url: undefined,
+    photo3Url: undefined
+  };
     setCachedTasks(cached);
   }
   /* 🔥 END CACHE UPDATE */
