@@ -198,7 +198,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebas
 import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.5.14.3.4-DYNAMIC";
+const VERSION = "Driver v3.5.14.3.5-DYNAMIC";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -724,7 +724,7 @@ cameraInput.onchange = async e => {
     takenAt: new Date().toISOString(),
     gps,
     deliveryData: BILLING_CACHE[CURRENT_TASK] || {},
-    submitIntent: null   // 🔒 NEW: draft by default
+
   });
   
   checkStorageQuota();
@@ -1786,8 +1786,8 @@ async function processOfflineQueue() {
       submitIntent: p.submitIntent
     })));
 
-    const records = (await getAllPhotosFromDB()).filter(r =>
-      r.submitIntent === true || r.submitIntent === undefined
+    const records = allPhotos.filter(r =>
+      r.submitIntent !== false
     );
     
     if (!records.length) {
