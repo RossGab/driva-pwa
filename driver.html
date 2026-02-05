@@ -198,7 +198,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebas
 import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const VERSION = "Driver v3.5.14.3.1-DYNAMIC";
+const VERSION = "Driver v3.5.14.3.2-DYNAMIC";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -330,6 +330,11 @@ function isBusy() {
     Object.keys(processingMap).length > 0 ||
     Object.keys(uploadingMap).length > 0
   );
+}
+
+function cleanupStuckTasks() {
+  for (const k in uploadingMap) delete uploadingMap[k];
+  for (const k in processingMap) delete processingMap[k];
 }
 
 searchBox.addEventListener("input", e => {
@@ -1746,13 +1751,16 @@ async function processOfflineQueue() {
     
       try {
         if (!navigator.onLine || !canUploadNow()) {
-      console.log("⏸ Upload paused — will retry");
-      OFFLINE_REPLAY_RUNNING = false;
-    
-      // 🔁 auto-retry later even if no network event fires
-      setTimeout(processOfflineQueue, 5000);
-      return;
-    }
+            console.log("⏸ Upload paused — will retry");
+          
+            // 🔥 FIX: unlock stuck tasks
+            cleanupStuckTasks();
+            loadTasks();
+          
+            OFFLINE_REPLAY_RUNNING = false;
+            setTimeout(processOfflineQueue, 5000);
+            return;
+          }
 
     const records = (await getAllPhotosFromDB()).filter(r =>
       // ✅ allow legacy tasks
@@ -1760,6 +1768,9 @@ async function processOfflineQueue() {
     );
     
     if (!records.length) {
+      cleanupStuckTasks();
+      loadTasks();
+    
       OFFLINE_REPLAY_RUNNING = false;
       return;
     }
