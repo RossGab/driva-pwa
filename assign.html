@@ -81,7 +81,7 @@ select, input[type="date"] {
 
 <body>
 
-<h2>Manage Tasks V4.1.2</h2>
+<h2>Manage Tasks V4.2</h2>
 
 <button onclick="location.href='admin.html'" class="small-btn">⬅ Back</button>
 
@@ -114,6 +114,11 @@ select, input[type="date"] {
 </div>
 
 <!-- TASK TABLE -->
+  <div style="font-size:12px;color:#777;text-align:center;">
+  Bulk actions apply to selected rows on the current page only
+</div>
+  <div id="paginationControls"
+     style="margin-top:10px;text-align:center;"></div>
 <div class="panel">
   <b>📝Open Tasks</b>
   <div style="overflow:auto;margin-top:6px;">
@@ -179,6 +184,9 @@ searchBox.addEventListener("input", e => {
 }); 
 
 let TASKS = [];
+const PAGE_SIZE = 1000;   // ✅ adjust: 50 / 100 / 200
+let CURRENT_PAGE = 0;
+let FILTERED_TASKS = [];
 
 const today = getTodayPH();
 filterDateFrom.value = today;
@@ -260,10 +268,13 @@ async function loadTasks() {
     applyFilters();
     return;
   }
-
+  
+  const MAX_TASKS = 3000; // ✅ prevent browser + network overload
+  const limitedTaskIds = [...taskIds].slice(0, MAX_TASKS);
+  
   // 2️⃣ Fetch ONLY needed tasks
   const reads = [];
-  for (const id of taskIds) {
+  for (const id of limitedTaskIds) {
     reads.push(
       get(ref(db, `tasks/${id}`)).then(s =>
         s.exists() ? { _key: id, ...s.val() } : null
@@ -308,6 +319,45 @@ function buildFilterLists() {
   dmzs.forEach(v=>filterDMZ.innerHTML += `<option>${v}</option>`);
   mrus.forEach(v=>filterMRU.innerHTML += `<option>${v}</option>`);
 }
+function renderPaginationControls() {
+  const el = document.getElementById("paginationControls");
+  if (!el) return;
+
+  const totalPages = Math.ceil(FILTERED_TASKS.length / PAGE_SIZE);
+
+  if (totalPages <= 1) {
+    el.innerHTML = "";
+    return;
+  }
+
+  el.innerHTML = `
+    <button ${CURRENT_PAGE === 0 ? "disabled" : ""}
+      onclick="prevPage()">⬅ Prev</button>
+
+    <span style="margin:0 12px;">
+      Page ${CURRENT_PAGE + 1} of ${totalPages}
+      (${FILTERED_TASKS.length} tasks)
+    </span>
+
+    <button ${CURRENT_PAGE >= totalPages - 1 ? "disabled" : ""}
+      onclick="nextPage()">Next ➡</button>
+  `;
+}
+
+window.prevPage = function () {
+  if (CURRENT_PAGE > 0) {
+    CURRENT_PAGE--;
+    renderCurrentPage();
+  }
+};
+
+window.nextPage = function () {
+  const totalPages = Math.ceil(FILTERED_TASKS.length / PAGE_SIZE);
+  if (CURRENT_PAGE < totalPages - 1) {
+    CURRENT_PAGE++;
+    renderCurrentPage();
+  }
+};
 
 function applyFilters() {
   let data = [...TASKS];
@@ -361,7 +411,18 @@ function applyFilters() {
     });
   }
 
-  renderTable(data);
+  FILTERED_TASKS = data;
+  CURRENT_PAGE = 0;      // reset to first page
+  renderCurrentPage();
+}
+
+function renderCurrentPage() {
+  const start = CURRENT_PAGE * PAGE_SIZE;
+  const end = start + PAGE_SIZE;
+
+  const pageData = FILTERED_TASKS.slice(start, end);
+  renderTable(pageData);
+  renderPaginationControls();
 }
     
 
@@ -375,6 +436,8 @@ function renderTable(data) {
     table.innerHTML = `<tr><td colspan="7">No matching tasks</td></tr>`;
     return;
   }
+
+  const frag = document.createDocumentFragment();
 
   data.forEach(t=>{
     const tr = document.createElement("tr");
@@ -397,8 +460,10 @@ function renderTable(data) {
         </b>
       </td>
     `;
-    table.appendChild(tr);
-  });
+    frag.appendChild(tr);
+});
+
+table.appendChild(frag);
 }
 
 /* ===== SELECTION ===== */
