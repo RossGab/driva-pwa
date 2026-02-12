@@ -81,7 +81,7 @@ select, input[type="date"] {
 
 <body>
 
-<h2>Manage Tasks V4.2</h2>
+<h2>Manage Tasks V4.2.1</h2>
 
 <button onclick="location.href='admin.html'" class="small-btn">⬅ Back</button>
 
@@ -269,12 +269,11 @@ async function loadTasks() {
     return;
   }
   
-  const MAX_TASKS = 3000; // ✅ prevent browser + network overload
-  const limitedTaskIds = [...taskIds].slice(0, MAX_TASKS);
+  const taskIdList = [...taskIds];
   
   // 2️⃣ Fetch ONLY needed tasks
   const reads = [];
-  for (const id of limitedTaskIds) {
+  for (const id of taskIdList) {
     reads.push(
       get(ref(db, `tasks/${id}`)).then(s =>
         s.exists() ? { _key: id, ...s.val() } : null
