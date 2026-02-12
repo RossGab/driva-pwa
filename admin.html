@@ -269,7 +269,7 @@ button {
 <div class="admin-header" style="justify-content:space-between;">
   <div style="display:flex;align-items:center;gap:14px;">
     <img src="./logo.jpg" class="admin-logo" alt="Company Logo">
-    <h1>Admin Dashboard <span class="version">V2.7.3.1</span></h1>
+    <h1>Admin Dashboard <span class="version">V2.7.4</span></h1>
   </div>
 
   <!-- 📅 DATE FILTER -->
@@ -358,6 +358,7 @@ button {
 
 <!-- ===== TASK LIST ===== -->
 <div id="taskList">Select Open or Completed</div>
+<div id="adminPagination" style="text-align:center;margin:12px 0;"></div>
 
 <!-- ===== LIVE MAP ===== -->
 <div id="mapContainer" style="display:none;">
@@ -501,6 +502,40 @@ function normalizeDate(dateStr) {
     timeZone: "Asia/Manila"
   });
 }
+function renderAdminPagination() {
+  const el = document.getElementById("adminPagination");
+  if (!el) return;
+
+  const totalPages = Math.ceil(ADMIN_TASK_IDS.length / ADMIN_PAGE_SIZE);
+
+  el.innerHTML = `
+    <button ${ADMIN_CURRENT_PAGE === 0 ? "disabled" : ""}
+      onclick="adminPrevPage()">⬅ Prev</button>
+
+    <span style="margin:0 10px;">
+      Page ${ADMIN_CURRENT_PAGE + 1} of ${totalPages}
+      (${ADMIN_TASK_IDS.length} tasks)
+    </span>
+
+    <button ${ADMIN_CURRENT_PAGE >= totalPages - 1 ? "disabled" : ""}
+      onclick="adminNextPage()">Next ➡</button>
+  `;
+}
+
+window.adminPrevPage = function () {
+  if (ADMIN_CURRENT_PAGE > 0) {
+    ADMIN_CURRENT_PAGE--;
+    loadAdminPage(CURRENT_STATUS);
+  }
+};
+
+window.adminNextPage = function () {
+  const totalPages = Math.ceil(ADMIN_TASK_IDS.length / ADMIN_PAGE_SIZE);
+  if (ADMIN_CURRENT_PAGE < totalPages - 1) {
+    ADMIN_CURRENT_PAGE++;
+    loadAdminPage(CURRENT_STATUS);
+  }
+};
 
 function buildLiveMapBAFilters() {
   const box = document.getElementById("mapBACheckboxes");
@@ -633,18 +668,35 @@ const searchWrapper = document.getElementById("searchWrapper");
 const baFilters = document.getElementById("baFilters");
 const searchBox = document.getElementById("searchBox");
 
+const ADMIN_PAGE_SIZE = 200;
+let ADMIN_CURRENT_PAGE = 0;
+let ADMIN_TASK_IDS = [];
+
+let SEARCH_TIMER = null;
+const SEARCH_DELAY = 300; // ms (300–500 is ideal)
+
 /* ===== SEARCH ===== */
 searchBox.addEventListener("input", e => {
-  SEARCH_TERM = e.target.value.toLowerCase();
+  const value = e.target.value.toLowerCase();
 
-  const clearBtn = document.getElementById("clearSearchBtn");
-  clearBtn.style.display = SEARCH_TERM ? "block" : "none";
-
-  if (CURRENT_STATUS) {
-    loadTasks(CURRENT_STATUS);
+  // Clear previous timer
+  if (SEARCH_TIMER) {
+    clearTimeout(SEARCH_TIMER);
   }
-});
 
+  // Delay execution
+  SEARCH_TIMER = setTimeout(() => {
+    SEARCH_TERM = value;
+
+    const clearBtn = document.getElementById("clearSearchBtn");
+    clearBtn.style.display = SEARCH_TERM ? "block" : "none";
+
+    if (CURRENT_STATUS) {
+      // 🔥 IMPORTANT: only reload current page
+      loadAdminPage(CURRENT_STATUS);
+    }
+  }, SEARCH_DELAY);
+});
 function buildBAFilters(allTasks) {
   if (MAP_VISIBLE || !CURRENT_STATUS) {
     baFilters.style.display = "none";
@@ -1081,7 +1133,7 @@ window.hardRefresh = async function () {
 
     // Only rebuild BA UI when NOT in live map
     if (!MAP_VISIBLE) {
-      buildBAFilters(window.ALL_TASKS || []);
+      buildBAFilters([]); // disable BA counts for paginated admin list
     }
 
     // Refresh live map if visible
@@ -1096,14 +1148,10 @@ window.hardRefresh = async function () {
   } finally {
     hideLoader();
   }
-};
-window.loadTasks = async function (status) {
+};window.loadTasks = async function (status) {
   CURRENT_STATUS = status;
   taskList.innerHTML = "Loading...";
 
-  let allTasks = getCachedTasks();
-
-if (!allTasks) {
   const dateKey = SELECTED_DATE.replace(/-/g, "");
 
   const indexSnap = await withTimeout(
@@ -1114,68 +1162,122 @@ if (!allTasks) {
   const ids = indexSnap.val();
 
   if (!ids) {
-    allTasks = [];
-  } else {
-    const reads = Object.keys(ids).map(id =>
-      get(ref(db, `tasks/${id}`)).then(s =>
-        s.exists() ? { _key: id, ...s.val() } : null
-      )
-    );
-
-    allTasks = (await Promise.all(reads)).filter(Boolean);
-    // 🔥 STRIP PHOTO URLS FROM MEMORY & CACHE
-    allTasks.forEach(t => {
-      delete t.photo1Url;
-      delete t.photo2Url;
-      delete t.photo3Url;
-    });
-  }
-
-  setCachedTasks(allTasks);
-}
-
-  // ✅ FILTER LOCALLY (FAST)
-  let tasks = allTasks.filter(t =>
-    t.status === status &&
-    normalizeDate(t.createdAt) === SELECTED_DATE
-  );
-
-  window.ALL_TASKS = tasks;
-
-  // Driver filter
-  if (FILTER_DRIVER) {
-    tasks = tasks.filter(t => t.driverId === FILTER_DRIVER);
-  }
-
-  // Search filter
-  if (SEARCH_TERM) {
-    const term = SEARCH_TERM.toLowerCase();
-    tasks = tasks.filter(t =>
-      JSON.stringify(t).toLowerCase().includes(term)
-    );
-  }
-
-  // BA filters
-  if (!MAP_VISIBLE) {
-    buildBAFilters(allTasks);
-  }
-  if (FILTER_BA.size) {
-    tasks = tasks.filter(t => FILTER_BA.has(t.BA));
-  }
-
-  // 🔽 render (your existing logic untouched)
-  taskList.innerHTML = "";
-  if (!tasks.length) {
+    ADMIN_TASK_IDS = [];
     taskList.innerHTML = "No tasks found";
+    renderAdminPagination();
     return;
   }
+
+  // ✅ PAGINATION SOURCE OF TRUTH
+  ADMIN_TASK_IDS = Object.keys(ids);
+  ADMIN_CURRENT_PAGE = 0;
+
+  // 🔥 LOAD ONLY FIRST PAGE
+  await loadAdminPage(status);
+};
+async function loadAdminPage(status) {
+  taskList.innerHTML = "Loading...";
+
+  const start = ADMIN_CURRENT_PAGE * ADMIN_PAGE_SIZE;
+  const end = start + ADMIN_PAGE_SIZE;
+
+  const pageIds = ADMIN_TASK_IDS.slice(start, end);
+
+  if (!pageIds.length) {
+  renderAdminTasks([]); // let the renderer decide message
+  renderAdminPagination();
+  return;
+}
+
+  const reads = pageIds.map(id =>
+    get(ref(db, `tasks/${id}`)).then(s =>
+      s.exists() ? { _key: id, ...s.val() } : null
+    )
+  );
+
+  let tasks = (await Promise.all(reads)).filter(Boolean);
+
+tasks = tasks.filter(t => {
+  if (t.status !== status) return false;
+  if (normalizeDate(t.createdAt) !== SELECTED_DATE) return false;
+
+  // 🔍 SEARCH (CURRENT PAGE ONLY)
+  if (SEARCH_TERM) {
+    const haystack = [
+      t.CUSTOMERNAME,
+      t.ADDRESS,
+      t.driverId,
+      t.METERNUMBER,
+      t.ACCOUNTNUMBER,
+      t.BA,
+      t.DMZ,
+      t.MRU,
+      t.remarks
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+
+    return haystack.includes(SEARCH_TERM);
+  }
+
+  return true;
+});
+
+  renderAdminTasks(tasks);
+  renderAdminPagination();
+}
+
+function renderAdminTasks(tasks) {
+  taskList.innerHTML = "";
+
+  if (!tasks.length) {
+  const isSearching = SEARCH_TERM && SEARCH_TERM.length > 0;
+  const hasMorePages =
+    (ADMIN_CURRENT_PAGE + 1) * ADMIN_PAGE_SIZE < ADMIN_TASK_IDS.length;
+
+  if (isSearching && hasMorePages) {
+    taskList.innerHTML = `
+      <div style="
+        padding:12px;
+        background:#fff;
+        border-radius:8px;
+        text-align:center;
+        font-size:14px;
+        color:#555;
+        box-shadow:0 0 4px rgba(0,0,0,.1);
+      ">
+        🔍 <b>No results on this page</b><br>
+        <span style="font-size:13px;">
+          Try the <b>Next</b> page →
+        </span>
+      </div>
+    `;
+  } else {
+    taskList.innerHTML = `
+      <div style="
+        padding:12px;
+        background:#fff;
+        border-radius:8px;
+        text-align:center;
+        font-size:14px;
+        color:#777;
+        box-shadow:0 0 4px rgba(0,0,0,.1);
+      ">
+        No tasks found
+      </div>
+    `;
+  }
+
+  return;
+}
 
   tasks.forEach(t => {
     const sla = getSLA(t);
 
     const div = document.createElement("div");
-    div.className = `task ${status === "COMPLETED" ? "completed" : "pending"}`;
-
+    div.className = `task ${t.status === "COMPLETED" ? "completed" : "pending"}`;
+    
     div.innerHTML = `
       <div class="task-header">
         <b>${t.CUSTOMERNAME || ""}</b>
@@ -1183,10 +1285,9 @@ if (!allTasks) {
         <div class="small">Driver: ${t.driverId || "—"}</div>
         ${sla ? `<div class="small ${sla.cls}">⏱ ${sla.text}</div>` : ""}
       </div>
-
+    
       <div class="task-details" data-task-id="${t._key}" style="display:none">
         ${renderTaskDetails(t)}
-
         ${t.status === "COMPLETED" ? renderDynamicCompletedFields(t) : ""}
         ${t.status === "COMPLETED" ? `
           <button class="deleteBtn"
@@ -1194,33 +1295,22 @@ if (!allTasks) {
             🔁 Back to Pending (Reset)
           </button>
         ` : ""}
-
-        ${t.status === "COMPLETED" ? `
-          <div class="photoBox" data-task="${t._key}">
-            <button class="toggleBtn"
-              onclick="loadTaskPhotos('${t._key}', this)">
-              📷 Load Photos
-            </button>
-          </div>
-        ` : ""}
-
         <div class="form-actions">
           <button class="toggleBtn" onclick="enableEdit(this)">✏ Modify Task</button>
         </div>
       </div>
     `;
-
+    
     const header = div.querySelector(".task-header");
     const details = div.querySelector(".task-details");
     header.onclick = () => {
-      const isOpen = details.style.display !== "none";
-      details.style.display = isOpen ? "none" : "block";
+      details.style.display =
+        details.style.display === "none" ? "block" : "none";
     };
-
+    
     taskList.appendChild(div);
   });
-};
-
+}
 
 window.enableEdit = function (btn) {
   const details = btn.closest(".task-details");
