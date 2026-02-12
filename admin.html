@@ -269,7 +269,7 @@ button {
 <div class="admin-header" style="justify-content:space-between;">
   <div style="display:flex;align-items:center;gap:14px;">
     <img src="./logo.jpg" class="admin-logo" alt="Company Logo">
-    <h1>Admin Dashboard <span class="version">V2.7.4.2</span></h1>
+    <h1>Admin Dashboard <span class="version">V2.7.4.3</span></h1>
   </div>
 
   <!-- 📅 DATE FILTER -->
@@ -454,6 +454,7 @@ function getTodayPH() {
 }
 
 let SELECTED_DATE = getTodayPH();
+let ALL_BA_FOR_DATE = new Set();
 
 const adminDateFilter = document.getElementById("adminDateFilter");
 
@@ -502,9 +503,16 @@ function normalizeDate(dateStr) {
     timeZone: "Asia/Manila"
   });
 }
+  
 function renderAdminPagination() {
   const el = document.getElementById("adminPagination");
   if (!el) return;
+
+  // ❌ DO NOT show pagination in Live Map
+  if (MAP_VISIBLE) {
+    el.innerHTML = "";
+    return;
+  }
 
   const totalPages = Math.ceil(ADMIN_TASK_IDS.length / ADMIN_PAGE_SIZE);
 
@@ -698,7 +706,7 @@ searchBox.addEventListener("input", e => {
   }, SEARCH_DELAY);
 });
   
- function buildBAFilters(tasks) {
+ function renderGlobalBAFilters() {
   if (MAP_VISIBLE || !CURRENT_STATUS) {
     baFilters.style.display = "none";
     return;
@@ -709,22 +717,14 @@ searchBox.addEventListener("input", e => {
 
   box.innerHTML = "";
 
-  // Collect UNIQUE BA values from CURRENT PAGE ONLY
-  const bas = new Set();
-
-  tasks.forEach(t => {
-    if (!t.BA) return;
-    bas.add(t.BA);
-  });
-
-  if (!bas.size) {
+  if (!ALL_BA_FOR_DATE.size) {
     container.style.display = "none";
     return;
   }
 
   container.style.display = "block";
 
-  [...bas].sort().forEach(ba => {
+  [...ALL_BA_FOR_DATE].sort().forEach(ba => {
     const label = document.createElement("label");
     label.style.cssText =
       "font-size:13px;display:flex;align-items:center;gap:6px;";
@@ -740,7 +740,8 @@ searchBox.addEventListener("input", e => {
     input.onchange = () => {
       if (input.checked) FILTER_BA.add(ba);
       else FILTER_BA.delete(ba);
-
+    
+      ADMIN_CURRENT_PAGE = 0; // 🔥 reset to first page
       loadAdminPage(CURRENT_STATUS);
     };
 
@@ -1142,7 +1143,8 @@ window.hardRefresh = async function () {
   } finally {
     hideLoader();
   }
-};window.loadTasks = async function (status) {
+};
+  window.loadTasks = async function (status) {
   CURRENT_STATUS = status;
   taskList.innerHTML = "Loading...";
 
@@ -1157,18 +1159,41 @@ window.hardRefresh = async function () {
 
   if (!ids) {
     ADMIN_TASK_IDS = [];
+    ALL_BA_FOR_DATE.clear();
     taskList.innerHTML = "No tasks found";
     renderAdminPagination();
     return;
   }
 
-  // ✅ PAGINATION SOURCE OF TRUTH
   ADMIN_TASK_IDS = Object.keys(ids);
   ADMIN_CURRENT_PAGE = 0;
 
-  // 🔥 LOAD ONLY FIRST PAGE
+  // 🔥 BUILD GLOBAL BA LIST (one-time, light fetch)
+  await buildGlobalBAList(ADMIN_TASK_IDS);
+
   await loadAdminPage(status);
 };
+
+async function buildGlobalBAList(taskIds) {
+  ALL_BA_FOR_DATE.clear();
+
+  // ⚠️ Only sample first N tasks to avoid overload
+  const SAMPLE_LIMIT = 300;
+  const sampleIds = taskIds.slice(0, SAMPLE_LIMIT);
+
+  const reads = sampleIds.map(id =>
+    get(ref(db, `tasks/${id}/BA`)).then(s => s.val())
+  );
+
+  const bas = await Promise.all(reads);
+
+  bas.forEach(ba => {
+    if (ba) ALL_BA_FOR_DATE.add(ba);
+  });
+
+  renderGlobalBAFilters();
+}
+
 async function loadAdminPage(status) {
   taskList.innerHTML = "Loading...";
 
@@ -1223,7 +1248,6 @@ tasks = tasks.filter(t => {
 
   return true;
 });
-  buildBAFilters(tasks);
 
   renderAdminTasks(tasks);
   renderAdminPagination();
@@ -1488,7 +1512,12 @@ window.loadTaskPhotos = async function (taskId, btn) {
 let map, markers={};
 
 window.toggleLiveMap = async function () {
+  
   MAP_VISIBLE = !MAP_VISIBLE;
+
+  if (MAP_VISIBLE) {
+    document.getElementById("adminPagination").innerHTML = "";
+  }
 
   mapContainer.style.display = MAP_VISIBLE ? "block" : "none";
   taskList.style.display = MAP_VISIBLE ? "none" : "block";
