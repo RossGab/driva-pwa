@@ -269,7 +269,7 @@ button {
 <div class="admin-header" style="justify-content:space-between;">
   <div style="display:flex;align-items:center;gap:14px;">
     <img src="./logo.jpg" class="admin-logo" alt="Company Logo">
-    <h1>Admin Dashboard <span class="version">V2.7.4.3</span></h1>
+    <h1>Admin Dashboard <span class="version">V2.7.4.4</span></h1>
   </div>
 
   <!-- 📅 DATE FILTER -->
@@ -1177,19 +1177,24 @@ window.hardRefresh = async function () {
 async function buildGlobalBAList(taskIds) {
   ALL_BA_FOR_DATE.clear();
 
-  // ⚠️ Only sample first N tasks to avoid overload
-  const SAMPLE_LIMIT = 300;
-  const sampleIds = taskIds.slice(0, SAMPLE_LIMIT);
+  const CHUNK_SIZE = 250; // safe for Firebase + browser
+  const chunks = [];
 
-  const reads = sampleIds.map(id =>
-    get(ref(db, `tasks/${id}/BA`)).then(s => s.val())
-  );
+  for (let i = 0; i < taskIds.length; i += CHUNK_SIZE) {
+    chunks.push(taskIds.slice(i, i + CHUNK_SIZE));
+  }
 
-  const bas = await Promise.all(reads);
+  for (const chunk of chunks) {
+    const reads = chunk.map(id =>
+      get(ref(db, `tasks/${id}/BA`)).then(s => s.val())
+    );
 
-  bas.forEach(ba => {
-    if (ba) ALL_BA_FOR_DATE.add(ba);
-  });
+    const bas = await Promise.all(reads);
+
+    bas.forEach(ba => {
+      if (ba) ALL_BA_FOR_DATE.add(ba);
+    });
+  }
 
   renderGlobalBAFilters();
 }
