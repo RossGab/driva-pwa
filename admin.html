@@ -269,7 +269,7 @@ button {
 <div class="admin-header" style="justify-content:space-between;">
   <div style="display:flex;align-items:center;gap:14px;">
     <img src="./logo.jpg" class="admin-logo" alt="Company Logo">
-    <h1>Admin Dashboard <span class="version">V2.7.4.1</span></h1>
+    <h1>Admin Dashboard <span class="version">V2.7.4.2</span></h1>
   </div>
 
   <!-- 📅 DATE FILTER -->
@@ -697,7 +697,8 @@ searchBox.addEventListener("input", e => {
     }
   }, SEARCH_DELAY);
 });
-function buildBAFilters(allTasks) {
+  
+ function buildBAFilters(tasks) {
   if (MAP_VISIBLE || !CURRENT_STATUS) {
     baFilters.style.display = "none";
     return;
@@ -708,35 +709,29 @@ function buildBAFilters(allTasks) {
 
   box.innerHTML = "";
 
-  const baCount = {};
+  // Collect UNIQUE BA values from CURRENT PAGE ONLY
+  const bas = new Set();
 
-  allTasks.forEach(t => {
-    if (t.status !== CURRENT_STATUS) return;
-    if (normalizeDate(t.createdAt) !== SELECTED_DATE) return;
+  tasks.forEach(t => {
     if (!t.BA) return;
-
-    baCount[t.BA] = (baCount[t.BA] || 0) + 1;
+    bas.add(t.BA);
   });
 
-  const bas = Object.keys(baCount);
-
-  if (!bas.length) {
+  if (!bas.size) {
     container.style.display = "none";
     return;
   }
 
   container.style.display = "block";
 
-  bas.sort().forEach(ba => {
-    const count = baCount[ba];
-
+  [...bas].sort().forEach(ba => {
     const label = document.createElement("label");
     label.style.cssText =
       "font-size:13px;display:flex;align-items:center;gap:6px;";
 
     label.innerHTML = `
       <input type="checkbox" value="${ba}">
-      <span>${ba} (${count})</span>
+      <span>${ba}</span>
     `;
 
     const input = label.querySelector("input");
@@ -746,7 +741,7 @@ function buildBAFilters(allTasks) {
       if (input.checked) FILTER_BA.add(ba);
       else FILTER_BA.delete(ba);
 
-      loadTasks(CURRENT_STATUS);
+      loadAdminPage(CURRENT_STATUS);
     };
 
     box.appendChild(label);
@@ -1132,8 +1127,7 @@ window.hardRefresh = async function () {
     FILTER_BA = new Set(preservedBA);
 
     // Only rebuild BA UI when NOT in live map
-    if (!MAP_VISIBLE) {
-      buildBAFilters([]); // disable BA counts for paginated admin list
+    if (!MAP_VISIBLE) { // disable BA counts for paginated admin list
     }
 
     // Refresh live map if visible
@@ -1198,18 +1192,14 @@ async function loadAdminPage(status) {
   let tasks = (await Promise.all(reads)).filter(Boolean);
 
 tasks = tasks.filter(t => {
+  // STATUS
   if (t.status !== status) return false;
-  if (normalizeDate(t.createdAt) !== SELECTED_DATE) return false;
 
-  // 🔍 SEARCH (CURRENT PAGE ONLY)
-  tasks = tasks.filter(t => {
-  if (t.status !== status) return false;
+  // DATE
   if (normalizeDate(t.createdAt) !== SELECTED_DATE) return false;
 
   // ✅ BA FILTER
-  if (FILTER_BA.size && !FILTER_BA.has(t.BA)) {
-    return false;
-  }
+  if (FILTER_BA.size && !FILTER_BA.has(t.BA)) return false;
 
   // 🔍 SEARCH (current page only)
   if (SEARCH_TERM) {
@@ -1233,6 +1223,7 @@ tasks = tasks.filter(t => {
 
   return true;
 });
+  buildBAFilters(tasks);
 
   renderAdminTasks(tasks);
   renderAdminPagination();
