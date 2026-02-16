@@ -197,8 +197,9 @@ img { width:100%;margin-top:8px;border-radius:6px; }
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
-
-const VERSION = "v3.5.14.3.0.3";
+import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+  
+const VERSION = "v3.5.15.0-WIP";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -645,12 +646,6 @@ function compressImage(file) {
   });
 }
 
-const toBase64 = b => new Promise(r => {
-  const f = new FileReader();
-  f.onloadend = () => r(f.result);
-  f.readAsDataURL(b);
-});
-
   let CURRENT_TASK = null;
 let CURRENT_PHOTO_INDEX = null;
 
@@ -750,6 +745,10 @@ cameraInput.onchange = async e => {
   if (!photos || Object.keys(photos).length === 0) {
     alert("Please take at least 1 photo.");
     submitLock[taskKey] = false;
+    if (btn) {
+      btn.disabled = false;
+      btn.innerText = "✅ Submit Task";
+    }
     return;
   }
 
@@ -949,7 +948,9 @@ async function uploadNow(
     .slice(0,14)}.jpg`;
 
   // ✅ SAVE FINAL IMAGE TO LOCAL GALLERY
-  saveToGallery(blob, filename);
+  if (!isStandalone()) {
+    saveToGallery(blob, filename);
+  }
 
   // 🔁 MARK LAST UPLOAD ATTEMPT (VERY IMPORTANT)
   await update(ref(db, `tasks/${taskKey}`), {
@@ -993,6 +994,26 @@ async function uploadNow(
 
   await update(ref(db, `tasks/${taskKey}`), updatePayload);
 
+  // ===============================
+// ✅ ADMIN STATS UPDATE (ONCE)
+// ===============================
+if (isLastPhoto) {
+  const dateKey = normalizeDatePH(task.createdAt)?.replace(/-/g, "");
+  if (dateKey) {
+    const statsRef = ref(db, `adminStats/${dateKey}`);
+
+    try {
+      await update(statsRef, {
+        open: increment(-1),
+        done: increment(1)
+      });
+    } catch (e) {
+      console.warn("⚠️ adminStats update failed", e);
+      // ❗ DO NOT BLOCK DRIVER FLOW
+    }
+  }
+}
+
 
 /* ================= FIX #3 START ================= */
 
@@ -1031,6 +1052,13 @@ checkStorageQuota();
 setInterval(checkStorageQuota, 60_000); // every 60 seconds
 /* ===== LOAD TASKS ===== */
 async function loadTasks() {
+  // 🔓 Safety reset if app crashed mid-capture
+  if (
+    ACTIVE_CAPTURE_TASK &&
+    !PHOTO_BUFFER[ACTIVE_CAPTURE_TASK]
+  ) {
+    ACTIVE_CAPTURE_TASK = null;
+  }
   try {
     let tasks = [];
 
@@ -1115,6 +1143,7 @@ async function loadTasks() {
     tasks.sort((a, b) => {
       const priority = {
         PENDING: 1,
+        READY: 2,
         PROCESSING: 3,
         UPLOADING: 4,
         COMPLETED: 5
@@ -1550,10 +1579,12 @@ async function renderDynamicDelivery(t) {
   // 🔁 Restore selected delivery method UI
   const saved = BILLING_CACHE[t._key];
   if (saved?.deliveryType) {
-    const radio = document.querySelector(
-      `input[name="delivery_${t._key}"][value="${saved.deliveryType}"]`
-    );
-    if (radio) radio.checked = true;
+    setTimeout(() => {
+      const radio = document.querySelector(
+        `input[name="delivery_${t._key}"][value="${saved.deliveryType}"]`
+      );
+      if (radio) radio.checked = true;
+    }, 0);
   }
   // 🔁 Auto-rebuild child fields if previously selected
 if (saved?.deliveryType && saved?.deliverytype_2nd) {
@@ -1728,11 +1759,7 @@ setInterval(() => {
   
 async function processOfflineQueue() {
   const dbg = await getAllPhotosFromDB();
-    console.log("📦 IndexedDB photos", dbg.map(p => ({
-      id: p.id,
-      taskKey: p.taskKey,
-      submitIntent: p.submitIntent
-    })));
+    
   if (OFFLINE_REPLAY_RUNNING) return;
       OFFLINE_REPLAY_RUNNING = true;
     
@@ -1792,6 +1819,9 @@ async function processOfflineQueue() {
           );
 
           await deletePhotoFromDB(p.id);
+          if (p.previewURL) {
+            URL.revokeObjectURL(p.previewURL);
+          }
 
         } catch (e) {
             console.error("❌ Upload failed", p.taskKey, p.photoIndex, e);
