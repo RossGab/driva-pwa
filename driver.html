@@ -199,7 +199,7 @@ import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "htt
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "v3.5.15.0-WIP";
+const VERSION = "v3.5.15.1-WIP";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -948,9 +948,9 @@ async function uploadNow(
     .slice(0,14)}.jpg`;
 
   // ✅ SAVE FINAL IMAGE TO LOCAL GALLERY
-  if (!isStandalone()) {
-    saveToGallery(blob, filename);
-  }
+  
+  saveToGallery(blob, filename);
+  
 
   // 🔁 MARK LAST UPLOAD ATTEMPT (VERY IMPORTANT)
   await update(ref(db, `tasks/${taskKey}`), {
