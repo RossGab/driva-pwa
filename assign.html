@@ -81,7 +81,7 @@ select, input[type="date"] {
 
 <body>
 
-<h2>Manage Tasks V4.2.1</h2>
+<h2>Manage Tasks V4.3.0-WIP</h2>
 
 <button onclick="location.href='admin.html'" class="small-btn">⬅ Back</button>
 
@@ -642,6 +642,27 @@ window.uploadCSV = async function(btn){
         });
 
         await update(ref(db), updates);
+
+        // ===== UPDATE adminStats (CHEAP + CORRECT) =====
+        const statsRef = ref(db, `adminStats/${dateKey}`);
+        
+        const statsSnap = await get(statsRef);
+        const current = statsSnap.val() || {
+          open: 0,
+          done: 0,
+          sla: { ok: 0, warn: 0, breach: 0 }
+        };
+        
+        const added = rows.length;
+        
+        await update(statsRef, {
+          open: (current.open || 0) + added,
+          sla: {
+            ok: (current.sla?.ok || 0) + added,
+            warn: current.sla?.warn || 0,
+            breach: current.sla?.breach || 0
+          }
+        });
 
         // ✅ Build local task objects (NO DB READ)
         const newTasks = rows.map((task, index) => ({
