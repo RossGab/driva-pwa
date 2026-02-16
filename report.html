@@ -57,7 +57,7 @@ button:hover {
 
 <body>
 
-<h2>📊 Task Report V2.2</h2>
+<h2>📊 Task Report V2.3</h2>
 
 <button
   onclick="location.href='admin.html'"
@@ -150,11 +150,12 @@ const SYSTEM_FIELDS = new Set([
   "AGENTNAME",
 
   // Delivery
-  "deliveryType"
+  "deliveryType",
 
   // Explicit report columns (BLOCK FROM DYNAMIC)
   "rowIndex",
   "uploadBatch",
+  "forceReopen",
   "gpsAccuracy",
   "remarks",
 
@@ -170,9 +171,7 @@ const SYSTEM_FIELDS = new Set([
   "filename",
   "photo1Url",
   "photo2Url",
-  "photo3Url",
-
-  
+  "photo3Url"
 ]);
   
 let ALL_TASKS = [];
@@ -195,9 +194,46 @@ async function loadTasks() {
   buildFilterOptions();
 }
 
+async function loadTasksByDateRange(fromDate, toDate) {
+  ALL_TASKS = [];
+
+  const dateKeys = getDateRangeKeys(fromDate, toDate);
+  const taskIds = new Set();
+
+  // 1️⃣ Collect task IDs per date
+  for (const dk of dateKeys) {
+    const snap = await get(ref(db, `tasksByDate/${dk}`));
+    const ids = snap.val();
+    if (!ids) continue;
+
+    Object.keys(ids).forEach(id => taskIds.add(id));
+  }
+
+  if (!taskIds.size) return;
+
+  // 2️⃣ Fetch only needed tasks
+  const reads = [...taskIds].map(id =>
+    get(ref(db, `tasks/${id}`)).then(s =>
+      s.exists() ? { _key: id, ...s.val() } : null
+    )
+  );
+
+  ALL_TASKS = (await Promise.all(reads))
+  .filter(t => t && t.createdAt);
+
+  buildFilterOptions();
+}
+
 (async () => {
   await loadDrivers();
-  await loadTasks();
+
+  // Ensure defaults are set BEFORE loading
+  setDefaultDates();
+
+  const from = document.getElementById("dateFrom").value;
+  const to   = document.getElementById("dateTo").value;
+
+  await loadTasksByDateRange(from, to);
 })();
 
 function extractDynamicFields(task) {
@@ -235,6 +271,10 @@ function buildFilterOptions() {
 
 function fillSelect(id, field) {
   const select = document.getElementById(id);
+
+  // 🔥 CLEAR existing options (except first)
+  select.innerHTML = `<option value="">All ${field}</option>`;
+
   const values = [...new Set(
     ALL_TASKS.map(t => t[field]).filter(Boolean)
   )].sort();
@@ -262,8 +302,38 @@ function toDateOnly(val) {
   return ph.getTime();
 }
 
-/* ===== EXPORT ===== */
-window.generateReport = function () {
+function dateToKey(dateStr) {
+  return dateStr.replace(/-/g, ""); // YYYYMMDD
+}
+
+function getDateRangeKeys(from, to) {
+  const keys = [];
+  const d1 = new Date(from);
+  const d2 = new Date(to);
+
+  for (
+    let d = new Date(d1);
+    d <= d2;
+    d.setDate(d.getDate() + 1)
+  ) {
+    keys.push(
+      d.toLocaleDateString("en-CA", {
+        timeZone: "Asia/Manila"
+      }).replace(/-/g, "")
+    );
+  }
+  return keys;
+}
+
+  /* ===== EXPORT ===== */
+window.generateReport = async function () {
+
+  // 🔄 Always reload tasks for selected date range
+  await loadTasksByDateRange(
+    document.getElementById("dateFrom").value,
+    document.getElementById("dateTo").value
+  );
+
   const status = document.getElementById("statusFilter").value;
   const jobType = document.getElementById("jobTypeFilter").value;
   const ba = document.getElementById("baFilter").value;
@@ -291,78 +361,68 @@ window.generateReport = function () {
     return;
   }
 
-  /* ===== FULL EXPORT DATA ===== */
+  /* ===== BUILD EXPORT ===== */
   const data = rows.map(t => {
-  const row = {};
+    const row = {};
 
-  /* ===== CORE TASK INFO ===== */
-  row.TASK_ID = t._key || "";
-  row.STATUS = t.status || "";
-  row.JOB_TYPE = t.JOBTYPE || "";
-  row.BA = t.BA || "";
-  row.DMZ = t.DMZ || "";
+    row.TASK_ID = t._key || "";
+    row.STATUS = t.status || "";
+    row.JOB_TYPE = t.JOBTYPE || "";
+    row.BA = t.BA || "";
+    row.DMZ = t.DMZ || "";
 
-  row.CUSTOMER_NAME = t.CUSTOMERNAME || "";
-  row.ADDRESS = t.ADDRESS || "";
-  row.ZIPCODE = t.ZIPCODE || "";
+    row.CUSTOMER_NAME = t.CUSTOMERNAME || "";
+    row.ADDRESS = t.ADDRESS || "";
+    row.ZIPCODE = t.ZIPCODE || "";
 
-  row.ACCOUNT_NUMBER = t.ACCOUNTNUMBER || "";
-  row.METER_NUMBER = t.METERNUMBER || "";
+    row.ACCOUNT_NUMBER = t.ACCOUNTNUMBER || "";
+    row.METER_NUMBER = t.METERNUMBER || "";
 
-  const driverId = t.driverId || "";
+    const driverId = t.driverId || "";
+    row.DRIVERID = driverId;
+    row.DRIVER_NAME = DRIVER_MAP[driverId] || "";
 
-row.DRIVERID = driverId;
-row.DRIVER_NAME = DRIVER_MAP[driverId] || "";
+    row.DELIVERY_TYPE = t.deliveryType || "";
 
-  row.DELIVERY_TYPE = t.deliveryType || "";
-    // ===== REQUIRED SYSTEM COLUMNS (EXPLICIT) =====
     row.ROWINDEX = t.rowIndex ?? "";
     row.UPLOADBATCH = t.uploadBatch ?? "";
     row.DESCRIPTION = t.remarks ?? "";
     row.FORCEREOPEN = t.forceReopen ?? "";
     row.GPSACCURACY = t.gpsAccuracy ?? "";
 
-  /* ===== DYNAMIC DELIVERY FIELDS (MIDDLE) ===== */
-  const dynamic = extractDynamicFields(t);
-  Object.keys(dynamic)
-    .sort() // optional: keeps columns stable across rows
-    .forEach(k => {
+    const dynamic = extractDynamicFields(t);
+    Object.keys(dynamic).sort().forEach(k => {
       row[k] = dynamic[k];
     });
 
-  /* ===== FINAL SYSTEM COLUMNS (ALWAYS LAST) ===== */
-  row.LATITUDE = t.LATITUDE || "";
-  row.LONGITUDE = t.LONGITUDE || "";
+    row.LATITUDE = t.LATITUDE || "";
+    row.LONGITUDE = t.LONGITUDE || "";
+    row.CREATED_AT = t.createdAt || "";
+    row.COMPLETED_AT = t.uploadedAt || "";
 
-  row.CREATED_AT = t.createdAt || "";
-  row.COMPLETED_AT = t.uploadedAt || "";
+    row.PHOTO1_URL = t.photo1Url
+      ? { t: "s", v: "View Photo 1", l: { Target: t.photo1Url } }
+      : "";
 
-  row.PHOTO1_URL = t.photo1Url
-  ? { t: "s", v: "View Photo 1", l: { Target: t.photo1Url } }
-  : "";
+    row.PHOTO2_URL = t.photo2Url
+      ? { t: "s", v: "View Photo 2", l: { Target: t.photo2Url } }
+      : "";
 
-row.PHOTO2_URL = t.photo2Url
-  ? { t: "s", v: "View Photo 2", l: { Target: t.photo2Url } }
-  : "";
+    row.PHOTO3_URL = t.photo3Url
+      ? { t: "s", v: "View Photo 3", l: { Target: t.photo3Url } }
+      : "";
 
-row.PHOTO3_URL = t.photo3Url
-  ? { t: "s", v: "View Photo 3", l: { Target: t.photo3Url } }
-  : "";
+    return row;
+  });
 
-  return row;
-});
-  
   const ws = XLSX.utils.json_to_sheet(data);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "Tasks");
 
   const df = document.getElementById("dateFrom").value || "ALL";
   const dt = document.getElementById("dateTo").value || "ALL";
-  
-  XLSX.writeFile(
-    wb,
-    `Task_Report_${df}_to_${dt}.xlsx`
-  );
+
+  XLSX.writeFile(wb, `Task_Report_${df}_to_${dt}.xlsx`);
 };
 </script>
 
