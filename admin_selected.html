@@ -269,7 +269,7 @@ button {
 <div class="admin-header" style="justify-content:space-between;">
   <div style="display:flex;align-items:center;gap:14px;">
     <img src="./logo.jpg" class="admin-logo" alt="Company Logo">
-    <h1>Admin Dashboard <span class="version">V2.8.4-WIP</span></h1>
+    <h1>Admin Dashboard <span class="version">V2.8.5-WIP</span></h1>
   </div>
 
   <!-- 📅 DATE FILTER -->
@@ -1218,45 +1218,46 @@ async function loadAdminPage(status) {
   let tasks = (await Promise.all(reads)).filter(Boolean);
 
   // ✅ STEP 2: FILTER (ONE TIME ONLY)
-  tasks = tasks.filter(t => {
-    // STATUS
-    if (status === "COMPLETED") {
-      if (t.status !== "COMPLETED") return false;
-    } else {
-      // OPEN = anything NOT completed
-      if (t.status === "COMPLETED") return false;
-    }
+tasks = tasks.filter(t => {
 
-    
+  // ✅ STATUS (SAFE + BACKWARD COMPATIBLE)
+  const taskStatus = (t.status || "PENDING").toUpperCase();
 
-    // 👤 DRIVER FILTER (from Live Map)
-    if (FILTER_DRIVER && t.driverId !== FILTER_DRIVER) return false;
+  if (status === "COMPLETED") {
+    if (taskStatus !== "COMPLETED") return false;
+  } else {
+    // OPEN = anything NOT completed
+    if (taskStatus === "COMPLETED") return false;
+  }
 
-    // BA FILTER
-    if (FILTER_BA.size && !FILTER_BA.has(t.BA)) return false;
+  // 👤 DRIVER FILTER (from Live Map)
+  if (FILTER_DRIVER && t.driverId !== FILTER_DRIVER) return false;
 
-    // 🔍 SEARCH (current page only)
-    if (SEARCH_TERM) {
-      const haystack = [
-        t.CUSTOMERNAME,
-        t.ADDRESS,
-        t.driverId,
-        t.METERNUMBER,
-        t.ACCOUNTNUMBER,
-        t.BA,
-        t.DMZ,
-        t.MRU,
-        t.remarks
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
+  // 🧾 BA FILTER
+  if (FILTER_BA.size && !FILTER_BA.has(t.BA)) return false;
 
-      return haystack.includes(SEARCH_TERM);
-    }
+  // 🔍 SEARCH (current page only)
+  if (SEARCH_TERM) {
+    const haystack = [
+      t.CUSTOMERNAME,
+      t.ADDRESS,
+      t.driverId,
+      t.METERNUMBER,
+      t.ACCOUNTNUMBER,
+      t.BA,
+      t.DMZ,
+      t.MRU,
+      t.remarks
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
 
-    return true;
-  });
+    return haystack.includes(SEARCH_TERM);
+  }
+
+  return true;
+});
 
   // ✅ STEP 3: RENDER
   renderAdminTasks(tasks);
@@ -1267,52 +1268,53 @@ function renderAdminTasks(tasks) {
   taskList.innerHTML = "";
 
   if (!tasks.length) {
-  const isSearching = SEARCH_TERM && SEARCH_TERM.length > 0;
-  const hasMorePages =
-    (ADMIN_CURRENT_PAGE + 1) * ADMIN_PAGE_SIZE < ADMIN_TASK_IDS.length;
+    const isSearching = SEARCH_TERM && SEARCH_TERM.length > 0;
+    const hasMorePages =
+      (ADMIN_CURRENT_PAGE + 1) * ADMIN_PAGE_SIZE < ADMIN_TASK_IDS.length;
 
-  if (isSearching && hasMorePages) {
-    taskList.innerHTML = `
-      <div style="
-        padding:12px;
-        background:#fff;
-        border-radius:8px;
-        text-align:center;
-        font-size:14px;
-        color:#555;
-        box-shadow:0 0 4px rgba(0,0,0,.1);
-      ">
-        🔍 <b>No results on this page</b><br>
-        <span style="font-size:13px;">
-          Try the <b>Next</b> page →
-        </span>
-      </div>
-    `;
-  } else {
-    taskList.innerHTML = `
-      <div style="
-        padding:12px;
-        background:#fff;
-        border-radius:8px;
-        text-align:center;
-        font-size:14px;
-        color:#777;
-        box-shadow:0 0 4px rgba(0,0,0,.1);
-      ">
-        No tasks found
-      </div>
-    `;
+    if (isSearching && hasMorePages) {
+      taskList.innerHTML = `
+        <div style="
+          padding:12px;
+          background:#fff;
+          border-radius:8px;
+          text-align:center;
+          font-size:14px;
+          color:#555;
+          box-shadow:0 0 4px rgba(0,0,0,.1);
+        ">
+          🔍 <b>No results on this page</b><br>
+          <span style="font-size:13px;">
+            Try the <b>Next</b> page →
+          </span>
+        </div>
+      `;
+    } else {
+      taskList.innerHTML = `
+        <div style="
+          padding:12px;
+          background:#fff;
+          border-radius:8px;
+          text-align:center;
+          font-size:14px;
+          color:#777;
+          box-shadow:0 0 4px rgba(0,0,0,.1);
+        ">
+          No tasks found
+        </div>
+      `;
+    }
+
+    return;
   }
 
-  return;
-}
-
+  // ✅ THIS MUST BE INSIDE THE FUNCTION
   tasks.forEach(t => {
     const sla = getSLA(t);
 
     const div = document.createElement("div");
     div.className = `task ${t.status === "COMPLETED" ? "completed" : "pending"}`;
-    
+
     div.innerHTML = `
       <div class="task-header">
         <b>${t.CUSTOMERNAME || ""}</b>
@@ -1320,7 +1322,7 @@ function renderAdminTasks(tasks) {
         <div class="small">Driver: ${t.driverId || "—"}</div>
         ${sla ? `<div class="small ${sla.cls}">⏱ ${sla.text}</div>` : ""}
       </div>
-    
+
       <div class="task-details" data-task-id="${t._key}" style="display:none">
         ${renderTaskDetails(t)}
         ${t.status === "COMPLETED" ? renderDynamicCompletedFields(t) : ""}
@@ -1331,18 +1333,21 @@ function renderAdminTasks(tasks) {
           </button>
         ` : ""}
         <div class="form-actions">
-          <button class="toggleBtn" onclick="enableEdit(this)">✏ Modify Task</button>
+          <button class="toggleBtn" onclick="enableEdit(this)">
+            ✏ Modify Task
+          </button>
         </div>
       </div>
     `;
-    
+
     const header = div.querySelector(".task-header");
     const details = div.querySelector(".task-details");
+
     header.onclick = () => {
       details.style.display =
         details.style.display === "none" ? "block" : "none";
     };
-    
+
     taskList.appendChild(div);
   });
 }
