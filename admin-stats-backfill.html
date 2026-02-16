@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Admin Stats One-Time Sync</title>
+</head>
+<body>
+  <h2>Admin Stats Backfill</h2>
+  <button onclick="run()">▶ Run One-Time Sync</button>
+  <pre id="log"></pre>
+
+<script type="module">
+import { initializeApp } from
+  "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import {
+  getDatabase, ref, get, set
+} from
+  "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+
+/* 🔥 SAME FIREBASE CONFIG */
+const firebaseConfig = {
+  apiKey: "AIzaSyDFW61pnwLvh6HGKWt10zLYNr860fI8vkg",
+  authDomain: "driva-pwa.firebaseapp.com",
+  databaseURL: "https://driva-pwa-default-rtdb.firebaseio.com",
+  projectId: "driva-pwa",
+  storageBucket: "driva-pwa.firebasestorage.app",
+  messagingSenderId: "299138219722",
+  appId: "1:299138219722:web:623ff6b0a067ea822dfe33"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
+
+const log = msg =>
+  document.getElementById("log").textContent += msg + "\n";
+
+window.run = async function () {
+  log("🔄 Starting adminStats backfill...");
+
+  const indexSnap = await get(ref(db, "tasksByDate"));
+  const dates = indexSnap.val();
+
+  if (!dates) {
+    log("❌ No tasksByDate found");
+    return;
+  }
+
+  for (const dateKey of Object.keys(dates)) {
+    log(`📅 Processing ${dateKey}`);
+
+    let open = 0;
+    let done = 0;
+    let sla = { ok: 0, warn: 0, breach: 0 };
+
+    const ids = Object.keys(dates[dateKey]);
+
+    const reads = ids.map(id =>
+      get(ref(db, `tasks/${id}`)).then(s =>
+        s.exists() ? s.val() : null
+      )
+    );
+
+    const tasks = (await Promise.all(reads)).filter(Boolean);
+
+    tasks.forEach(t => {
+      if (t.status === "COMPLETED") {
+        done++;
+        return;
+      }
+
+      open++;
+
+      if (!t.createdAt) return;
+
+      const hrs = (Date.now() - new Date(t.createdAt)) / 36e5;
+      if (hrs < 24) sla.ok++;
+      else if (hrs < 48) sla.warn++;
+      else sla.breach++;
+    });
+
+    await set(ref(db, `adminStats/${dateKey}`), {
+      open,
+      done,
+      sla
+    });
+
+    log(`✅ ${dateKey} → open:${open}, done:${done}`);
+  }
+
+  log("🎉 BACKFILL COMPLETE — you can close this page");
+};
+</script>
+</body>
+</html>
