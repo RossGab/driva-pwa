@@ -57,7 +57,7 @@ button:hover {
 
 <body>
 
-<h2>📊 Task Report V2.1</h2>
+<h2>📊 Task Report V2.2</h2>
 
 <button
   onclick="location.href='admin.html'"
@@ -130,7 +130,8 @@ const db = getDatabase(app);
 const SYSTEM_FIELDS = new Set([
   "_key",
   "status",
-  "finalized",
+
+  // Core task fields
   "JOBTYPE",
   "BA",
   "DMZ",
@@ -141,16 +142,39 @@ const SYSTEM_FIELDS = new Set([
   "CUSTOMERNAME",
   "ADDRESS",
   "ZIPCODE",
+
+  // Driver fields (BLOCK FROM DYNAMIC)
+  "driverId",
+  "DRIVERID",
+  "AGENTID",
+  "AGENTNAME",
+
+  // Delivery
+  "deliveryType"
+
+  // Explicit report columns (BLOCK FROM DYNAMIC)
+  "rowIndex",
+  "uploadBatch",
+  "gpsAccuracy",
+  "remarks",
+
+  // Location & time
   "LATITUDE",
   "LONGITUDE",
   "createdAt",
   "uploadedAt",
   "takenAt",
+
+  // Media
   "imageUrl",
   "filename",
-  "deliveryType"
-]);
+  "photo1Url",
+  "photo2Url",
+  "photo3Url",
 
+  
+]);
+  
 let ALL_TASKS = [];
 let DRIVER_MAP = {};
 
@@ -291,6 +315,12 @@ row.DRIVERID = driverId;
 row.DRIVER_NAME = DRIVER_MAP[driverId] || "";
 
   row.DELIVERY_TYPE = t.deliveryType || "";
+    // ===== REQUIRED SYSTEM COLUMNS (EXPLICIT) =====
+    row.ROWINDEX = t.rowIndex ?? "";
+    row.UPLOADBATCH = t.uploadBatch ?? "";
+    row.DESCRIPTION = t.remarks ?? "";
+    row.FORCEREOPEN = t.forceReopen ?? "";
+    row.GPSACCURACY = t.gpsAccuracy ?? "";
 
   /* ===== DYNAMIC DELIVERY FIELDS (MIDDLE) ===== */
   const dynamic = extractDynamicFields(t);
