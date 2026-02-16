@@ -269,7 +269,7 @@ button {
 <div class="admin-header" style="justify-content:space-between;">
   <div style="display:flex;align-items:center;gap:14px;">
     <img src="./logo.jpg" class="admin-logo" alt="Company Logo">
-    <h1>Admin Dashboard <span class="version">V2.8.2-WIP</span></h1>
+    <h1>Admin Dashboard <span class="version">V2.8.3-WIP</span></h1>
   </div>
 
   <!-- 📅 DATE FILTER -->
@@ -311,7 +311,7 @@ button {
   <button class="assign" onclick="location.href='add-driver.html'">👤 Add Driver</button>
   <button class="assign" onclick="location.href=''">⚙ Driver Configuration</button>
   <button class="assign" onclick="openReport()">📊 Report</button>
-  <button class="refresh" onclick="hardRefresh()">🔄</button>
+  <button class="refresh" onclick="softRefresh()">🔄</button>
 </div>
 
 <div id="loadingScreen">
@@ -465,12 +465,22 @@ const adminDateFilter = document.getElementById("adminDateFilter");
 adminDateFilter.value = SELECTED_DATE;
 
 adminDateFilter.addEventListener("change", async e => {
+  const oldDate = SELECTED_DATE;
   SELECTED_DATE = e.target.value;
 
-  // ✅ persist selected date
   localStorage.setItem("ADMIN_SELECTED_DATE", SELECTED_DATE);
 
-  await hardRefresh();
+  // remove OLD date cache
+  localStorage.removeItem(`ADMIN_TASK_IDS_${oldDate}`);
+  localStorage.removeItem(`ADMIN_TASK_CACHE_${oldDate}`);
+
+  showLoader("Loading selected date…");
+  try {
+    await refreshDashboard();
+    await loadTasks(CURRENT_STATUS || "PENDING");
+  } finally {
+    hideLoader();
+  }
 });
 
 async function loadDriverUIConfig() {
@@ -773,14 +783,13 @@ async function loadDrivers() {
 
 window.onerror = (msg, src, line) => {
   alert(`JS Error:\n${msg}\nLine: ${line}`);
-};
-window.clearSearch = function () {
+};window.clearSearch = function () {
   SEARCH_TERM = "";
   searchBox.value = "";
   document.getElementById("clearSearchBtn").style.display = "none";
 
   if (CURRENT_STATUS) {
-    loadTasks(CURRENT_STATUS);
+    loadAdminPage(CURRENT_STATUS); // ✅ page-only reload
   }
 };
   
@@ -1080,35 +1089,41 @@ window.showAllOpenTasks = function () {
   loadTasks("PENDING");
 };
   
-window.hardRefresh = async function () {
+window.forceRefresh = async function () {
   clearTaskCache();
-  showLoader("Refreshing all data…");
-
-  const preservedBA = new Set(FILTER_BA);
+  showLoader("Force refreshing all data…");
 
   try {
     await loadDrivers();
     await refreshDashboard();
     await loadTasks(CURRENT_STATUS || "PENDING");
-
-    // ✅ ONLY load map-heavy data when map is visible
-    if (MAP_VISIBLE) {
-      await buildDriverBAMapLive();
-      await buildTaskStatsLive();
-
-      buildLiveMapBAFilters();
-      await refreshMap();
-    }
-
-    FILTER_BA = new Set(preservedBA);
-
-  } catch (err) {
-    console.error("Hard refresh failed:", err);
-    alert("Refresh failed. Please try again.");
   } finally {
     hideLoader();
   }
 };
+
+window.softRefresh = async function () {
+  showLoader("Refreshing data…");
+
+  try {
+    // 1️⃣ Always refresh counters (cheap)
+    await refreshDashboard();
+
+    // 2️⃣ Reload current page only
+    if (CURRENT_STATUS) {
+      await loadAdminPage(CURRENT_STATUS);
+    }
+
+    // 3️⃣ Live Map only if visible
+    if (MAP_VISIBLE) {
+      await buildTaskStatsLive();
+      await refreshMap();
+    }
+  } finally {
+    hideLoader();
+  }
+};
+  
   window.loadTasks = async function (status) {
   CURRENT_STATUS = status;
   taskList.innerHTML = "Loading...";
@@ -1188,11 +1203,12 @@ async function loadAdminPage(status) {
   const pageIds = ADMIN_TASK_IDS.slice(start, end);
 
   if (!pageIds.length) {
-  renderAdminTasks([]); // let the renderer decide message
-  renderAdminPagination();
-  return;
-}
+    renderAdminTasks([]);
+    renderAdminPagination();
+    return;
+  }
 
+  // ✅ STEP 1: FETCH TASKS
   const reads = pageIds.map(id =>
     get(ref(db, `tasks/${id}`)).then(s =>
       s.exists() ? { _key: id, ...s.val() } : null
@@ -1201,45 +1217,49 @@ async function loadAdminPage(status) {
 
   let tasks = (await Promise.all(reads)).filter(Boolean);
 
-tasks = tasks.filter(t => {
-  // STATUS
-  // STATUS LOGIC
-  if (status === "COMPLETED") {
-    if (t.status !== "COMPLETED") return false;
-  } else {
-    // OPEN = anything NOT completed
-    if (t.status === "COMPLETED") return false;
-  }
+  // ✅ STEP 2: FILTER (ONE TIME ONLY)
+  tasks = tasks.filter(t => {
+    // STATUS
+    if (status === "COMPLETED") {
+      if (t.status !== "COMPLETED") return false;
+    } else {
+      // OPEN = anything NOT completed
+      if (t.status === "COMPLETED") return false;
+    }
 
-  // DATE
-  if (normalizeDate(t.createdAt) !== SELECTED_DATE) return false;
+    // DATE
+    if (normalizeDate(t.createdAt) !== SELECTED_DATE) return false;
 
-  // ✅ BA FILTER
-  if (FILTER_BA.size && !FILTER_BA.has(t.BA)) return false;
+    // 👤 DRIVER FILTER (from Live Map)
+    if (FILTER_DRIVER && t.driverId !== FILTER_DRIVER) return false;
 
-  // 🔍 SEARCH (current page only)
-  if (SEARCH_TERM) {
-    const haystack = [
-      t.CUSTOMERNAME,
-      t.ADDRESS,
-      t.driverId,
-      t.METERNUMBER,
-      t.ACCOUNTNUMBER,
-      t.BA,
-      t.DMZ,
-      t.MRU,
-      t.remarks
-    ]
-      .filter(Boolean)
-      .join(" ")
-      .toLowerCase();
+    // BA FILTER
+    if (FILTER_BA.size && !FILTER_BA.has(t.BA)) return false;
 
-    return haystack.includes(SEARCH_TERM);
-  }
+    // 🔍 SEARCH (current page only)
+    if (SEARCH_TERM) {
+      const haystack = [
+        t.CUSTOMERNAME,
+        t.ADDRESS,
+        t.driverId,
+        t.METERNUMBER,
+        t.ACCOUNTNUMBER,
+        t.BA,
+        t.DMZ,
+        t.MRU,
+        t.remarks
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
 
-  return true;
-});
+      return haystack.includes(SEARCH_TERM);
+    }
 
+    return true;
+  });
+
+  // ✅ STEP 3: RENDER
   renderAdminTasks(tasks);
   renderAdminPagination();
 }
