@@ -81,7 +81,7 @@ select, input[type="date"] {
 
 <body>
 
-<h2>Manage Tasks V4.3.0-WIP</h2>
+<h2>Manage Tasks V4.3.1-WIP</h2>
 
 <button onclick="location.href='admin.html'" class="small-btn">⬅ Back</button>
 
@@ -444,7 +444,6 @@ function renderTable(data) {
       <td>
         <input type="checkbox"
           data-id="${t._key}"
-          ${t.status === "CANCELLED" ? "disabled" : ""}
           onchange="checkSelection()">
       </td>
       <td>${t.CUSTOMERNAME||""}</td>
@@ -454,7 +453,7 @@ function renderTable(data) {
       <td>${t.BA||""}</td>
       <td>${toPHTime(t.createdAt)}</td>
       <td>
-        <b style="color:${t.status === 'CANCELLED' ? '#c0392b' : '#333'}">
+        <b style="color:#333">
           ${t.status || "PENDING"}
         </b>
       </td>
@@ -485,7 +484,7 @@ window.openBulkActions = function () {
 
   if (!ids.length) return;
 
-  const action = prompt("Type: TRANSFER, DELETE, or CANCEL");
+  const action = prompt("Type: TRANSFER or DELETE");
 
   if (!action) return;
 
@@ -493,14 +492,14 @@ window.openBulkActions = function () {
 
   if (cmd === "DELETE") bulkDelete(ids);
   else if (cmd === "TRANSFER") bulkTransfer(ids);
-  else if (cmd === "CANCEL") bulkCancel(ids);
-  else alert("Invalid action. Use TRANSFER, DELETE, or CANCEL.");
+  else alert("Invalid action. Use TRANSFER or DELETE.");
 };
 
 async function bulkDelete(ids) {
   if (!confirm(`Delete ${ids.length} tasks?`)) return;
 
   const updates = {};
+  const statsDelta = {}; // per dateKey
 
   ids.forEach(id => {
     const task = TASKS.find(t => t._key === id);
@@ -509,14 +508,39 @@ async function bulkDelete(ids) {
     const dateKey = normalizeDate(task.createdAt)?.replace(/-/g, "");
     if (!dateKey) return;
 
-    // 1️⃣ remove task
+    // 1️⃣ Remove task
     updates[`tasks/${id}`] = null;
-
-    // 2️⃣ remove date index
     updates[`tasksByDate/${dateKey}/${id}`] = null;
+
+    // 2️⃣ Track adminStats delta
+    if (!statsDelta[dateKey]) {
+      statsDelta[dateKey] = { open: 0, done: 0 };
+    }
+
+    if (task.status === "COMPLETED") {
+      statsDelta[dateKey].done += 1;
+    } else {
+      statsDelta[dateKey].open += 1;
+    }
   });
 
+  // 3️⃣ Apply deletions
   await update(ref(db), updates);
+
+  // 4️⃣ Apply adminStats corrections
+  for (const dateKey of Object.keys(statsDelta)) {
+    const statsRef = ref(db, `adminStats/${dateKey}`);
+    const snap = await get(statsRef);
+    const current = snap.val();
+
+    if (!current) continue;
+
+    await update(statsRef, {
+      open: Math.max(0, (current.open || 0) - statsDelta[dateKey].open),
+      done: Math.max(0, (current.done || 0) - statsDelta[dateKey].done)
+    });
+  }
+
   loadTasks();
 }
 
@@ -530,20 +554,6 @@ async function bulkTransfer(ids) {
   loadTasks();
 }
 
-async function bulkCancel(ids) {
-  if (!confirm(`Cancel ${ids.length} tasks?`)) return;
-
-  const updates = {};
-  const now = new Date().toISOString();
-
-  ids.forEach(id => {
-    updates[`tasks/${id}/status`] = "CANCELLED";
-    updates[`tasks/${id}/cancelledAt`] = now;
-  });
-
-  await update(ref(db), updates);
-  loadTasks();
-}
 
 /* ===== BULK UPLOAD ===== */
 const REQUIRED_HEADERS = [
