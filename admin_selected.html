@@ -269,7 +269,7 @@ button {
 <div class="admin-header" style="justify-content:space-between;">
   <div style="display:flex;align-items:center;gap:14px;">
     <img src="./logo.jpg" class="admin-logo" alt="Company Logo">
-    <h1>Admin Dashboard <span class="version">V2.8.1-WIP</span></h1>
+    <h1>Admin Dashboard <span class="version">V2.8.2-WIP</span></h1>
   </div>
 
   <!-- 📅 DATE FILTER -->
@@ -1203,7 +1203,13 @@ async function loadAdminPage(status) {
 
 tasks = tasks.filter(t => {
   // STATUS
-  if (t.status !== status) return false;
+  // STATUS LOGIC
+  if (status === "COMPLETED") {
+    if (t.status !== "COMPLETED") return false;
+  } else {
+    // OPEN = anything NOT completed
+    if (t.status === "COMPLETED") return false;
+  }
 
   // DATE
   if (normalizeDate(t.createdAt) !== SELECTED_DATE) return false;
