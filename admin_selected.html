@@ -269,7 +269,7 @@ button {
 <div class="admin-header" style="justify-content:space-between;">
   <div style="display:flex;align-items:center;gap:14px;">
     <img src="./logo.jpg" class="admin-logo" alt="Company Logo">
-    <h1>Admin Dashboard <span class="version">V2.8.0-WIP</span></h1>
+    <h1>Admin Dashboard <span class="version">V2.8.1-WIP</span></h1>
   </div>
 
   <!-- 📅 DATE FILTER -->
@@ -1082,35 +1082,29 @@ window.showAllOpenTasks = function () {
   
 window.hardRefresh = async function () {
   clearTaskCache();
-
   showLoader("Refreshing all data…");
 
-  // ✅ Preserve BA filter selections (especially for Live Map)
   const preservedBA = new Set(FILTER_BA);
 
   try {
     await loadDrivers();
     await refreshDashboard();
     await loadTasks(CURRENT_STATUS || "PENDING");
-    await buildDriverBAMapLive();
-    await buildTaskStatsLive();
 
-    // 🔁 Restore BA selections
+    // ✅ ONLY load map-heavy data when map is visible
+    if (MAP_VISIBLE) {
+      await buildDriverBAMapLive();
+      await buildTaskStatsLive();
+
+      buildLiveMapBAFilters();
+      await refreshMap();
+    }
+
     FILTER_BA = new Set(preservedBA);
 
-    // Only rebuild BA UI when NOT in live map
-    if (!MAP_VISIBLE) { // disable BA counts for paginated admin list
-    }
-
-    // Refresh live map if visible
-    if (MAP_VISIBLE) {
-      buildLiveMapBAFilters();  // 🔥 rebuild checkbox UI
-      await refreshMap();       // 🔥 reapply BA filter
-    }
-
   } catch (err) {
+    console.error("Hard refresh failed:", err);
     alert("Refresh failed. Please try again.");
-    console.error(err);
   } finally {
     hideLoader();
   }
