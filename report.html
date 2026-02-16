@@ -57,7 +57,7 @@ button:hover {
 
 <body>
 
-<h2>📊 Task Report V2.0.4</h2>
+<h2>📊 Task Report V2.1</h2>
 
 <button
   onclick="location.href='admin.html'"
@@ -143,8 +143,6 @@ const SYSTEM_FIELDS = new Set([
   "ZIPCODE",
   "LATITUDE",
   "LONGITUDE",
-  "AGENTID",
-  "AGENTNAME",
   "createdAt",
   "uploadedAt",
   "takenAt",
@@ -154,6 +152,16 @@ const SYSTEM_FIELDS = new Set([
 ]);
 
 let ALL_TASKS = [];
+let DRIVER_MAP = {};
+
+async function loadDrivers() {
+  const snap = await get(ref(db, "drivers"));
+  const raw = snap.val() || {};
+
+  Object.keys(raw).forEach(id => {
+    DRIVER_MAP[id] = raw[id]?.name || "";
+  });
+}
 
 /* ===== LOAD TASKS ===== */
 async function loadTasks() {
@@ -163,7 +171,10 @@ async function loadTasks() {
   buildFilterOptions();
 }
 
-loadTasks();
+(async () => {
+  await loadDrivers();
+  await loadTasks();
+})();
 
 function extractDynamicFields(task) {
   const out = {};
@@ -274,8 +285,10 @@ window.generateReport = function () {
   row.ACCOUNT_NUMBER = t.ACCOUNTNUMBER || "";
   row.METER_NUMBER = t.METERNUMBER || "";
 
-  row.DRIVER_ID = t.AGENTID || "";
-  row.DRIVER_NAME = t.AGENTNAME || "";
+  const driverId = t.driverId || "";
+
+row.DRIVERID = driverId;
+row.DRIVER_NAME = DRIVER_MAP[driverId] || "";
 
   row.DELIVERY_TYPE = t.deliveryType || "";
 
