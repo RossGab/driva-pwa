@@ -57,7 +57,7 @@ button:hover {
 
 <body>
 
-<h2>📊 Task Report V2.3</h2>
+<h2>📊 Task Report V2.4</h2>
 
 <button
   onclick="location.href='admin.html'"
@@ -302,6 +302,24 @@ function toDateOnly(val) {
   return ph.getTime();
 }
 
+function toPHDateTime(value) {
+  if (!value) return "";
+
+  const d = new Date(value);
+  if (isNaN(d.getTime())) return "";
+
+  return d.toLocaleString("en-GB", {
+    timeZone: "Asia/Manila",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false
+  });
+}
+
 function dateToKey(dateStr) {
   return dateStr.replace(/-/g, ""); // YYYYMMDD
 }
@@ -397,8 +415,8 @@ window.generateReport = async function () {
 
     row.LATITUDE = t.LATITUDE || "";
     row.LONGITUDE = t.LONGITUDE || "";
-    row.CREATED_AT = t.createdAt || "";
-    row.COMPLETED_AT = t.uploadedAt || "";
+    row.CREATED_AT = toPHDateTime(t.createdAt);
+    row.COMPLETED_AT = toPHDateTime(t.uploadedAt);
 
     row.PHOTO1_URL = t.photo1Url
       ? { t: "s", v: "View Photo 1", l: { Target: t.photo1Url } }
