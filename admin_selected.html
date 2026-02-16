@@ -269,7 +269,7 @@ button {
 <div class="admin-header" style="justify-content:space-between;">
   <div style="display:flex;align-items:center;gap:14px;">
     <img src="./logo.jpg" class="admin-logo" alt="Company Logo">
-    <h1>Admin Dashboard <span class="version">V2.8.3-WIP</span></h1>
+    <h1>Admin Dashboard <span class="version">V2.8.4-WIP</span></h1>
   </div>
 
   <!-- 📅 DATE FILTER -->
@@ -1227,8 +1227,7 @@ async function loadAdminPage(status) {
       if (t.status === "COMPLETED") return false;
     }
 
-    // DATE
-    if (normalizeDate(t.createdAt) !== SELECTED_DATE) return false;
+    
 
     // 👤 DRIVER FILTER (from Live Map)
     if (FILTER_DRIVER && t.driverId !== FILTER_DRIVER) return false;
