@@ -269,7 +269,7 @@ button {
 <div class="admin-header" style="justify-content:space-between;">
   <div style="display:flex;align-items:center;gap:14px;">
     <img src="./logo.jpg" class="admin-logo" alt="Company Logo">
-    <h1>Admin Dashboard <span class="version">V2.7.4.4</span></h1>
+    <h1>Admin Dashboard <span class="version">V2.8.0-WIP</span></h1>
   </div>
 
   <!-- 📅 DATE FILTER -->
@@ -429,6 +429,10 @@ import {
 
 function getTaskCacheKey() {
   return `ADMIN_TASK_CACHE_${SELECTED_DATE}`;
+}
+
+function getTaskIdCacheKey() {
+  return `ADMIN_TASK_IDS_${SELECTED_DATE}`;
 }
 
 /* ===== FIREBASE ===== */
@@ -640,7 +644,8 @@ function setCachedTasks(tasks) {
 }
 
 function clearTaskCache() {
-  localStorage.removeItem(getTaskCacheKey())
+  localStorage.removeItem(getTaskCacheKey());
+  localStorage.removeItem(getTaskIdCacheKey());
 }
 
 const app = initializeApp(firebaseConfig);
@@ -781,22 +786,17 @@ window.clearSearch = function () {
   
 /* ===== DASHBOARD (OPTIMIZED BY DATE INDEX) ===== */
 window.refreshDashboard = async function () {
-  let open = 0, done = 0, ok = 0, warn = 0, breach = 0;
-
-  // Convert YYYY-MM-DD → YYYYMMDD
   const dateKey = SELECTED_DATE.replace(/-/g, "");
 
   try {
-    // 1️⃣ Get task IDs for selected date
-    const indexSnap = await withTimeout(
-      get(ref(db, `tasksByDate/${dateKey}`)),
-      10000
+    const snap = await withTimeout(
+      get(ref(db, `adminStats/${dateKey}`)),
+      8000
     );
 
-    const ids = indexSnap.val();
+    const stats = snap.val();
 
-    if (!ids) {
-      // No tasks for this date
+    if (!stats) {
       openCount.innerText = 0;
       doneCount.innerText = 0;
       slaOk.innerText = 0;
@@ -805,44 +805,15 @@ window.refreshDashboard = async function () {
       return;
     }
 
-    // 2️⃣ Fetch ONLY those tasks
-    const reads = Object.keys(ids).map(id =>
-      get(ref(db, `tasks/${id}`)).then(s =>
-        s.exists() ? s.val() : null
-      )
-    );
-
-    const tasks = (await Promise.all(reads)).filter(Boolean);
-
-    // 3️⃣ Count
-    tasks.forEach(t => {
-      if (t.status === "COMPLETED") {
-        done++;
-        return;
-      }
-
-      if (t.status === "PENDING") {
-        open++;
-
-        const sla = getSLA(t);
-        if (!sla) return;
-
-        if (sla.cls === "sla-ok") ok++;
-        else if (sla.cls === "sla-warn") warn++;
-        else breach++;
-      }
-    });
+    openCount.innerText = stats.open || 0;
+    doneCount.innerText = stats.done || 0;
+    slaOk.innerText = stats.sla?.ok || 0;
+    slaWarn.innerText = stats.sla?.warn || 0;
+    slaBreach.innerText = stats.sla?.breach || 0;
 
   } catch (err) {
-    console.error("Dashboard load failed", err);
+    console.error("Dashboard stats load failed", err);
   }
-
-  // 4️⃣ Render
-  openCount.innerText = open;
-  doneCount.innerText = done;
-  slaOk.innerText = ok;
-  slaWarn.innerText = warn;
-  slaBreach.innerText = breach;
 };
 
 /* ===== TASK LIST ===== */
@@ -1150,12 +1121,27 @@ window.hardRefresh = async function () {
 
   const dateKey = SELECTED_DATE.replace(/-/g, "");
 
-  const indexSnap = await withTimeout(
-    get(ref(db, `tasksByDate/${dateKey}`)),
-    15000
-  );
-
-  const ids = indexSnap.val();
+  // 🔁 STEP 1: Load task IDs from cache OR Firebase (once per date)
+  const cachedIds =
+    JSON.parse(localStorage.getItem(getTaskIdCacheKey()) || "null");
+  
+  let ids;
+  
+  if (cachedIds) {
+    ids = cachedIds;
+  } else {
+    const indexSnap = await withTimeout(
+      get(ref(db, `tasksByDate/${dateKey}`)),
+      15000
+    );
+  
+    ids = indexSnap.val() || null;
+  
+    localStorage.setItem(
+      getTaskIdCacheKey(),
+      JSON.stringify(ids)
+    );
+  }
 
   if (!ids) {
     ADMIN_TASK_IDS = [];
