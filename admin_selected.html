@@ -531,11 +531,11 @@ async function updateSnapshotFreshness() {
       <span style="color:${color}">
         ${label}
       </span>
-      · updatedAt.toLocaleTimeString("en-PH", {
-          timeZone: "Asia/Manila",
-          hour: "numeric",
-          minute: "2-digit"
-        })}
+      · Updated ${updatedAt.toLocaleTimeString("en-PH", {
+        timeZone: "Asia/Manila",
+        hour: "numeric",
+        minute: "2-digit"
+      })} (PH)
     `;
   } catch {
     el.innerHTML = `
