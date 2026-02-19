@@ -269,7 +269,7 @@ button {
 <div class="admin-header" style="justify-content:space-between;">
   <div style="display:flex;align-items:center;gap:14px;">
     <img src="./logo.jpg" class="admin-logo" alt="Company Logo">
-    <h1>Admin Dashboard <span class="version">V3.0.1-WIP</span></h1>
+    <h1>Admin Dashboard <span class="version">V3.0.2-WIP</span></h1>
   </div>
 
   <!-- 📅 DATE FILTER -->
@@ -502,24 +502,34 @@ async function updateSnapshotFreshness(dateKey) {
   const el = document.getElementById("snapshotFreshness");
   if (!el) return;
 
-  try {
-    const res = await fetch(getSnapshotUrl(dateKey), {
-      method: "HEAD",
-      cache: "no-store"
-    });
+  const url = getSnapshotUrl(dateKey);
 
-    const lastModified = res.headers.get("last-modified");
+  try {
+    // 1️⃣ Try HEAD first (cheap)
+    let res = await fetch(url, { method: "HEAD", cache: "no-store" });
+
+    let lastModified = res.headers.get("last-modified");
+
+    // 2️⃣ Fallback to GET if GitHub omitted header
     if (!lastModified) {
-      el.textContent = "📦 Snapshot: unknown freshness";
+      res = await fetch(url, { cache: "no-store" });
+      lastModified = res.headers.get("last-modified");
+    }
+
+    // 3️⃣ Still no header? Snapshot exists but GitHub hides timestamp
+    if (!lastModified) {
+      el.innerHTML = `
+        <span style="color:orange">
+          🟡 Snapshot available (timestamp not provided)
+        </span>
+      `;
       return;
     }
 
     const updatedAt = new Date(lastModified);
-    const diffMs = Date.now() - updatedAt.getTime();
-    const diffMin = Math.floor(diffMs / 60000);
+    const diffMin = Math.floor((Date.now() - updatedAt) / 60000);
 
-    let label;
-    let color;
+    let label, color;
 
     if (diffMin <= 10) {
       label = "🟢 Fresh";
@@ -532,19 +542,21 @@ async function updateSnapshotFreshness(dateKey) {
       color = "red";
     }
 
-    const timeStr = updatedAt.toLocaleTimeString("en-PH", {
-      hour: "numeric",
-      minute: "2-digit"
-    });
-
     el.innerHTML = `
       <span style="color:${color}">
         ${label}
       </span>
-      · Updated ${timeStr}
+      · Updated ${updatedAt.toLocaleTimeString("en-PH", {
+        hour: "numeric",
+        minute: "2-digit"
+      })}
     `;
-  } catch (e) {
-    el.textContent = "📦 Snapshot: unavailable";
+  } catch (err) {
+    el.innerHTML = `
+      <span style="color:red">
+        ⚠ Snapshot unavailable
+      </span>
+    `;
   }
 }
 
