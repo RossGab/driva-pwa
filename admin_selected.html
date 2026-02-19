@@ -269,7 +269,7 @@ button {
 <div class="admin-header" style="justify-content:space-between;">
   <div style="display:flex;align-items:center;gap:14px;">
     <img src="./logo.jpg" class="admin-logo" alt="Company Logo">
-    <h1>Admin Dashboard <span class="version">V3.0.0-WIP</span></h1>
+    <h1>Admin Dashboard <span class="version">V3.0.1-WIP</span></h1>
   </div>
 
   <!-- 📅 DATE FILTER -->
@@ -1228,11 +1228,10 @@ window.softRefresh = async function () {
   taskList.innerHTML = "Loading...";
 
   const dateKey = SELECTED_DATE.replace(/-/g, "");
-  // =========================
-// SNAPSHOT FAST-PATH
-// =========================
 
-  {
+  // =========================
+  // SNAPSHOT FAST-PATH
+  // =========================
   showLoader("Loading snapshot…");
 
   const snapshotTasks = await loadSnapshotTasks(dateKey);
@@ -1253,10 +1252,9 @@ window.softRefresh = async function () {
 
     window.__SNAPSHOT_TASKS__ = snapshotTasks;
 
-    // 🔥 ADD THIS LINE
     updateSnapshotFreshness(dateKey);
     refreshDashboard();
-    
+
     await loadAdminPageFromSnapshot(status);
     hideLoader();
     return;
