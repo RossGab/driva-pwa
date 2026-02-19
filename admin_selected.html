@@ -269,7 +269,7 @@ button {
 <div class="admin-header" style="justify-content:space-between;">
   <div style="display:flex;align-items:center;gap:14px;">
     <img src="./logo.jpg" class="admin-logo" alt="Company Logo">
-    <h1>Admin Dashboard <span class="version">V2.8.6-WIP</span></h1>
+    <h1>Admin Dashboard <span class="version">V3.0.0-WIP</span></h1>
   </div>
 
   <!-- 📅 DATE FILTER -->
@@ -283,6 +283,16 @@ button {
       font-size:14px;
     "
   >
+</div>
+<div
+  id="snapshotFreshness"
+  style="
+    font-size:12px;
+    color:#555;
+    margin-top:4px;
+  "
+>
+  📦 Snapshot: checking…
 </div>
 
 <!-- ===== DASHBOARD ===== -->
@@ -460,6 +470,7 @@ function getTodayPH() {
 let SELECTED_DATE = getTodayPH();
 let ALL_BA_FOR_DATE = new Set();
 let FILTERED_TASK_IDS = [];
+let FILTER_READY = false;
 
 const adminDateFilter = document.getElementById("adminDateFilter");
 
@@ -475,6 +486,9 @@ adminDateFilter.addEventListener("change", async e => {
   localStorage.removeItem(`ADMIN_TASK_IDS_${oldDate}`);
   localStorage.removeItem(`ADMIN_TASK_CACHE_${oldDate}`);
 
+  // 🔥 CLEAR SNAPSHOT MEMORY (ADD THIS LINE)
+  window.__SNAPSHOT_TASKS__ = null;
+
   showLoader("Loading selected date…");
   try {
     await refreshDashboard();
@@ -483,6 +497,56 @@ adminDateFilter.addEventListener("change", async e => {
     hideLoader();
   }
 });
+
+async function updateSnapshotFreshness(dateKey) {
+  const el = document.getElementById("snapshotFreshness");
+  if (!el) return;
+
+  try {
+    const res = await fetch(getSnapshotUrl(dateKey), {
+      method: "HEAD",
+      cache: "no-store"
+    });
+
+    const lastModified = res.headers.get("last-modified");
+    if (!lastModified) {
+      el.textContent = "📦 Snapshot: unknown freshness";
+      return;
+    }
+
+    const updatedAt = new Date(lastModified);
+    const diffMs = Date.now() - updatedAt.getTime();
+    const diffMin = Math.floor(diffMs / 60000);
+
+    let label;
+    let color;
+
+    if (diffMin <= 10) {
+      label = "🟢 Fresh";
+      color = "green";
+    } else if (diffMin <= 60) {
+      label = "🟡 Slightly old";
+      color = "orange";
+    } else {
+      label = "🔴 Stale";
+      color = "red";
+    }
+
+    const timeStr = updatedAt.toLocaleTimeString("en-PH", {
+      hour: "numeric",
+      minute: "2-digit"
+    });
+
+    el.innerHTML = `
+      <span style="color:${color}">
+        ${label}
+      </span>
+      · Updated ${timeStr}
+    `;
+  } catch (e) {
+    el.textContent = "📦 Snapshot: unavailable";
+  }
+}
 
 async function loadDriverUIConfig() {
   const snap = await get(ref(db, "config/driverUI/jobTypes"));
@@ -518,6 +582,26 @@ function normalizeDate(dateStr) {
     timeZone: "Asia/Manila"
   });
 }
+
+async function loadSnapshotTasks(dateKey) {
+  try {
+    const res = await fetch(getSnapshotUrl(dateKey), {
+      cache: "no-store"
+    });
+
+    if (!res.ok) return null;
+
+    const data = await res.json();
+
+    return Object.entries(data).map(([id, task]) => ({
+      _key: id,
+      ...task
+    }));
+  } catch (e) {
+    console.warn("Snapshot load failed", e);
+    return null;
+  }
+}
   
 function renderAdminPagination() {
   const el = document.getElementById("adminPagination");
@@ -551,7 +635,7 @@ function renderAdminPagination() {
 window.adminPrevPage = function () {
   if (ADMIN_CURRENT_PAGE > 0) {
     ADMIN_CURRENT_PAGE--;
-    loadAdminPage(CURRENT_STATUS);
+    loadAdminPageFromSnapshot(CURRENT_STATUS);
   }
 };
 
@@ -559,7 +643,7 @@ window.adminNextPage = function () {
   const totalPages = Math.ceil(FILTERED_TASK_IDS.length / ADMIN_PAGE_SIZE);
   if (ADMIN_CURRENT_PAGE < totalPages - 1) {
     ADMIN_CURRENT_PAGE++;
-    loadAdminPage(CURRENT_STATUS);
+    loadAdminPageFromSnapshot(CURRENT_STATUS);
   }
 };
 
@@ -662,6 +746,21 @@ function clearTaskCache() {
   localStorage.removeItem(getTaskIdCacheKey());
 }
 
+/* =========================
+   SNAPSHOT CONFIG
+========================= */
+
+const SNAPSHOT_BASE_URL =
+  "https://raw.githubusercontent.com/RossGab/driva-task-snapshots/main/snapshots";
+
+function getSnapshotUrl(dateKey) {
+  return `${SNAPSHOT_BASE_URL}/${dateKey}.json`;
+}
+
+function isTodayPH(dateStr) {
+  return dateStr === getTodayPH();
+}
+
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 
@@ -720,7 +819,7 @@ searchBox.addEventListener("input", e => {
 
     if (CURRENT_STATUS) {
       // 🔥 IMPORTANT: only reload current page
-      loadAdminPage(CURRENT_STATUS);
+      loadAdminPageFromSnapshot(CURRENT_STATUS);
     }
   }, SEARCH_DELAY);
 });
@@ -761,7 +860,7 @@ searchBox.addEventListener("input", e => {
       else FILTER_BA.delete(ba);
     
       ADMIN_CURRENT_PAGE = 0; // 🔥 reset to first page
-      loadAdminPage(CURRENT_STATUS);
+      loadAdminPageFromSnapshot(CURRENT_STATUS);
     };
 
     box.appendChild(label);
@@ -793,48 +892,44 @@ window.onerror = (msg, src, line) => {
   document.getElementById("clearSearchBtn").style.display = "none";
 
   if (CURRENT_STATUS) {
-    loadAdminPage(CURRENT_STATUS); // ✅ page-only reload
+    loadAdminPageFromSnapshot(CURRENT_STATUS); // ✅ page-only reload
   }
 };
   
-/* ===== DASHBOARD (OPTIMIZED BY DATE INDEX) ===== */
-window.refreshDashboard = async function () {
-  const dateKey = SELECTED_DATE.replace(/-/g, "");
-
-  try {
-    const snap = await withTimeout(
-      get(ref(db, `adminStats/${dateKey}`)),
-      8000
-    );
-
-    const stats = snap.val();
-
-    if (!stats) {
-      openCount.innerText = 0;
-      doneCount.innerText = 0;
-      slaOk.innerText = 0;
-      slaWarn.innerText = 0;
-      slaBreach.innerText = 0;
-      return;
-    }
-
-    openCount.innerText = stats.open || 0;
-    doneCount.innerText = stats.done || 0;
-    slaOk.innerText = stats.sla?.ok || 0;
-    slaWarn.innerText = stats.sla?.warn || 0;
-    slaBreach.innerText = stats.sla?.breach || 0;
-
-  } catch (err) {
-    console.error("Dashboard stats load failed", err);
+window.refreshDashboard = function () {
+  if (!window.__SNAPSHOT_TASKS__) {
+    openCount.innerText = 0;
+    doneCount.innerText = 0;
+    slaOk.innerText = 0;
+    slaWarn.innerText = 0;
+    slaBreach.innerText = 0;
+    return;
   }
+
+  let open = 0, done = 0;
+  let ok = 0, warn = 0, breach = 0;
+
+  window.__SNAPSHOT_TASKS__.forEach(t => {
+    if (t.status === "COMPLETED") {
+      done++;
+    } else {
+      open++;
+
+      if (!t.createdAt) return;
+      const hrs = (Date.now() - new Date(t.createdAt)) / 36e5;
+      if (hrs < 24) ok++;
+      else if (hrs < 48) warn++;
+      else breach++;
+    }
+  });
+
+  openCount.innerText = open;
+  doneCount.innerText = done;
+  slaOk.innerText = ok;
+  slaWarn.innerText = warn;
+  slaBreach.innerText = breach;
 };
 
-/* ===== TASK LIST ===== */
-import {
-  query,
-  orderByChild,
-  equalTo
-} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
 function renderDynamicCompletedFields(t) {
   if (!t.deliveryType || !t.JOBTYPE) return "";
@@ -1114,13 +1209,13 @@ window.softRefresh = async function () {
     await refreshDashboard();
 
     // 2️⃣ Reload current page only
-    if (CURRENT_STATUS) {
-      await loadAdminPage(CURRENT_STATUS);
+    if (CURRENT_STATUS && window.__SNAPSHOT_TASKS__) {
+      await loadAdminPageFromSnapshot(CURRENT_STATUS);
     }
 
     // 3️⃣ Live Map only if visible
     if (MAP_VISIBLE) {
-      await buildTaskStatsLive();
+      buildTaskStatsFromSnapshot();
       await refreshMap();
     }
   } finally {
@@ -1130,151 +1225,77 @@ window.softRefresh = async function () {
   
   window.loadTasks = async function (status) {
   CURRENT_STATUS = status;
-  FILTER_READY = false; // 🔥 ADD THIS
   taskList.innerHTML = "Loading...";
 
   const dateKey = SELECTED_DATE.replace(/-/g, "");
+  // =========================
+// SNAPSHOT FAST-PATH
+// =========================
 
-  // 🔁 STEP 1: Load task IDs from cache OR Firebase (once per date)
-  const cachedIds =
-    JSON.parse(localStorage.getItem(getTaskIdCacheKey()) || "null");
-  
-  let ids;
-  
-  if (cachedIds) {
-    ids = cachedIds;
-  } else {
-    const indexSnap = await withTimeout(
-      get(ref(db, `tasksByDate/${dateKey}`)),
-      15000
-    );
-  
-    ids = indexSnap.val() || null;
-  
-    localStorage.setItem(
-      getTaskIdCacheKey(),
-      JSON.stringify(ids)
-    );
-  }
+  {
+  showLoader("Loading snapshot…");
 
-  if (!ids) {
-    ADMIN_TASK_IDS = [];
+  const snapshotTasks = await loadSnapshotTasks(dateKey);
+
+  if (snapshotTasks) {
+    console.log("📦 Using snapshot for", dateKey);
+
+    ADMIN_TASK_IDS = snapshotTasks.map(t => t._key);
+    FILTERED_TASK_IDS = [...ADMIN_TASK_IDS];
+    ADMIN_CURRENT_PAGE = 0;
+
     ALL_BA_FOR_DATE.clear();
-    taskList.innerHTML = "No tasks found";
-    renderAdminPagination();
+    snapshotTasks.forEach(t => {
+      if (t.BA) ALL_BA_FOR_DATE.add(t.BA);
+    });
+
+    renderGlobalBAFilters();
+
+    window.__SNAPSHOT_TASKS__ = snapshotTasks;
+
+    // 🔥 ADD THIS LINE
+    updateSnapshotFreshness(dateKey);
+    refreshDashboard();
+    
+    await loadAdminPageFromSnapshot(status);
+    hideLoader();
     return;
   }
 
-  ADMIN_TASK_IDS = Object.keys(ids);
-  FILTERED_TASK_IDS = [...ADMIN_TASK_IDS]; // reset filtered list
-  FILTER_READY = false; // 🔥 REQUIRED
-  ADMIN_CURRENT_PAGE = 0;
-
-  // 🔥 BUILD GLOBAL BA LIST (one-time, light fetch)
-  await buildGlobalBAList(ADMIN_TASK_IDS);
-
-  await loadAdminPage(status);
+  hideLoader();
 };
 
-async function buildGlobalBAList(taskIds) {
-  ALL_BA_FOR_DATE.clear();
+async function loadAdminPageFromSnapshot(status) {
+  if (!window.__SNAPSHOT_TASKS__) return;
 
-  const CHUNK_SIZE = 250; // safe for Firebase + browser
-  const chunks = [];
-
-  for (let i = 0; i < taskIds.length; i += CHUNK_SIZE) {
-    chunks.push(taskIds.slice(i, i + CHUNK_SIZE));
-  }
-
-  for (const chunk of chunks) {
-    const reads = chunk.map(id =>
-      get(ref(db, `tasks/${id}/BA`)).then(s => s.val())
-    );
-
-    const bas = await Promise.all(reads);
-
-    bas.forEach(ba => {
-      if (ba) ALL_BA_FOR_DATE.add(ba);
-    });
-  }
-
-  renderGlobalBAFilters();
-}
-
-let FILTER_READY = false;
-
-async function loadAdminPage(status) {
-  taskList.innerHTML = "Loading...";
-
-  // 🔥 FILTER TASK IDS ONLY ONCE PER STATUS
-  if (!FILTER_READY) {
-    FILTERED_TASK_IDS = [];
-
-    const reads = ADMIN_TASK_IDS.map(id =>
-      get(ref(db, `tasks/${id}/status`))
-        .then(s => ({ id, status: (s.val() || "PENDING").toUpperCase() }))
-    );
-
-    const results = await Promise.all(reads);
-
-    results.forEach(({ id, status: s }) => {
-      if (status === "COMPLETED") {
-        if (s === "COMPLETED") FILTERED_TASK_IDS.push(id);
-      } else {
-        if (s !== "COMPLETED") FILTERED_TASK_IDS.push(id);
-      }
-    });
-
-    FILTER_READY = true;
-  }
-
-  // 🔥 PAGINATION (STABLE)
-  const start = ADMIN_CURRENT_PAGE * ADMIN_PAGE_SIZE;
-  const end = start + ADMIN_PAGE_SIZE;
-  const pageIds = FILTERED_TASK_IDS.slice(start, end);
-
-  if (!pageIds.length) {
-    renderAdminTasks([]);
-    renderAdminPagination();
-    return;
-  }
-
-  // 🔥 FETCH ONLY PAGE TASKS
-  const reads = pageIds.map(id =>
-    get(ref(db, `tasks/${id}`))
-      .then(s => s.exists() ? { _key: id, ...s.val() } : null)
+  let tasks = window.__SNAPSHOT_TASKS__.filter(t =>
+    status === "COMPLETED"
+      ? t.status === "COMPLETED"
+      : t.status !== "COMPLETED"
   );
 
-  let tasks = (await Promise.all(reads)).filter(Boolean);
+  // 🔍 Search filter
+  if (SEARCH_TERM) {
+    tasks = tasks.filter(t =>
+      Object.values(t).some(v =>
+        String(v || "").toLowerCase().includes(SEARCH_TERM)
+      )
+    );
+  }
 
-  // 🔥 UI FILTERS ONLY (NO FIREBASE)
-  tasks = tasks.filter(t => {
-    if (FILTER_DRIVER && t.driverId !== FILTER_DRIVER) return false;
-    if (FILTER_BA.size && !FILTER_BA.has(t.BA)) return false;
+  // 🏷 BA filter
+  if (FILTER_BA.size) {
+    tasks = tasks.filter(t => FILTER_BA.has(t.BA));
+  }
 
-    if (SEARCH_TERM) {
-      const haystack = [
-        t.CUSTOMERNAME,
-        t.ADDRESS,
-        t.driverId,
-        t.METERNUMBER,
-        t.ACCOUNTNUMBER,
-        t.BA,
-        t.DMZ,
-        t.MRU,
-        t.remarks
-      ].filter(Boolean).join(" ").toLowerCase();
+  FILTERED_TASK_IDS = tasks.map(t => t._key);
 
-      return haystack.includes(SEARCH_TERM);
-    }
+  const start = ADMIN_CURRENT_PAGE * ADMIN_PAGE_SIZE;
+  const pageTasks = tasks.slice(start, start + ADMIN_PAGE_SIZE);
 
-    return true;
-  });
-
-  renderAdminTasks(tasks);
+  renderAdminTasks(pageTasks);
   renderAdminPagination();
 }
-
 
 function renderAdminTasks(tasks) {
   taskList.innerHTML = "";
@@ -1570,8 +1591,8 @@ window.toggleLiveMap = async function () {
   initMap();
   setTimeout(() => map.invalidateSize(), 200);
 
-  await buildTaskStatsLive();
-  await buildDriverBAMapLive();
+  buildTaskStatsFromSnapshot();
+  buildDriverBAMapFromSnapshot();
   buildLiveMapBAFilters();
   await refreshMap();
 };  
@@ -1709,117 +1730,45 @@ function renderDriverList(statusData = {}) {
     `;
   }
 }
-  
-async function buildTaskStats() {
-  const snap = await withTimeout(get(ref(db, "tasks")), 8000);
-  const tasks = snap.val() || {};
 
-  const stats = {};
+function buildTaskStatsFromSnapshot() {
+  TASK_STATS = {};
 
-  Object.values(tasks).forEach(t => {
+  if (!window.__SNAPSHOT_TASKS__) return;
+
+  window.__SNAPSHOT_TASKS__.forEach(t => {
     if (!t.driverId) return;
 
-    if (!stats[t.driverId]) {
-      stats[t.driverId] = { open: 0, completed: 0 };
+    if (!TASK_STATS[t.driverId]) {
+      TASK_STATS[t.driverId] = { open: 0, completed: 0 };
     }
 
     if (t.status === "COMPLETED") {
-      stats[t.driverId].completed++;
+      TASK_STATS[t.driverId].completed++;
     } else {
-      stats[t.driverId].open++;
+      TASK_STATS[t.driverId].open++;
     }
   });
-
-  TASK_STATS = stats;
 }
 
-async function buildTaskStatsLive() {
-  const stats = {};
-  const dateKey = SELECTED_DATE.replace(/-/g, "");
+function buildDriverBAMapFromSnapshot() {
+  DRIVER_BA_MAP = {};
 
-  try {
-    const indexSnap = await withTimeout(
-      get(ref(db, `tasksByDate/${dateKey}`)),
-      10000
-    );
+  if (!window.__SNAPSHOT_TASKS__) return;
 
-    const ids = indexSnap.val();
-    if (!ids) {
-      TASK_STATS = {};
-      return;
+  window.__SNAPSHOT_TASKS__.forEach(t => {
+    if (!t.driverId || !t.BA) return;
+
+    if (!DRIVER_BA_MAP[t.driverId]) {
+      DRIVER_BA_MAP[t.driverId] = [];
     }
 
-    const reads = Object.keys(ids).map(id =>
-      get(ref(db, `tasks/${id}`)).then(s =>
-        s.exists() ? s.val() : null
-      )
-    );
-
-    const tasks = (await Promise.all(reads)).filter(Boolean);
-
-    tasks.forEach(t => {
-      if (!t.driverId) return;
-
-      if (!stats[t.driverId]) {
-        stats[t.driverId] = { open: 0, completed: 0 };
-      }
-
-      if (t.status === "COMPLETED") {
-        stats[t.driverId].completed++;
-      } else {
-        stats[t.driverId].open++;
-      }
-    });
-
-  } catch (e) {
-    console.error("buildTaskStatsLive failed", e);
-  }
-
-  TASK_STATS = stats;
-}
-
-async function buildDriverBAMapLive() {
-  const map = {};
-  const dateKey = SELECTED_DATE.replace(/-/g, "");
-
-  try {
-    const indexSnap = await withTimeout(
-      get(ref(db, `tasksByDate/${dateKey}`)),
-      10000
-    );
-
-    const ids = indexSnap.val();
-    if (!ids) {
-      DRIVER_BA_MAP = {};
-      return;
+    if (!DRIVER_BA_MAP[t.driverId].includes(t.BA)) {
+      DRIVER_BA_MAP[t.driverId].push(t.BA);
     }
-
-    const reads = Object.keys(ids).map(id =>
-      get(ref(db, `tasks/${id}`)).then(s =>
-        s.exists() ? s.val() : null
-      )
-    );
-
-    const tasks = (await Promise.all(reads)).filter(Boolean);
-
-    tasks.forEach(t => {
-      if (!t.driverId || !t.BA) return;
-
-      if (!map[t.driverId]) {
-        map[t.driverId] = [];
-      }
-
-      if (!map[t.driverId].includes(t.BA)) {
-        map[t.driverId].push(t.BA);
-      }
-    });
-
-  } catch (e) {
-    console.error("buildDriverBAMapLive failed", e);
-  }
-
-  DRIVER_BA_MAP = map;
+  });
 }
+
   
 async function refreshMap() {
   const snap = await withTimeout(get(ref(db, "driverStatus")), 8000);
@@ -1891,14 +1840,10 @@ function startMapAutoRefresh() {
 
   MAP_REFRESH_TIMER = setInterval(async () => {
     if (!MAP_VISIBLE) return;
-
-    await refreshMap();          // GPS + markers
-    await buildTaskStatsLive();  // 🔥 Open / Done counts per driver
-
-    // Optional: re-render driver list so numbers update visually
-    const statusSnap = await get(ref(db, "driverStatus"));
-    renderDriverList(statusSnap.val() || {});
-  }, 600000); // 🔥 every 60 seconds
+  
+    await refreshMap();               // 🔥 Firebase (GPS only)
+    buildTaskStatsFromSnapshot();     // 📦 Snapshot
+  }, 60000); // 🔥 every 60 seconds
 }
 
 function stopMapAutoRefresh() {
@@ -1960,8 +1905,8 @@ function setLoaderText(txt) {
     showLoader("Loading driver config…");
     await loadDriverUIConfig();
 
-    showLoader("Loading dashboard…");
-    await refreshDashboard();
+    // showLoader("Loading dashboard…");
+    // await refreshDashboard();
 
     showLoader("Loading tasks…");
     await loadTasks("PENDING");
