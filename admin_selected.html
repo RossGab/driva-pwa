@@ -269,7 +269,7 @@ button {
 <div class="admin-header" style="justify-content:space-between;">
   <div style="display:flex;align-items:center;gap:14px;">
     <img src="./logo.jpg" class="admin-logo" alt="Company Logo">
-    <h1>Admin Dashboard <span class="version">V3.0.4-WIP</span></h1>
+    <h1>Admin Dashboard <span class="version">V3.0.5-WIP</span></h1>
   </div>
 
   <!-- 📅 DATE FILTER -->
@@ -1266,50 +1266,37 @@ window.softRefresh = async function () {
 
   const dateKey = SELECTED_DATE.replace(/-/g, "");
 
-  // =========================
-  // SNAPSHOT FAST-PATH
-  // =========================
   showLoader("Loading snapshot…");
 
-  let snapshotTasks = await loadSnapshotTasks(dateKey);
+  const snapshotTasks = await loadSnapshotTasks(dateKey);
 
-    // 🔁 Fallback: yesterday, then day before
-    if (!snapshotTasks) {
-      const d = new Date(SELECTED_DATE);
-      for (let i = 1; i <= 2 && !snapshotTasks; i++) {
-        d.setDate(d.getDate() - 1);
-        const fallbackKey = d.toISOString().slice(0, 10).replace(/-/g, "");
-        snapshotTasks = await loadSnapshotTasks(fallbackKey);
-      }
-    }
-
-  if (snapshotTasks) {
-    console.log("📦 Using snapshot for", dateKey);
-
-    ADMIN_TASK_IDS = snapshotTasks.map(t => t._key);
-    FILTERED_TASK_IDS = [...ADMIN_TASK_IDS];
-    ADMIN_CURRENT_PAGE = 0;
-
-    ALL_BA_FOR_DATE.clear();
-    snapshotTasks.forEach(t => {
-      if (t.BA) ALL_BA_FOR_DATE.add(t.BA);
-    });
-
-    renderGlobalBAFilters();
-
-    window.__SNAPSHOT_TASKS__ = snapshotTasks;
-
-    updateSnapshotFreshness();
-    refreshDashboard();
-
-    await loadAdminPageFromSnapshot(status);
+  // ✅ STRICT MODE: NO FALLBACK
+  if (!snapshotTasks) {
+    window.__SNAPSHOT_TASKS__ = null;
+    showNoSnapshotMessage(SELECTED_DATE);
     hideLoader();
     return;
   }
 
-  // 🚫 NO SNAPSHOT FOUND
-  window.__SNAPSHOT_TASKS__ = null;
-  showNoSnapshotMessage(SELECTED_DATE);
+  console.log("📦 Using snapshot for", dateKey);
+
+  ADMIN_TASK_IDS = snapshotTasks.map(t => t._key);
+  FILTERED_TASK_IDS = [...ADMIN_TASK_IDS];
+  ADMIN_CURRENT_PAGE = 0;
+
+  ALL_BA_FOR_DATE.clear();
+  snapshotTasks.forEach(t => {
+    if (t.BA) ALL_BA_FOR_DATE.add(t.BA);
+  });
+
+  renderGlobalBAFilters();
+
+  window.__SNAPSHOT_TASKS__ = snapshotTasks;
+
+  updateSnapshotFreshness();
+  refreshDashboard();
+
+  await loadAdminPageFromSnapshot(status);
   hideLoader();
 };
 
