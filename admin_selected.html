@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Admin Dashboard V 2.0.0</title>
+<title>Admin Dashboard V 3</title>
 <!-- ===== LEAFLET (OPTION 2 MAP) ===== -->
 <link
   rel="stylesheet"
@@ -269,7 +269,7 @@ button {
 <div class="admin-header" style="justify-content:space-between;">
   <div style="display:flex;align-items:center;gap:14px;">
     <img src="./logo.jpg" class="admin-logo" alt="Company Logo">
-    <h1>Admin Dashboard <span class="version">V3.0.3-WIP</span></h1>
+    <h1>Admin Dashboard <span class="version">V3.0.4-WIP</span></h1>
   </div>
 
   <!-- 📅 DATE FILTER -->
@@ -531,15 +531,55 @@ async function updateSnapshotFreshness() {
       <span style="color:${color}">
         ${label}
       </span>
-      · Updated ${updatedAt.toLocaleTimeString("en-PH", {
-        hour: "numeric",
-        minute: "2-digit"
-      })}
+      · updatedAt.toLocaleTimeString("en-PH", {
+          timeZone: "Asia/Manila",
+          hour: "numeric",
+          minute: "2-digit"
+        })}
     `;
   } catch {
     el.innerHTML = `
       <span style="color:red">
         ⚠ Snapshot freshness unavailable
+      </span>
+    `;
+  }
+}
+function showNoSnapshotMessage(dateKey) {
+  taskList.innerHTML = `
+    <div style="
+      padding:16px;
+      background:#fff;
+      border-radius:8px;
+      text-align:center;
+      font-size:14px;
+      color:#777;
+      box-shadow:0 0 4px rgba(0,0,0,.1);
+    ">
+      📦 <b>No snapshot data available</b><br>
+      <span style="font-size:13px;">
+        No data was recorded for <b>${dateKey}</b>
+      </span>
+    </div>
+  `;
+
+  // Reset dashboard counters
+  openCount.innerText = 0;
+  doneCount.innerText = 0;
+  slaOk.innerText = 0;
+  slaWarn.innerText = 0;
+  slaBreach.innerText = 0;
+
+  // Hide pagination
+  const pg = document.getElementById("adminPagination");
+  if (pg) pg.innerHTML = "";
+
+  // Update freshness indicator
+  const el = document.getElementById("snapshotFreshness");
+  if (el) {
+    el.innerHTML = `
+      <span style="color:#999">
+        📦 No snapshot for selected date
       </span>
     `;
   }
@@ -1267,6 +1307,9 @@ window.softRefresh = async function () {
     return;
   }
 
+  // 🚫 NO SNAPSHOT FOUND
+  window.__SNAPSHOT_TASKS__ = null;
+  showNoSnapshotMessage(SELECTED_DATE);
   hideLoader();
 };
 
