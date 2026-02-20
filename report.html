@@ -57,7 +57,7 @@ button:hover {
 
 <body>
 
-<h2>📊 Task Report V3.0</h2>
+<h2>📊 Task Report V3.1</h2>
 
 <button
   onclick="location.href='admin.html'"
@@ -132,6 +132,56 @@ async function loadDrivers() {
   }
 
   DRIVER_MAP = await res.json();
+}
+
+function flattenTaskForReport(task, driverMap) {
+  const row = {};
+
+  // Always include ID first
+  row.TASK_ID = task._key || "";
+
+  for (const [key, value] of Object.entries(task)) {
+
+    // ❌ Skip internal/system-only fields
+    if (
+      key === "_key" ||
+      key === "finalized" ||
+      key === "uploading" ||
+      key === "processing"
+    ) {
+      continue;
+    }
+
+    // 🔄 Normalize column name
+    const col = key.toUpperCase();
+
+    // 👤 Driver name helper
+    if (key === "driverId") {
+      row.DRIVER_ID = value || "";
+      row.DRIVER_NAME = driverMap[value]?.name || "";
+      continue;
+    }
+
+    // 🕒 Format date-like values
+    if (
+      typeof value === "string" &&
+      value.match(/^\d{4}-\d{2}-\d{2}T/)
+    ) {
+      row[col] = toPHDateTime(value);
+      continue;
+    }
+
+    // 📦 Objects → stringify (safe for Excel)
+    if (typeof value === "object" && value !== null) {
+      row[col] = JSON.stringify(value);
+      continue;
+    }
+
+    // ✅ Normal scalar
+    row[col] = value ?? "";
+  }
+
+  return row;
 }
 
 /* ===============================
@@ -258,25 +308,9 @@ window.generateReport = async function () {
     return;
   }
 
-  const data = rows.map(t => ({
-    TASK_ID: t._key,
-    STATUS: t.status || "",
-    JOB_TYPE: t.JOBTYPE || "",
-    BA: t.BA || "",
-    DMZ: t.DMZ || "",
-    CUSTOMER_NAME: t.CUSTOMERNAME || "",
-    ADDRESS: t.ADDRESS || "",
-    ZIPCODE: t.ZIPCODE || "",
-    ACCOUNT_NUMBER: t.ACCOUNTNUMBER || "",
-    METER_NUMBER: t.METERNUMBER || "",
-    DRIVER_ID: t.driverId || "",
-    DRIVER_NAME: DRIVER_MAP[t.driverId]?.name || "",
-    DELIVERY_TYPE: t.deliveryType || "",
-    CREATED_AT: toPHDateTime(t.createdAt),
-    COMPLETED_AT: toPHDateTime(t.uploadedAt),
-    LATITUDE: t.LATITUDE || "",
-    LONGITUDE: t.LONGITUDE || ""
-  }));
+  const data = rows.map(t =>
+  flattenTaskForReport(t, DRIVER_MAP)
+);
 
   const ws = XLSX.utils.json_to_sheet(data);
   const wb = XLSX.utils.book_new();
