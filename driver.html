@@ -211,7 +211,7 @@ import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "htt
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "v3.5.15.11-WIP";
+const VERSION = "v3.5.15.12-WIP";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -1092,8 +1092,10 @@ async function loadTasks() {
   taskList.innerText = "Loading tasks…";
 
   // 1️⃣ OFFLINE FIRST
-  if (!navigator.onLine) {
-  const offlineTasks = await getTasksFromIndexedDB();
+ if (!navigator.onLine) {
+  const offlineTasks = (await getTasksFromIndexedDB())
+    .filter(t => resolveStatus(t) !== "COMPLETED");
+
   render(offlineTasks);
   renderJobTypeFilters(offlineTasks);
   updateRemainingCounter(offlineTasks);
@@ -1129,7 +1131,8 @@ async function loadTasks() {
 
     let tasks = (await Promise.all(reads))
       .filter(Boolean)
-      .filter(t => t.driverId === DRIVER_ID); // ✅ driver filter LOCAL
+      .filter(t => t.driverId === DRIVER_ID)
+      .filter(t => t.status !== "COMPLETED");   // ✅ HARD BLOCK
 
     // 5️⃣ Cache for offline use
     await saveTasksToIndexedDB(tasks);
@@ -1252,6 +1255,8 @@ function updateRemainingCounter(tasks) {
   const selectedDate = dateFilter.value;
 
   tasks = tasks.filter(t => {
+  const status = resolveStatus(t);    // ✅ ADD THIS
+  if (status === "COMPLETED") return false;   // ✅ CORRECT
   const taskDate = normalizeDatePH(t.createdAt);
   if (!taskDate || taskDate !== selectedDate) return false;
 
@@ -1684,8 +1689,18 @@ setTimeout(() => {
   }
 }, 8000);
 
+// 🧹 BOOT CLEANUP — REMOVE COMPLETED TASKS FROM INDEXEDDB
+(async () => {
+  const tasks = await getTasksFromIndexedDB();
+  for (const t of tasks) {
+    if (t.status === "COMPLETED") {
+      await deleteTaskFromIndexedDB(t._key);
+    }
+  }
+})();
+
 // 🚀 INITIAL BOOT LOAD (ONLY ONCE)
-loadTasks();
+loadTasks()
 
 let OFFLINE_REPLAY_RUNNING = false;
 
