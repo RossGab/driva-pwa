@@ -211,7 +211,7 @@ import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "htt
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "v3.5.15.3-WIP";
+const VERSION = "v3.5.15.2-WIP";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -471,19 +471,7 @@ async function loadDriverUI(jobType) {
 
 //   return data;
 // }
-  
-function minimizeTaskForCache(t) {
-  return {
-    _key: t._key,
-    status: t.status,
-    finalized: !!t.finalized,
-    JOBTYPE: t.JOBTYPE,
-    createdAt: t.createdAt,
-    rowIndex: t.rowIndex,
-    uploadBatch: t.uploadBatch
-  };
-}
-  
+
 function disablePullToRefresh() {
   document.body.style.overscrollBehaviorY = "contain";
 }
@@ -794,6 +782,10 @@ cameraInput.onchange = async e => {
   
   processingMap[taskKey] = true;
   
+  localStorage.setItem(
+    TASK_CACHE_KEY,
+    JSON.stringify(cachedTasks)
+  );
   
   // 🔁 STORE QUEUE ENTRY
   let q = getQueue().filter(x => x.taskKey !== taskKey);
@@ -1046,14 +1038,11 @@ if (idx !== -1) {
   cachedTasks[idx].status = "COMPLETED";
   cachedTasks[idx].finalized = true;
 }
-  
-try {
-  const slim = cachedTasks.map(minimizeTaskForCache);
-  localStorage.setItem(TASK_CACHE_KEY, JSON.stringify(slim));
-} catch (e) {
-  console.warn("⚠️ cachedTasks overflow — clearing", e);
-  localStorage.removeItem(TASK_CACHE_KEY);
-}
+
+localStorage.setItem(
+  TASK_CACHE_KEY,
+  JSON.stringify(cachedTasks)
+);
 
 /* ================= FIX #3 END ================= */
   // ✅ CLEAR FORM CACHE AFTER SUCCESS
@@ -1065,25 +1054,16 @@ try {
 }
 
 async function preloadDriverUIConfig(tasks) {
-  const types = new Set();
-
   for (const t of tasks) {
-    if (resolveStatus(t) === "COMPLETED") continue;
-    if (t.JOBTYPE) types.add(t.JOBTYPE);
+    if (t.JOBTYPE) {
+      await loadDriverUI(t.JOBTYPE);
+    }
   }
-
-  await Promise.all(
-    [...types].map(t => loadDriverUI(t))
-  );
 }
-  
 checkStorageQuota();
 setInterval(checkStorageQuota, 60_000); // every 60 seconds
 /* ===== LOAD TASKS ===== */
 async function loadTasks() {
-  let firebaseFailed = false;
-  let snap = null;     // ✅ FIX: function scope
-  let tasks = [];      // ✅ FIX: function scope
   // 🔓 Safety reset if app crashed mid-capture
   if (
     ACTIVE_CAPTURE_TASK &&
@@ -1092,6 +1072,7 @@ async function loadTasks() {
     ACTIVE_CAPTURE_TASK = null;
   }
   try {
+    let tasks = [];
 
     try {
       tasks = dedupeTasks(
@@ -1103,21 +1084,22 @@ async function loadTasks() {
       tasks = [];
     }
 
+    localStorage.setItem(TASK_CACHE_KEY, JSON.stringify(tasks));
         
     if (navigator.onLine) {
-      try {
-        snap = await get(
-          query(
-            ref(db, "tasks"),
-            orderByChild("driverId"),
-            equalTo(DRIVER_ID)
-          )
-        );
-      } catch (e) {
-        console.warn("⚠️ Firebase read failed, using cache", e);
-        firebaseFailed = true;
-      }
-    }
+  let snap = null;
+
+  try {
+    snap = await get(
+      query(
+        ref(db, "tasks"),
+        orderByChild("driverId"),
+        equalTo(DRIVER_ID)
+      )
+    );
+  } catch (e) {
+    console.warn("⚠️ Firebase read failed, using cache", e);
+  }
 
   if (snap) {
     const raw = snap.val() || {};
@@ -1162,15 +1144,6 @@ async function loadTasks() {
 
     tasks = merged;
 
-    // ✅ persist SLIM cache only (prevents quota crash)
-      try {
-        const slim = tasks.map(minimizeTaskForCache);
-        localStorage.setItem(TASK_CACHE_KEY, JSON.stringify(slim));
-      } catch (e) {
-        console.warn("⚠️ cachedTasks too large — clearing", e);
-        localStorage.removeItem(TASK_CACHE_KEY);
-      }
-
     // 🔁 AUTO-COMPLETE SAFETY
     tasks = tasks.map(t => {
       if (
@@ -1191,19 +1164,10 @@ async function loadTasks() {
       return t;
     });
 
-  
-  }
-  // ✅ FINAL SAFETY: Firebase failed → render cached tasks
-  if (firebaseFailed) {
-    try {
-      const cached =
-        JSON.parse(localStorage.getItem(TASK_CACHE_KEY) || "[]");
-
-      render(cached);
-    } catch (e) {
-      console.warn("⚠️ Cache render failed", e);
-      taskList.innerHTML = "⚠️ Unable to load tasks offline.";
-    }
+    localStorage.setItem(
+      TASK_CACHE_KEY,
+      JSON.stringify(tasks)
+    );
   }
 }
 
@@ -1293,7 +1257,6 @@ const filtered = tasks
         "⚠️ Failed to load tasks.<br><br>" +
         "<small>" + e.message + "</small>";
     }
-  
 }
 
 async function detectGPSPermission() {
@@ -1925,14 +1888,10 @@ async function processOfflineQueue() {
         cachedTasks[idx].finalized = true;
       }
       
-      // ✅ SAVE SLIMMED CACHE AFTER OFFLINE COMPLETION
-      try {
-        const slim = cachedTasks.map(minimizeTaskForCache);
-        localStorage.setItem(TASK_CACHE_KEY, JSON.stringify(slim));
-      } catch (e) {
-        console.warn("⚠️ cachedTasks overflow — clearing", e);
-        localStorage.removeItem(TASK_CACHE_KEY);
-      }
+      localStorage.setItem(
+        TASK_CACHE_KEY,
+        JSON.stringify(cachedTasks)
+      );
 
       delete uploadingMap[taskKey];
       delete processingMap[taskKey];
