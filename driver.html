@@ -211,7 +211,7 @@ import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "htt
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "v3.5.15.14-WIP";
+const VERSION = "v3.5.15.16-WIP";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -1538,33 +1538,6 @@ async function renderCachedOnly() {
 
     if (ra !== rb) return ra - rb;
 
-    // secondary: oldest first
-    return new Date(a.createdAt || 0) - new Date(b.createdAt || 0);
-  });
-
-  // ⬇️ THIS WAS ALREADY HERE
-  render(filtered);
-  updateRemainingCounter(filtered);
-  updateUploadCounter(filtered);
-}
-
-  // 🔥 FIX: SORT OFFLINE TASKS
-  const statusRank = {
-    PENDING: 1,
-    READY: 1,
-    PROCESSING: 2,
-    UPLOADING: 2,
-    SYNC_PENDING: 3,
-    OFFLINE_PENDING: 3
-  };
-
-  filtered.sort((a, b) => {
-    const ra = statusRank[resolveStatus(a)] || 9;
-    const rb = statusRank[resolveStatus(b)] || 9;
-
-    if (ra !== rb) return ra - rb;
-
-    // secondary sort: older tasks first
     return new Date(a.createdAt || 0) - new Date(b.createdAt || 0);
   });
 
@@ -1572,6 +1545,8 @@ async function renderCachedOnly() {
   updateRemainingCounter(filtered);
   updateUploadCounter(filtered);
 }
+
+
   
 async function renderDynamicDelivery(t) {
   const methods = await loadDriverUI(t.JOBTYPE);
