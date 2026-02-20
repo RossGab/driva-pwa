@@ -211,7 +211,7 @@ import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "htt
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "v3.5.15.16-WIP";
+const VERSION = "v3.5.15.17-WIP";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -963,6 +963,29 @@ function resolveStatus(task) {
   return task.status || "PENDING";
 }
 
+function sortTasksOfflineSafe(tasks) {
+  function getOfflineRank(t) {
+    if (t.status === "OFFLINE_PENDING") return 3;
+    if (t.status === "UPLOADING") return 2;
+
+    const resolved = resolveStatus(t);
+    if (resolved === "READY") return 1;
+    if (resolved === "PENDING") return 1;
+
+    return 9;
+  }
+
+  return tasks.sort((a, b) => {
+    const ra = getOfflineRank(a);
+    const rb = getOfflineRank(b);
+
+    if (ra !== rb) return ra - rb;
+
+    // secondary: oldest first
+    return new Date(a.createdAt || 0) - new Date(b.createdAt || 0);
+  });
+}
+
 async function uploadNow(
     taskKey,
     blob,
@@ -1096,10 +1119,11 @@ async function loadTasks() {
   const offlineTasks = (await getTasksFromIndexedDB())
     .filter(t => resolveStatus(t) !== "COMPLETED");
 
-  render(offlineTasks);
-  renderJobTypeFilters(offlineTasks);
-  updateRemainingCounter(offlineTasks);
-  updateUploadCounter(offlineTasks);
+  const sorted = sortTasksOfflineSafe(offlineTasks);
+  render(sorted);
+  renderJobTypeFilters(sorted);
+  updateRemainingCounter(sorted);
+  updateUploadCounter(sorted);
   return;
 }
 
@@ -1519,28 +1543,8 @@ async function renderCachedOnly() {
     return true;
   });
 
-  // 🔥 FORCE IndexedDB status to win (OFFLINE SAFE)
-  function getOfflineRank(t) {
-    if (t.status === "OFFLINE_PENDING") return 3;
-    if (t.status === "PROCESSING") return 2;
-    if (t.status === "UPLOADING") return 2;
-
-    const resolved = resolveStatus(t);
-    if (resolved === "READY") return 1;
-    if (resolved === "PENDING") return 1;
-
-    return 9;
-  }
-
-  filtered.sort((a, b) => {
-    const ra = getOfflineRank(a);
-    const rb = getOfflineRank(b);
-
-    if (ra !== rb) return ra - rb;
-
-    return new Date(a.createdAt || 0) - new Date(b.createdAt || 0);
-  });
-
+  filtered = sortTasksOfflineSafe(filtered);
+  
   render(filtered);
   updateRemainingCounter(filtered);
   updateUploadCounter(filtered);
