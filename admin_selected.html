@@ -296,7 +296,7 @@ button {
 <div class="admin-header" style="justify-content:space-between;">
   <div style="display:flex;align-items:center;gap:14px;">
     <img src="./logo.jpg" class="admin-logo" alt="Company Logo">
-    <h1>Admin Dashboard <span class="version">V3.1.1-WIP</span></h1>
+    <h1>Admin Dashboard <span class="version">V3.1.2-WIP</span></h1>
   </div>
 
   <!-- 📅 DATE FILTER -->
@@ -899,6 +899,40 @@ async function loadDriverSnapshot() {
   }
 }
 
+async function updateSnapshotFreshness() {
+  const btn = document.getElementById("snapshotStatusBtn");
+  if (!btn) return;
+
+  const metaUrl =
+    "https://raw.githubusercontent.com/RossGab/driva-task-snapshots/main/snapshots/latest.json";
+
+  try {
+    const res = await fetch(metaUrl, { cache: "no-store" });
+    if (!res.ok) throw new Error("No meta");
+
+    const meta = await res.json();
+    const updatedAt = new Date(meta.updatedAt);
+    const diffMin = Math.floor((Date.now() - updatedAt) / 60000);
+
+    // 🔴 snapshot exists but OLD
+    if (diffMin > 60) {
+      btn.className = "snapshot-btn snapshot-stale";
+      btn.textContent = `🔴 Snapshot Stale (${diffMin}m old)`;
+    }
+    // 🟡 warning
+    else if (diffMin > 15) {
+      btn.className = "snapshot-btn snapshot-warn";
+      btn.textContent = `🟡 Snapshot Aging (${diffMin}m old)`;
+    }
+    // 🟢 fresh
+    else {
+      btn.className = "snapshot-btn snapshot-fresh";
+      btn.textContent = `🟢 Snapshot Fresh (${diffMin}m old)`;
+    }
+  } catch {
+    // Do nothing — availability already handled
+  }
+}
 
 window.onerror = (msg, src, line) => {
   alert(`JS Error:\n${msg}\nLine: ${line}`);
@@ -1276,6 +1310,7 @@ window.softRefresh = async function () {
   refreshDashboard();
 
   await loadAdminPageFromSnapshot(status);
+  updateSnapshotFreshness();
   hideLoader();
 };
 
