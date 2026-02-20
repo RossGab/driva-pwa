@@ -57,7 +57,7 @@ button:hover {
 
 <body>
 
-<h2>📊 Task Report V2.4</h2>
+<h2>📊 Task Report V3.0</h2>
 
 <button
   onclick="location.href='admin.html'"
@@ -105,221 +105,38 @@ button:hover {
   Date range is based on <b>Created Date</b>
 </p>
 
-<script type="module">
-import { initializeApp } from
-  "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import {
-  getDatabase, ref, get
-} from
-  "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+<script>
+/* ===============================
+   SNAPSHOT CONFIG
+================================ */
+const SNAPSHOT_BASE =
+  "https://raw.githubusercontent.com/RossGab/driva-task-snapshots/main/snapshots";
 
-/* ===== FIREBASE CONFIG ===== */
-const firebaseConfig = {
-  apiKey: "AIzaSyDFW61pnwLvh6HGKWt10zLYNr860fI8vkg",
-  authDomain: "driva-pwa.firebaseapp.com",
-  databaseURL: "https://driva-pwa-default-rtdb.firebaseio.com",
-  projectId: "driva-pwa",
-  storageBucket: "driva-pwa.firebasestorage.app",
-  messagingSenderId: "299138219722",
-  appId: "1:299138219722:web:623ff6b0a067ea822dfe33"
-};
-
-const app = initializeApp(firebaseConfig);
-const db = getDatabase(app);
-
-const SYSTEM_FIELDS = new Set([
-  "_key",
-  "status",
-
-  // Core task fields
-  "JOBTYPE",
-  "BA",
-  "DMZ",
-  "MRU",
-  "SEQUENCE",
-  "METERNUMBER",
-  "ACCOUNTNUMBER",
-  "CUSTOMERNAME",
-  "ADDRESS",
-  "ZIPCODE",
-
-  // Driver fields (BLOCK FROM DYNAMIC)
-  "driverId",
-  "DRIVERID",
-  "AGENTID",
-  "AGENTNAME",
-
-  // Delivery
-  "deliveryType",
-
-  // Explicit report columns (BLOCK FROM DYNAMIC)
-  "rowIndex",
-  "uploadBatch",
-  "forceReopen",
-  "gpsAccuracy",
-  "remarks",
-
-  // Location & time
-  "LATITUDE",
-  "LONGITUDE",
-  "createdAt",
-  "uploadedAt",
-  "takenAt",
-
-  // Media
-  "imageUrl",
-  "filename",
-  "photo1Url",
-  "photo2Url",
-  "photo3Url"
-]);
-  
+/* ===============================
+   GLOBAL STATE
+================================ */
 let ALL_TASKS = [];
 let DRIVER_MAP = {};
 
+/* ===============================
+   DRIVER SNAPSHOT
+================================ */
 async function loadDrivers() {
-  const snap = await get(ref(db, "drivers"));
-  const raw = snap.val() || {};
-
-  Object.keys(raw).forEach(id => {
-    DRIVER_MAP[id] = raw[id]?.name || "";
+  const res = await fetch(`${SNAPSHOT_BASE}/drivers.json`, {
+    cache: "no-store"
   });
-}
 
-/* ===== LOAD TASKS ===== */
-async function loadTasks() {
-  const snap = await get(ref(db, "tasks"));
-  const raw = snap.val() || {};
-  ALL_TASKS = Object.keys(raw).map(k => ({ _key: k, ...raw[k] }));
-  buildFilterOptions();
-}
-
-async function loadTasksByDateRange(fromDate, toDate) {
-  ALL_TASKS = [];
-
-  const dateKeys = getDateRangeKeys(fromDate, toDate);
-  const taskIds = new Set();
-
-  // 1️⃣ Collect task IDs per date
-  for (const dk of dateKeys) {
-    const snap = await get(ref(db, `tasksByDate/${dk}`));
-    const ids = snap.val();
-    if (!ids) continue;
-
-    Object.keys(ids).forEach(id => taskIds.add(id));
+  if (!res.ok) {
+    console.warn("⚠️ No driver snapshot");
+    return;
   }
 
-  if (!taskIds.size) return;
-
-  // 2️⃣ Fetch only needed tasks
-  const reads = [...taskIds].map(id =>
-    get(ref(db, `tasks/${id}`)).then(s =>
-      s.exists() ? { _key: id, ...s.val() } : null
-    )
-  );
-
-  ALL_TASKS = (await Promise.all(reads))
-  .filter(t => t && t.createdAt);
-
-  buildFilterOptions();
+  DRIVER_MAP = await res.json();
 }
 
-(async () => {
-  await loadDrivers();
-
-  // Ensure defaults are set BEFORE loading
-  setDefaultDates();
-
-  const from = document.getElementById("dateFrom").value;
-  const to   = document.getElementById("dateTo").value;
-
-  await loadTasksByDateRange(from, to);
-})();
-
-function extractDynamicFields(task) {
-  const out = {};
-
-  for (const [key, value] of Object.entries(task)) {
-    if (!SYSTEM_FIELDS.has(key) && value !== "") {
-      out[key.toUpperCase()] = value;
-    }
-  }
-
-  return out;
-}
-
-/* ===== DEFAULT DATE (TODAY) ===== */
-function setDefaultDates() {
-  const today = new Date().toISOString().slice(0, 10);
-
-  const from = document.getElementById("dateFrom");
-  const to = document.getElementById("dateTo");
-
-  if (from && !from.value) from.value = today;
-  if (to && !to.value) to.value = today;
-}
-
-// ✅ run once on page load
-setDefaultDates();
-
-/* ===== BUILD FILTER OPTIONS ===== */
-function buildFilterOptions() {
-  fillSelect("jobTypeFilter", "JOBTYPE");
-  fillSelect("baFilter", "BA");
-  fillSelect("dmzFilter", "DMZ");
-}
-
-function fillSelect(id, field) {
-  const select = document.getElementById(id);
-
-  // 🔥 CLEAR existing options (except first)
-  select.innerHTML = `<option value="">All ${field}</option>`;
-
-  const values = [...new Set(
-    ALL_TASKS.map(t => t[field]).filter(Boolean)
-  )].sort();
-
-  values.forEach(v => {
-    const opt = document.createElement("option");
-    opt.value = v;
-    opt.textContent = v;
-    select.appendChild(opt);
-  });
-}
-
-/* ===== DATE HELPERS ===== */
-function toDateOnly(val) {
-  if (!val) return null;
-
-  const d = new Date(val);
-  if (isNaN(d.getTime())) return null;
-
-  const ph = new Date(
-    d.toLocaleString("en-US", { timeZone: "Asia/Manila" })
-  );
-
-  ph.setHours(0,0,0,0);
-  return ph.getTime();
-}
-
-function toPHDateTime(value) {
-  if (!value) return "";
-
-  const d = new Date(value);
-  if (isNaN(d.getTime())) return "";
-
-  return d.toLocaleString("en-GB", {
-    timeZone: "Asia/Manila",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: false
-  });
-}
-
+/* ===============================
+   DATE HELPERS
+================================ */
 function dateToKey(dateStr) {
   return dateStr.replace(/-/g, ""); // YYYYMMDD
 }
@@ -343,106 +160,144 @@ function getDateRangeKeys(from, to) {
   return keys;
 }
 
-  /* ===== EXPORT ===== */
+function toPHDateTime(value) {
+  if (!value) return "";
+
+  const d = new Date(value);
+  if (isNaN(d.getTime())) return "";
+
+  return d.toLocaleString("en-GB", {
+    timeZone: "Asia/Manila",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false
+  });
+}
+
+/* ===============================
+   LOAD SNAPSHOTS (CORE)
+================================ */
+async function loadTasksByDateRange(from, to) {
+  ALL_TASKS = [];
+
+  const keys = getDateRangeKeys(from, to);
+
+  for (const key of keys) {
+    try {
+      const res = await fetch(`${SNAPSHOT_BASE}/${key}.json`, {
+        cache: "no-store"
+      });
+      if (!res.ok) continue;
+
+      const data = await res.json();
+
+      Object.entries(data).forEach(([id, task]) => {
+        ALL_TASKS.push({ _key: id, ...task });
+      });
+    } catch {
+      console.warn("⚠️ Missing snapshot:", key);
+    }
+  }
+
+  buildFilterOptions();
+}
+
+/* ===============================
+   FILTER UI
+================================ */
+function buildFilterOptions() {
+  fillSelect("jobTypeFilter", "JOBTYPE");
+  fillSelect("baFilter", "BA");
+  fillSelect("dmzFilter", "DMZ");
+}
+
+function fillSelect(id, field) {
+  const select = document.getElementById(id);
+  select.innerHTML = `<option value="">All ${field}</option>`;
+
+  const values = [...new Set(
+    ALL_TASKS.map(t => t[field]).filter(Boolean)
+  )].sort();
+
+  values.forEach(v => {
+    const opt = document.createElement("option");
+    opt.value = v;
+    opt.textContent = v;
+    select.appendChild(opt);
+  });
+}
+
+/* ===============================
+   EXPORT XLSX
+================================ */
 window.generateReport = async function () {
 
-  // 🔄 Always reload tasks for selected date range
-  await loadTasksByDateRange(
-    document.getElementById("dateFrom").value,
-    document.getElementById("dateTo").value
-  );
+  const from = document.getElementById("dateFrom").value;
+  const to   = document.getElementById("dateTo").value;
+
+  await loadTasksByDateRange(from, to);
 
   const status = document.getElementById("statusFilter").value;
   const jobType = document.getElementById("jobTypeFilter").value;
   const ba = document.getElementById("baFilter").value;
   const dmz = document.getElementById("dmzFilter").value;
 
-  const from = toDateOnly(document.getElementById("dateFrom").value);
-  const to = toDateOnly(document.getElementById("dateTo").value);
-
-  let rows = ALL_TASKS.filter(t => {
-    const created = toDateOnly(t.createdAt);
-
-    if (from && (!created || created < from)) return false;
-    if (to && (!created || created > to)) return false;
-
-    return (
-      (!status || t.status === status) &&
-      (!jobType || t.JOBTYPE === jobType) &&
-      (!ba || t.BA === ba) &&
-      (!dmz || t.DMZ === dmz)
-    );
-  });
+  let rows = ALL_TASKS.filter(t =>
+    (!status || t.status === status) &&
+    (!jobType || t.JOBTYPE === jobType) &&
+    (!ba || t.BA === ba) &&
+    (!dmz || t.DMZ === dmz)
+  );
 
   if (!rows.length) {
     alert("No data found for selected filters.");
     return;
   }
 
-  /* ===== BUILD EXPORT ===== */
-  const data = rows.map(t => {
-    const row = {};
-
-    row.TASK_ID = t._key || "";
-    row.STATUS = t.status || "";
-    row.JOB_TYPE = t.JOBTYPE || "";
-    row.BA = t.BA || "";
-    row.DMZ = t.DMZ || "";
-
-    row.CUSTOMER_NAME = t.CUSTOMERNAME || "";
-    row.ADDRESS = t.ADDRESS || "";
-    row.ZIPCODE = t.ZIPCODE || "";
-
-    row.ACCOUNT_NUMBER = t.ACCOUNTNUMBER || "";
-    row.METER_NUMBER = t.METERNUMBER || "";
-
-    const driverId = t.driverId || "";
-    row.DRIVERID = driverId;
-    row.DRIVER_NAME = DRIVER_MAP[driverId] || "";
-
-    row.DELIVERY_TYPE = t.deliveryType || "";
-
-    row.ROWINDEX = t.rowIndex ?? "";
-    row.UPLOADBATCH = t.uploadBatch ?? "";
-    row.DESCRIPTION = t.remarks ?? "";
-    row.FORCEREOPEN = t.forceReopen ?? "";
-    row.GPSACCURACY = t.gpsAccuracy ?? "";
-
-    const dynamic = extractDynamicFields(t);
-    Object.keys(dynamic).sort().forEach(k => {
-      row[k] = dynamic[k];
-    });
-
-    row.LATITUDE = t.LATITUDE || "";
-    row.LONGITUDE = t.LONGITUDE || "";
-    row.CREATED_AT = toPHDateTime(t.createdAt);
-    row.COMPLETED_AT = toPHDateTime(t.uploadedAt);
-
-    row.PHOTO1_URL = t.photo1Url
-      ? { t: "s", v: "View Photo 1", l: { Target: t.photo1Url } }
-      : "";
-
-    row.PHOTO2_URL = t.photo2Url
-      ? { t: "s", v: "View Photo 2", l: { Target: t.photo2Url } }
-      : "";
-
-    row.PHOTO3_URL = t.photo3Url
-      ? { t: "s", v: "View Photo 3", l: { Target: t.photo3Url } }
-      : "";
-
-    return row;
-  });
+  const data = rows.map(t => ({
+    TASK_ID: t._key,
+    STATUS: t.status || "",
+    JOB_TYPE: t.JOBTYPE || "",
+    BA: t.BA || "",
+    DMZ: t.DMZ || "",
+    CUSTOMER_NAME: t.CUSTOMERNAME || "",
+    ADDRESS: t.ADDRESS || "",
+    ZIPCODE: t.ZIPCODE || "",
+    ACCOUNT_NUMBER: t.ACCOUNTNUMBER || "",
+    METER_NUMBER: t.METERNUMBER || "",
+    DRIVER_ID: t.driverId || "",
+    DRIVER_NAME: DRIVER_MAP[t.driverId]?.name || "",
+    DELIVERY_TYPE: t.deliveryType || "",
+    CREATED_AT: toPHDateTime(t.createdAt),
+    COMPLETED_AT: toPHDateTime(t.uploadedAt),
+    LATITUDE: t.LATITUDE || "",
+    LONGITUDE: t.LONGITUDE || ""
+  }));
 
   const ws = XLSX.utils.json_to_sheet(data);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "Tasks");
 
-  const df = document.getElementById("dateFrom").value || "ALL";
-  const dt = document.getElementById("dateTo").value || "ALL";
-
-  XLSX.writeFile(wb, `Task_Report_${df}_to_${dt}.xlsx`);
+  XLSX.writeFile(
+    wb,
+    `Task_Report_${from}_to_${to}.xlsx`
+  );
 };
-</script>
 
+/* ===============================
+   INIT
+================================ */
+(function init() {
+  const today = new Date().toISOString().slice(0,10);
+  document.getElementById("dateFrom").value = today;
+  document.getElementById("dateTo").value = today;
+
+  loadDrivers();
+})();
+</script>
 </body>
 </html>
