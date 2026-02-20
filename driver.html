@@ -211,7 +211,7 @@ import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "htt
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "v3.5.15.9-WIP";
+const VERSION = "v3.5.15.10-WIP";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -1255,9 +1255,16 @@ function updateRemainingCounter(tasks) {
   }
 }  
 /* ===== RENDER ===== */
-async function render(tasks) {
+  async function render(tasks) {
   BOOT_WATCHDOG_FIRED = true;
   taskList.innerHTML = "";
+
+  const selectedDate = dateFilter.value;
+
+  tasks = tasks.filter(t => {
+    const taskDate = normalizeDatePH(t.createdAt);
+    return taskDate && taskDate === selectedDate;
+  });
 
   for (const t of tasks) {
     const p = PHOTO_BUFFER[t._key] || {};
