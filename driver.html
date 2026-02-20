@@ -211,7 +211,7 @@ import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "htt
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "v3.5.15.12-WIP";
+const VERSION = "v3.5.15.13-WIP";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -1136,7 +1136,21 @@ async function loadTasks() {
 
     // 5️⃣ Cache for offline use
     await saveTasksToIndexedDB(tasks);
-
+    
+    // 🧹 PRUNE INDEXEDDB — REMOVE TASKS NOT IN TODAY'S FETCH
+    const cached = await getTasksFromIndexedDB();
+    const liveIds = new Set(tasks.map(t => t._key));
+    
+    for (const t of cached) {
+      const taskDate = normalizeDatePH(t.createdAt);
+      if (
+        taskDate === selectedDate &&
+        !liveIds.has(t._key)
+      ) {
+        await deleteTaskFromIndexedDB(t._key);
+      }
+    }
+    
     // 6️⃣ Render
     render(tasks);
     renderJobTypeFilters(tasks);
