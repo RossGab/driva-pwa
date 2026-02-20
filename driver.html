@@ -211,7 +211,7 @@ import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "htt
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "v3.5.15.7-WIP";
+const VERSION = "v3.5.15.8-WIP";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -694,6 +694,7 @@ function compressImage(file) {
 
   let CURRENT_TASK = null;
 let CURRENT_PHOTO_INDEX = null;
+let BOOT_WATCHDOG_FIRED = false;
 
 window.startPhoto = function(index, taskKey) {
   if (!validateDynamic(taskKey)) return;
@@ -1100,218 +1101,59 @@ async function preloadDriverUIConfig(tasks) {
   
 checkStorageQuota();
 setInterval(checkStorageQuota, 60_000); // every 60 seconds
-/* ===== LOAD TASKS ===== */
+/* ===== LOAD TASKS (DATE-BASED, SAFE) ===== */
 async function loadTasks() {
+  taskList.innerText = "Loading tasks…";
+
+  // 1️⃣ OFFLINE FIRST
   if (!navigator.onLine) {
     const offlineTasks = await getTasksFromIndexedDB();
     render(offlineTasks);
     return;
   }
-  // 🔓 Safety reset if app crashed mid-capture
-  if (
-    ACTIVE_CAPTURE_TASK &&
-    !PHOTO_BUFFER[ACTIVE_CAPTURE_TASK]
-  ) {
-    ACTIVE_CAPTURE_TASK = null;
+
+  // 2️⃣ Selected PH date
+  const selectedDate = dateFilter.value;
+  if (!selectedDate) {
+    render([]);
+    return;
   }
+
+  const dateKey = selectedDate.replace(/-/g, "");
+
   try {
-    let tasks = [];
+    // 3️⃣ Read ONLY task IDs for that date
+    const idsSnap = await get(ref(db, `tasksByDate/${dateKey}`));
 
-    try {
-      tasks = dedupeTasks(
-        JSON.parse(localStorage.getItem(TASK_CACHE_KEY) || "[]")
-      );
-    } catch (e) {
-      console.warn("⚠️ Corrupt cache — resetting", e);
-      localStorage.removeItem(TASK_CACHE_KEY);
-      tasks = [];
+    if (!idsSnap.exists()) {
+      render([]); // ✅ no infinite loading
+      return;
     }
 
-    let snap = null;
-    if (navigator.onLine) {
-  try {
-    snap = await get(
-      query(
-        ref(db, "tasks"),
-        orderByChild("driverId"),
-        equalTo(DRIVER_ID)
-      )
+    const taskIds = Object.keys(idsSnap.val());
+
+    // 4️⃣ Fetch ONLY those tasks
+    const reads = taskIds.map(id =>
+      get(ref(db, `tasks/${id}`))
+        .then(s => s.exists() ? ({ _key: id, ...s.val() }) : null)
     );
-  } catch (e) {
-    console.warn("⚠️ Firebase read failed, using cache", e);
+
+    let tasks = (await Promise.all(reads))
+      .filter(Boolean)
+      .filter(t => t.driverId === DRIVER_ID); // ✅ driver filter LOCAL
+
+    // 5️⃣ Cache for offline use
+    await saveTasksToIndexedDB(tasks);
+
+    // 6️⃣ Render
+    render(tasks);
+
+  } catch (err) {
+    console.error("❌ loadTasks failed", err);
+    taskList.innerHTML =
+      "⚠️ Failed to load tasks.<br><br>" +
+      "<small>Please check internet or try again.</small>";
   }
-    
-    }
-  if (snap) {
-    const raw = snap.val() || {};
-
-    const serverTasks = Object.entries(raw)
-      .filter(([k, v]) => v && typeof v === "object")
-      .map(([k, v]) => ({ _key: k, ...v }));
-
-    // 🔒 MERGE with local cache to preserve offline / in-progress state
-    const localTasks =
-      JSON.parse(localStorage.getItem(TASK_CACHE_KEY) || "[]");
-
-    const merged = serverTasks.map(st => {
-      const local = localTasks.find(lt => lt._key === st._key);
-
-      // ✅ SERVER COMPLETED ALWAYS FINAL
-      if (st.status === "COMPLETED") {
-        deleteTaskFromIndexedDB(st._key);
-        return { ...st, finalized: true };
-      }
-
-      // ✅ LOCAL OFFLINE / PROCESSING STATE WINS
-      if (
-        local &&
-        (
-          local.status === "OFFLINE_PENDING" ||
-          processingMap[local._key] ||
-          uploadingMap[local._key] ||
-          PHOTO_BUFFER[local._key]
-        )
-      ) {
-        return { ...local, ...st, status: local.status };
-      }
-
-      if (!local) return st;
-
-      return {
-        ...local,
-        ...st,
-        finalized: false
-      };
-    });
-
-    tasks = merged;
-    const activeTasks = tasks
-  .filter(t => resolveStatus(t) !== "COMPLETED")
-  .map(t => ({ ...t })); // 👈 FULL TASK SNAPSHOT
-
-await saveTasksToIndexedDB(activeTasks);
-
-// 🔁 AUTO-COMPLETE SAFETY
-tasks = tasks.map(t => {
-  if (
-    t.status === "PENDING" &&
-    !t.forceReopen &&
-    (t.photo1Url || t.photo2Url || t.photo3Url) &&
-    t.uploadedAt
-  ) {
-    if (navigator.onLine) {
-      update(ref(db, `tasks/${t._key}`), {
-        status: "COMPLETED"
-      }).catch(() => {});
-    }
-    return { ...t, status: "COMPLETED", finalized: true };
-  }
-  return t;
-});
-
-// ✅ SAVE *SLIM CACHE ONLY*
-try {
-  const slim = tasks.map(t => ({
-    _key: t._key,
-    status: t.status,
-    JOBTYPE: t.JOBTYPE,
-    createdAt: t.createdAt,
-    finalized: t.finalized || false
-  }));
-  localStorage.setItem(TASK_CACHE_KEY, JSON.stringify(slim));
-} catch (e) {
-  console.warn("⚠️ Cache too large — clearing", e);
-  localStorage.removeItem(TASK_CACHE_KEY);
-}
-  }
-
-
-    try {
-        await preloadDriverUIConfig(tasks);
-      } catch (e) {
-        console.warn("⚠️ preloadDriverUIConfig failed", e);
-      }
-
-    tasks.sort((a, b) => {
-      const priority = {
-        PENDING: 1,
-        READY: 2,
-        PROCESSING: 3,
-        UPLOADING: 4,
-        COMPLETED: 5
-      };
-    
-      const sa = priority[resolveStatus(a)] || 99;
-      const sb = priority[resolveStatus(b)] || 99;
-    
-      // 1️⃣ STATUS ORDER (pending first, uploading last)
-      if (sa !== sb) return sa - sb;
-    
-      // 2️⃣ SAME STATUS → SAME UPLOAD BATCH
-      if (a.uploadBatch !== b.uploadBatch) {
-        return (a.uploadBatch || 0) - (b.uploadBatch || 0);
-      }
-    
-      // 3️⃣ PRESERVE EXCEL ROW ORDER
-      return (a.rowIndex || 0) - (b.rowIndex || 0);
-    });
-    
-    updateRemainingCounter(tasks);
-    updateUploadCounter(tasks);
-    const safeTasks = tasks.filter(
-      t => t && typeof t === "object" && t._key
-    );
-    
-    renderJobTypeFilters(safeTasks);
-    const selectedDate = dateFilter.value; // YYYY-MM-DD
-// 🔒 HIDE OTHER TASKS WHILE CAPTURING
-if (ACTIVE_CAPTURE_TASK) {
-  tasks = tasks.filter(t => t._key === ACTIVE_CAPTURE_TASK);
-}
-const filtered = tasks
-  .filter(t => {
-    const status = resolveStatus(t);
-
-    // ❌ Never show completed
-    if (status === "COMPLETED") return false;
-
-    // ❌ Must match selected date
-    const taskDate = normalizeDatePH(t.createdAt);
-      if (!taskDate || taskDate !== selectedDate) {
-        return false;
-      }
-
-    // ❌ Job type filter
-    if (
-      selectedJobTypes.size > 0 &&
-      !selectedJobTypes.has(t.JOBTYPE)
-    ) {
-      return false;
-    }
-
-    return true;
-  })
-  .filter(t => {
-    if (!SEARCH_TERM) return true;
-
-    const haystack = Object.values(t)
-      .filter(v => typeof v === "string" || typeof v === "number")
-      .join(" ")
-      .toLowerCase();
-
-    return haystack.includes(SEARCH_TERM);
-  });
-    
-    render(filtered);
-
-    if (!gpsWatchId) {
-      setTimeout(() => startGPSTracking(DRIVER_ID), 1000);
-    }
-  } catch (e) {
-      taskList.innerHTML =
-        "⚠️ Failed to load tasks.<br><br>" +
-        "<small>" + e.message + "</small>";
-    }
 }
 
 async function detectGPSPermission() {
@@ -1412,6 +1254,7 @@ function updateRemainingCounter(tasks) {
 }  
 /* ===== RENDER ===== */
 async function render(tasks) {
+  BOOT_WATCHDOG_FIRED = true;
   taskList.innerHTML = "";
 
   for (const t of tasks) {
@@ -1826,7 +1669,23 @@ function validateDynamic(taskKey) {
     }
   }
   return true;
-}  
+} 
+  
+// ⏳ Prevent infinite loading screen (BOOT SAFETY)
+setTimeout(() => {
+  if (
+    !BOOT_WATCHDOG_FIRED &&
+    taskList &&
+    taskList.innerText.includes("Loading")
+  ) {
+    taskList.innerHTML =
+      "📭 No tasks found for selected date.<br><br>" +
+      "<small>If this is unexpected, open ⚙️ and verify Driver ID.</small>";
+    BOOT_WATCHDOG_FIRED = true;
+  }
+}, 8000);
+
+// 🚀 INITIAL BOOT LOAD (ONLY ONCE)
 loadTasks();
 
 let OFFLINE_REPLAY_RUNNING = false;
