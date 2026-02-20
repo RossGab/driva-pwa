@@ -211,7 +211,7 @@ import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "htt
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "v3.5.15.2-WIP";
+const VERSION = "v3.5.15.5-WIP";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -242,19 +242,23 @@ const TASK_CACHE_KEY = "cachedTasks";
 const processingMap = {};
 const uploadingMap = {};
 const DB_NAME = "driver_uploads";
-const DB_VERSION = 1;
+const DB_VERSION = 2; // ⬅️ bump version ONCE
 const STORE = "photos";
+const TASK_STORE = "tasks";
 
-function openDB() {
-  return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, DB_VERSION);
+req.onupgradeneeded = e => {
+  const db = e.target.result;
 
-    req.onupgradeneeded = e => {
-      const db = e.target.result;
-      if (!db.objectStoreNames.contains(STORE)) {
-        db.createObjectStore(STORE, { keyPath: "id" });
-      }
-    };
+  // existing store (unchanged)
+  if (!db.objectStoreNames.contains(STORE)) {
+    db.createObjectStore(STORE, { keyPath: "id" });
+  }
+
+  // ✅ NEW store (does NOT affect existing data)
+  if (!db.objectStoreNames.contains(TASK_STORE)) {
+    db.createObjectStore(TASK_STORE, { keyPath: "_key" });
+  }
+};
 
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
@@ -276,11 +280,35 @@ async function getAllPhotosFromDB() {
   });
 }
 
+async function saveTasksToIndexedDB(tasks) {
+  const db = await openDB();
+  const tx = db.transaction("tasks", "readwrite");
+  const store = tx.objectStore("tasks");
+
+  tasks.forEach(t => store.put(t));
+}
+
+async function getTasksFromIndexedDB() {
+  const db = await openDB();
+  return new Promise(resolve => {
+    const tx = db.transaction("tasks", "readonly");
+    const req = tx.objectStore("tasks").getAll();
+    req.onsuccess = () => resolve(req.result || []);
+  });
+}
+
 async function deletePhotoFromDB(id) {
   const db = await openDB();
   const tx = db.transaction(STORE, "readwrite");
   tx.objectStore(STORE).delete(id);
 }
+
+async function deleteTaskFromIndexedDB(taskKey) {
+  const db = await openDB();
+  const tx = db.transaction("tasks", "readwrite");
+  tx.objectStore("tasks").delete(taskKey);
+}
+  
 let SEARCH_TERM = "";
 const dateFilter = document.getElementById("dateFilter");
 
@@ -310,6 +338,8 @@ async function checkStorageQuota() {
     console.warn("Storage check failed", e);
   }
 }
+
+
 
 // ✅ Default to today
 function getTodayPH() {
@@ -347,7 +377,7 @@ function isBusy() {
 
 searchBox.addEventListener("input", e => {
   SEARCH_TERM = e.target.value.toLowerCase();
-  loadTasks(); // re-render with filter
+  renderCachedOnly(); // ✅ NO Firebase, NO sorting
 });
 
 let DRIVER_ID = localStorage.getItem("driverId");
@@ -1005,6 +1035,7 @@ async function uploadNow(
   }
 
   await update(ref(db, `tasks/${taskKey}`), updatePayload);
+  await deleteTaskFromIndexedDB(taskKey);
 
   // ===============================
 // ✅ ADMIN STATS UPDATE (ONCE)
@@ -1054,16 +1085,24 @@ localStorage.setItem(
 }
 
 async function preloadDriverUIConfig(tasks) {
-  for (const t of tasks) {
-    if (t.JOBTYPE) {
-      await loadDriverUI(t.JOBTYPE);
-    }
-  }
+  const types = new Set(
+    tasks.map(t => t.JOBTYPE).filter(Boolean)
+  );
+
+  await Promise.all(
+    [...types].map(t => loadDriverUI(t))
+  );
 }
+  
 checkStorageQuota();
 setInterval(checkStorageQuota, 60_000); // every 60 seconds
 /* ===== LOAD TASKS ===== */
 async function loadTasks() {
+  if (!navigator.onLine) {
+    const offlineTasks = await getTasksFromIndexedDB();
+    render(offlineTasks);
+    return;
+  }
   // 🔓 Safety reset if app crashed mid-capture
   if (
     ACTIVE_CAPTURE_TASK &&
@@ -1084,11 +1123,8 @@ async function loadTasks() {
       tasks = [];
     }
 
-    localStorage.setItem(TASK_CACHE_KEY, JSON.stringify(tasks));
-        
+    let snap = null;
     if (navigator.onLine) {
-  let snap = null;
-
   try {
     snap = await get(
       query(
@@ -1100,7 +1136,8 @@ async function loadTasks() {
   } catch (e) {
     console.warn("⚠️ Firebase read failed, using cache", e);
   }
-
+    
+    }
   if (snap) {
     const raw = snap.val() || {};
 
@@ -1117,6 +1154,7 @@ async function loadTasks() {
 
       // ✅ SERVER COMPLETED ALWAYS FINAL
       if (st.status === "COMPLETED") {
+        deleteTaskFromIndexedDB(st._key);
         return { ...st, finalized: true };
       }
 
@@ -1143,33 +1181,47 @@ async function loadTasks() {
     });
 
     tasks = merged;
-
-    // 🔁 AUTO-COMPLETE SAFETY
-    tasks = tasks.map(t => {
-      if (
-        t.status === "PENDING" &&
-        !t.forceReopen &&
-        (t.photo1Url || t.photo2Url || t.photo3Url) &&
-        t.uploadedAt
-      ) {
-        if (navigator.onLine) {
-          update(ref(db, `tasks/${t._key}`), {
-            status: "COMPLETED"
-          }).catch(() => {});
-        }
-
-        return { ...t, status: "COMPLETED", finalized: true };
-      }
-
-      return t;
+    const activeTasks = tasks.filter(t => {
+      const status = resolveStatus(t);
+      return status !== "COMPLETED";
     });
+    
+    await saveTasksToIndexedDB(activeTasks);
 
-    localStorage.setItem(
-      TASK_CACHE_KEY,
-      JSON.stringify(tasks)
-    );
+// 🔁 AUTO-COMPLETE SAFETY
+tasks = tasks.map(t => {
+  if (
+    t.status === "PENDING" &&
+    !t.forceReopen &&
+    (t.photo1Url || t.photo2Url || t.photo3Url) &&
+    t.uploadedAt
+  ) {
+    if (navigator.onLine) {
+      update(ref(db, `tasks/${t._key}`), {
+        status: "COMPLETED"
+      }).catch(() => {});
+    }
+    return { ...t, status: "COMPLETED", finalized: true };
   }
+  return t;
+});
+
+// ✅ SAVE *SLIM CACHE ONLY*
+try {
+  const slim = tasks.map(t => ({
+    _key: t._key,
+    status: t.status,
+    JOBTYPE: t.JOBTYPE,
+    createdAt: t.createdAt,
+    finalized: t.finalized || false
+  }));
+  localStorage.setItem(TASK_CACHE_KEY, JSON.stringify(slim));
+} catch (e) {
+  console.warn("⚠️ Cache too large — clearing", e);
+  localStorage.removeItem(TASK_CACHE_KEY);
 }
+  }
+
 
     try {
         await preloadDriverUIConfig(tasks);
