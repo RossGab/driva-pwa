@@ -202,6 +202,33 @@ button {
   border-radius:5px;
   font-size:13px;
 }
+.snapshot-btn {
+  flex: 1;
+  padding: 12px;
+  font-size: 13px;
+  border: none;
+  border-radius: 6px;
+  color: #fff;
+  cursor: default;
+  opacity: 0.95;
+}
+
+/* STATUS COLORS */
+.snapshot-fresh {
+  background: #28a745; /* green */
+}
+
+.snapshot-warn {
+  background: #f39c12; /* orange */
+}
+
+.snapshot-stale {
+  background: #dc3545; /* red */
+}
+
+.snapshot-unknown {
+  background: #6c757d; /* gray */
+}
 
 .reassignBox {
   margin-top:10px;
@@ -269,7 +296,7 @@ button {
 <div class="admin-header" style="justify-content:space-between;">
   <div style="display:flex;align-items:center;gap:14px;">
     <img src="./logo.jpg" class="admin-logo" alt="Company Logo">
-    <h1>Admin Dashboard <span class="version">V3.1.0-WIP</span></h1>
+    <h1>Admin Dashboard <span class="version">V3.1.1-WIP</span></h1>
   </div>
 
   <!-- 📅 DATE FILTER -->
@@ -311,16 +338,13 @@ button {
   <button class="assign" onclick="location.href='add-driver.html'">👤 Add Driver</button>
   <button class="assign" onclick="location.href=''">⚙ Driver Configuration</button>
   <button class="assign" onclick="openReport()">📊 Report</button>
-  <div
-    id="snapshotFreshness"
-    style="
-      font-size:12px;
-      color:#555;
-      margin-top:4px;
-    "
+  <button
+    id="snapshotStatusBtn"
+    class="snapshot-btn snapshot-unknown"
+    disabled
   >
-    📦 Snapshot status
-</div>
+    📦 Snapshot: Unknown
+</button>
 </div>
 
 <div id="loadingScreen">
@@ -498,90 +522,34 @@ adminDateFilter.addEventListener("change", async e => {
   }
 });
 
-async function updateSnapshotFreshness() {
-  const el = document.getElementById("snapshotFreshness");
-  if (!el) return;
+async function updateSnapshotStatusForDate(dateKey) {
+  const btn = document.getElementById("snapshotStatusBtn");
+  if (!btn) return;
 
-  const metaUrl =
-    "https://raw.githubusercontent.com/RossGab/driva-task-snapshots/main/snapshots/latest.json";
+  const url =
+    `https://raw.githubusercontent.com/RossGab/driva-task-snapshots/main/snapshots/${dateKey}.json`;
 
   try {
-    const res = await fetch(metaUrl, { cache: "no-store" });
-    if (!res.ok) throw new Error("No meta");
+    const res = await fetch(url, {
+      method: "HEAD",        // 🔥 lightweight check
+      cache: "no-store"
+    });
 
-    const meta = await res.json();
+    if (!res.ok) throw new Error("Missing");
 
-    const updatedAt = new Date(meta.updatedAt);
-    const diffMin = Math.floor((Date.now() - updatedAt) / 60000);
-
-    let label, color;
-
-    if (diffMin <= 10) {
-      label = "🟢 Fresh";
-      color = "green";
-    } else if (diffMin <= 60) {
-      label = "🟡 Slightly old";
-      color = "orange";
-    } else {
-      label = "🔴 Stale";
-      color = "red";
-    }
-
-    el.innerHTML = `
-      <span style="color:${color}">
-        ${label}
-      </span>
-      · Updated ${updatedAt.toLocaleTimeString("en-PH", {
-        timeZone: "Asia/Manila",
-        hour: "numeric",
-        minute: "2-digit"
-      })} (PH)
-    `;
+    btn.className = "snapshot-btn snapshot-fresh";
+    btn.textContent = "🟢 Snapshot Available";
   } catch {
-    el.innerHTML = `
-      <span style="color:red">
-        ⚠ Snapshot freshness unavailable
-      </span>
-    `;
+    btn.className = "snapshot-btn snapshot-stale";
+    btn.textContent = "📦 No Snapshot for Selected Date";
   }
 }
+
 function showNoSnapshotMessage(dateKey) {
-  taskList.innerHTML = `
-    <div style="
-      padding:16px;
-      background:#fff;
-      border-radius:8px;
-      text-align:center;
-      font-size:14px;
-      color:#777;
-      box-shadow:0 0 4px rgba(0,0,0,.1);
-    ">
-      📦 <b>No snapshot data available</b><br>
-      <span style="font-size:13px;">
-        No data was recorded for <b>${dateKey}</b>
-      </span>
-    </div>
-  `;
-
-  // Reset dashboard counters
-  openCount.innerText = 0;
-  doneCount.innerText = 0;
-  slaOk.innerText = 0;
-  slaWarn.innerText = 0;
-  slaBreach.innerText = 0;
-
-  // Hide pagination
-  const pg = document.getElementById("adminPagination");
-  if (pg) pg.innerHTML = "";
-
-  // Update freshness indicator
-  const el = document.getElementById("snapshotFreshness");
-  if (el) {
-    el.innerHTML = `
-      <span style="color:#999">
-        📦 No snapshot for selected date
-      </span>
-    `;
+    const btn = document.getElementById("snapshotStatusBtn");
+  if (btn) {
+    btn.className = "snapshot-btn snapshot-stale";
+    btn.textContent = "📦 No Snapshot for Selected Date";
   }
 }
 
@@ -1304,7 +1272,7 @@ window.softRefresh = async function () {
 
   window.__SNAPSHOT_TASKS__ = snapshotTasks;
 
-  updateSnapshotFreshness();
+  updateSnapshotStatusForDate(dateKey);
   refreshDashboard();
 
   await loadAdminPageFromSnapshot(status);
