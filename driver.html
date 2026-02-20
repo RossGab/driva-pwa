@@ -211,7 +211,7 @@ import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "htt
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "v3.5.15.6-WIP";
+const VERSION = "v3.5.15.7-WIP";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -242,7 +242,7 @@ const TASK_CACHE_KEY = "cachedTasks";
 const processingMap = {};
 const uploadingMap = {};
 const DB_NAME = "driver_uploads";
-const DB_VERSION = 2; // ⬅️ bump version ONCE
+const DB_VERSION = 3; // ⬅️ bump version ONCE
 const STORE = "photos";
 const TASK_STORE = "tasks";
 
@@ -1185,12 +1185,11 @@ async function loadTasks() {
     });
 
     tasks = merged;
-    const activeTasks = tasks.filter(t => {
-      const status = resolveStatus(t);
-      return status !== "COMPLETED";
-    });
-    
-    await saveTasksToIndexedDB(activeTasks);
+    const activeTasks = tasks
+  .filter(t => resolveStatus(t) !== "COMPLETED")
+  .map(t => ({ ...t })); // 👈 FULL TASK SNAPSHOT
+
+await saveTasksToIndexedDB(activeTasks);
 
 // 🔁 AUTO-COMPLETE SAFETY
 tasks = tasks.map(t => {
