@@ -269,7 +269,7 @@ button {
 <div class="admin-header" style="justify-content:space-between;">
   <div style="display:flex;align-items:center;gap:14px;">
     <img src="./logo.jpg" class="admin-logo" alt="Company Logo">
-    <h1>Admin Dashboard <span class="version">V3.0.5-WIP</span></h1>
+    <h1>Admin Dashboard <span class="version">V3.0.6-WIP</span></h1>
   </div>
 
   <!-- 📅 DATE FILTER -->
@@ -471,6 +471,7 @@ let SELECTED_DATE = getTodayPH();
 let ALL_BA_FOR_DATE = new Set();
 let FILTERED_TASK_IDS = [];
 let FILTER_READY = false;
+let DRIVER_CACHE = {};
 
 const adminDateFilter = document.getElementById("adminDateFilter");
 
@@ -913,11 +914,22 @@ function getSLA(task) {
   return { text:"SLA Breached", cls:"sla-breach" };
 }
 
-let DRIVER_CACHE = {};
+const DRIVER_SNAPSHOT_URL =
+  "https://raw.githubusercontent.com/RossGab/driva-task-snapshots/main/snapshots/drivers.json";
 
-async function loadDrivers() {
-  const snap = await withTimeout(get(ref(db, "drivers")), 8000);
-  DRIVER_CACHE = snap.val() || {};
+async function loadDriverSnapshot() {
+  try {
+    const res = await fetch(DRIVER_SNAPSHOT_URL, { cache: "no-store" });
+    if (!res.ok) throw new Error("Driver snapshot not found");
+
+    const data = await res.json();
+
+    // Normalize to existing structure
+    DRIVER_CACHE = data || {};
+  } catch (e) {
+    console.warn("⚠️ Failed to load driver snapshot", e);
+    DRIVER_CACHE = {};
+  }
 }
 
 
@@ -1230,7 +1242,7 @@ window.forceRefresh = async function () {
   showLoader("Force refreshing all data…");
 
   try {
-    await loadDrivers();
+    await loadDriverSnapshot(); // ✅ snapshot instead
     await refreshDashboard();
     await loadTasks(CURRENT_STATUS || "PENDING");
   } finally {
@@ -1875,8 +1887,6 @@ function startMapAutoRefresh() {
 
   MAP_REFRESH_TIMER = setInterval(async () => {
     if (!MAP_VISIBLE) return;
-  
-    await refreshMap();               // 🔥 Firebase (GPS only)
     buildTaskStatsFromSnapshot();     // 📦 Snapshot
   }, 60000); // 🔥 every 60 seconds
 }
@@ -1932,7 +1942,7 @@ function setLoaderText(txt) {
 (async function init() {
   showLoader("Loading drivers…");
   try {
-    await loadDrivers();
+    await loadDriverSnapshot()
 
     // 🔥 ADD THIS
     await ensureDriverStatusNodes();
