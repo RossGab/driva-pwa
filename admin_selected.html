@@ -269,7 +269,7 @@ button {
 <div class="admin-header" style="justify-content:space-between;">
   <div style="display:flex;align-items:center;gap:14px;">
     <img src="./logo.jpg" class="admin-logo" alt="Company Logo">
-    <h1>Admin Dashboard <span class="version">V3.0.6-WIP</span></h1>
+    <h1>Admin Dashboard <span class="version">V3.1.0-WIP</span></h1>
   </div>
 
   <!-- 📅 DATE FILTER -->
@@ -283,16 +283,6 @@ button {
       font-size:14px;
     "
   >
-</div>
-<div
-  id="snapshotFreshness"
-  style="
-    font-size:12px;
-    color:#555;
-    margin-top:4px;
-  "
->
-  📦 Snapshot: checking…
 </div>
 
 <!-- ===== DASHBOARD ===== -->
@@ -321,7 +311,16 @@ button {
   <button class="assign" onclick="location.href='add-driver.html'">👤 Add Driver</button>
   <button class="assign" onclick="location.href=''">⚙ Driver Configuration</button>
   <button class="assign" onclick="openReport()">📊 Report</button>
-  <button class="refresh" onclick="softRefresh()">🔄</button>
+  <div
+    id="snapshotFreshness"
+    style="
+      font-size:12px;
+      color:#555;
+      margin-top:4px;
+    "
+  >
+    📦 Snapshot status
+</div>
 </div>
 
 <div id="loadingScreen">
