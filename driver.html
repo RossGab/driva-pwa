@@ -190,6 +190,18 @@ img { width:100%;margin-top:8px;border-radius:6px; }
   <div id="jobTypeOptions"></div>
 </div>
 <input id="searchBox" placeholder="Search tasks">
+<div id="fatalErrorBox"
+  style="
+    display:none;
+    background:#b00020;
+    color:#fff;
+    padding:10px;
+    margin-bottom:10px;
+    border-radius:6px;
+    font-size:13px;
+    white-space:pre-wrap;
+  ">
+</div>
 <div id="taskList">Loading tasks…</div>
 <input type="file" id="cameraInput" accept="image/*" capture="environment" hidden>
 
@@ -199,7 +211,7 @@ import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "htt
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "v3.5.15.1-WIP";
+const VERSION = "v3.5.15.2-WIP";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -1075,70 +1087,95 @@ async function loadTasks() {
     localStorage.setItem(TASK_CACHE_KEY, JSON.stringify(tasks));
         
     if (navigator.onLine) {
-      const snap = await get(
-        query(ref(db, "tasks"), orderByChild("driverId"), equalTo(DRIVER_ID))
-      );
-    
-      const raw = snap.val() || {};
-      const serverTasks = Object.entries(raw)
-        .filter(([k, v]) => v && typeof v === "object")
-        .map(([k, v]) => ({ _key: k, ...v }));
-    
-      // 🔒 MERGE with local cache to preserve finalized/offline flags
-      const localTasks =
-        JSON.parse(localStorage.getItem(TASK_CACHE_KEY) || "[]");
-    
-      const merged = serverTasks.map(st => {
-        const local = localTasks.find(lt => lt._key === st._key);
-      
-        // ✅ SERVER COMPLETED ALWAYS FINAL
-        if (st.status === "COMPLETED") {
-          return { ...st, finalized: true };
-        }
-      
-        // ✅ If local offline processing exists → LOCAL WINS
-        if (local && (
-            local.status === "OFFLINE_PENDING" ||
-            processingMap[local._key] ||
-            uploadingMap[local._key] || 
-            PHOTO_BUFFER[local._key]
-        )) {
-          return { ...local, ...st, status: local.status };
-        }
-      
-        if (!local) return st;
-      
-        return {
-          ...local,
-          ...st,
-          finalized: false
-        };
-      });
-    
-      tasks = merged;
+  let snap = null;
 
-      tasks = tasks.map(t => {
-        if (
-          t.status === "PENDING" &&
-          !t.forceReopen &&   // 👈 THIS IS THE KEY
-          (t.photo1Url || t.photo2Url || t.photo3Url) &&
-          t.uploadedAt
-        ) {
-          if (navigator.onLine) {
-            update(ref(db, `tasks/${t._key}`), {
-              status: "COMPLETED"
-            }).catch(() => {});
-          }
-      
-          return { ...t, status: "COMPLETED", finalized: true };
-        }
-        return t;
-      });
-      
-      localStorage.setItem(TASK_CACHE_KEY, JSON.stringify(tasks));
-    }
+  try {
+    snap = await get(
+      query(
+        ref(db, "tasks"),
+        orderByChild("driverId"),
+        equalTo(DRIVER_ID)
+      )
+    );
+  } catch (e) {
+    console.warn("⚠️ Firebase read failed, using cache", e);
+  }
 
-    await preloadDriverUIConfig(tasks);
+  if (snap) {
+    const raw = snap.val() || {};
+
+    const serverTasks = Object.entries(raw)
+      .filter(([k, v]) => v && typeof v === "object")
+      .map(([k, v]) => ({ _key: k, ...v }));
+
+    // 🔒 MERGE with local cache to preserve offline / in-progress state
+    const localTasks =
+      JSON.parse(localStorage.getItem(TASK_CACHE_KEY) || "[]");
+
+    const merged = serverTasks.map(st => {
+      const local = localTasks.find(lt => lt._key === st._key);
+
+      // ✅ SERVER COMPLETED ALWAYS FINAL
+      if (st.status === "COMPLETED") {
+        return { ...st, finalized: true };
+      }
+
+      // ✅ LOCAL OFFLINE / PROCESSING STATE WINS
+      if (
+        local &&
+        (
+          local.status === "OFFLINE_PENDING" ||
+          processingMap[local._key] ||
+          uploadingMap[local._key] ||
+          PHOTO_BUFFER[local._key]
+        )
+      ) {
+        return { ...local, ...st, status: local.status };
+      }
+
+      if (!local) return st;
+
+      return {
+        ...local,
+        ...st,
+        finalized: false
+      };
+    });
+
+    tasks = merged;
+
+    // 🔁 AUTO-COMPLETE SAFETY
+    tasks = tasks.map(t => {
+      if (
+        t.status === "PENDING" &&
+        !t.forceReopen &&
+        (t.photo1Url || t.photo2Url || t.photo3Url) &&
+        t.uploadedAt
+      ) {
+        if (navigator.onLine) {
+          update(ref(db, `tasks/${t._key}`), {
+            status: "COMPLETED"
+          }).catch(() => {});
+        }
+
+        return { ...t, status: "COMPLETED", finalized: true };
+      }
+
+      return t;
+    });
+
+    localStorage.setItem(
+      TASK_CACHE_KEY,
+      JSON.stringify(tasks)
+    );
+  }
+}
+
+    try {
+        await preloadDriverUIConfig(tasks);
+      } catch (e) {
+        console.warn("⚠️ preloadDriverUIConfig failed", e);
+      }
 
     tasks.sort((a, b) => {
       const priority = {
@@ -1166,7 +1203,11 @@ async function loadTasks() {
     
     updateRemainingCounter(tasks);
     updateUploadCounter(tasks);
-    renderJobTypeFilters(tasks);
+    const safeTasks = tasks.filter(
+      t => t && typeof t === "object" && t._key
+    );
+    
+    renderJobTypeFilters(safeTasks);
     const selectedDate = dateFilter.value; // YYYY-MM-DD
 // 🔒 HIDE OTHER TASKS WHILE CAPTURING
 if (ACTIVE_CAPTURE_TASK) {
@@ -1212,8 +1253,10 @@ const filtered = tasks
       setTimeout(() => startGPSTracking(DRIVER_ID), 1000);
     }
   } catch (e) {
-    taskList.innerHTML = "⚠️ Failed to load tasks. Pull to refresh.";
-  }
+      taskList.innerHTML =
+        "⚠️ Failed to load tasks.<br><br>" +
+        "<small>" + e.message + "</small>";
+    }
 }
 
 async function detectGPSPermission() {
