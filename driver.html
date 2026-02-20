@@ -1519,6 +1519,35 @@ async function renderCachedOnly() {
     return true;
   });
 
+  // 🔥 FORCE IndexedDB status to win (OFFLINE SAFE)
+  function getOfflineRank(t) {
+    if (t.status === "OFFLINE_PENDING") return 3;
+    if (t.status === "PROCESSING") return 2;
+    if (t.status === "UPLOADING") return 2;
+
+    const resolved = resolveStatus(t);
+    if (resolved === "READY") return 1;
+    if (resolved === "PENDING") return 1;
+
+    return 9;
+  }
+
+  filtered.sort((a, b) => {
+    const ra = getOfflineRank(a);
+    const rb = getOfflineRank(b);
+
+    if (ra !== rb) return ra - rb;
+
+    // secondary: oldest first
+    return new Date(a.createdAt || 0) - new Date(b.createdAt || 0);
+  });
+
+  // ⬇️ THIS WAS ALREADY HERE
+  render(filtered);
+  updateRemainingCounter(filtered);
+  updateUploadCounter(filtered);
+}
+
   // 🔥 FIX: SORT OFFLINE TASKS
   const statusRank = {
     PENDING: 1,
