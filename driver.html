@@ -211,7 +211,7 @@ import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "htt
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "v3.5.15.24-WIP";
+const VERSION = "v3.5.16.0-WIP";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -223,6 +223,7 @@ let ACTIVE_CAPTURE_TASK = null;
 let jobTypeFilterInitialized = false;
 let LAST_KNOWN_GPS = null;
 let LOAD_IN_PROGRESS = false;
+const MAX_RENDER_TASKS = 50;
 
 const firebaseConfig = {
   apiKey: "AIzaSyDFW61pnwLvh6HGKWt10zLYNr860fI8vkg",
@@ -1270,7 +1271,9 @@ async function loadTasks() {
     
     // 🔥 INIT FILTERS FIRST
     if (!jobTypeFilterInitialized) {
-      renderJobTypeFilters(tasks);
+      if (!jobTypeFilterInitialized && tasks.length < 300) {
+          renderJobTypeFilters(tasks);
+        }
     }
     
     // 🔥 THEN RENDER
@@ -1387,232 +1390,236 @@ function updateRemainingCounter(tasks) {
     el.innerText = `📄 Remaining Tasks: ${remaining}`;
   }
 }  
+
+async function renderOneTask(t) {
+  const p = PHOTO_BUFFER[t._key] || {};
+  // ✅ RESTORE FORM STATE IF EXISTS
+  const savedForms = loadFormCache();
+  if (savedForms[t._key] && !BILLING_CACHE[t._key]) {
+    BILLING_CACHE[t._key] = savedForms[t._key];
+  }
+  if (!BILLING_CACHE[t._key]) {
+    BILLING_CACHE[t._key] = {};
+  }
+
+  const status = resolveStatus(t);
+
+  const div = document.createElement("div");
+  div.className = `task ${status === "COMPLETED" ? "completed" : ""}`;
+
+  const hasGPS =
+    t.LATITUDE &&
+    t.LONGITUDE &&
+    !isNaN(parseFloat(t.LATITUDE)) &&
+    !isNaN(parseFloat(t.LONGITUDE));
+
+  const mapURL = hasGPS
+    ? `https://www.google.com/maps?q=${t.LATITUDE},${t.LONGITUDE}`
+    : null;
+
+  const addressHTML = hasGPS
+    ? `<a href="${mapURL}" target="_blank"
+        style="color:#007bff;text-decoration:underline;font-weight:bold;">
+        📍 ${t.ADDRESS || "—"}
+      </a>`
+    : `<div>📍 ${t.ADDRESS || "—"}</div>`;
+
+  let html = `
+    <b>${t.CUSTOMERNAME || "—"}</b>
+    <div class="small">${addressHTML}</div>
+    <div class="small"><b>Account #:</b> ${t.ACCOUNTNUMBER || "—"}</div>
+    <div class="small"><b>MRU:</b> ${t.MRU || "—"}</div>
+    <div class="small"><b>Meter #:</b> ${t.METERNUMBER || "—"}</div>
+    <div class="small"><b>DMZ:</b> ${t.DMZ || "—"}</div>
+    <div class="small"><b>Sequence:</b> ${t.SEQUENCE || "—"}</div>
+    <div class="small"><b>Job Type:</b> ${t.JOBTYPE || "—"}</div>
+    <div class="small"><b>Status:</b> ${status}</div>
+  `;
+  if (t.lastUploadAttemptAt) {
+    html += `
+      <div class="small" style="color:#888">
+        ⏱ Last upload attempt:
+        ${new Date(t.lastUploadAttemptAt).toLocaleTimeString()}
+      </div>
+    `;
+  }
+
+  /* ===== PENDING (EDITABLE ONLINE + OFFLINE) ===== */
+  if ((status === "PENDING" || status === "CAPTURING" || status === "READY") && !t.finalized) {
+    const count = Object.keys(p).length;
+
+    if (count > 0) {
+      html += `
+        <div class="uploading" style="color:green;">
+          📸 Photos taken: ${count} — you may submit
+        </div>
+      `;
+    }
+
+    // 🔒 Hide delivery options after Photo 1 is taken
+    if (ACTIVE_CAPTURE_TASK !== t._key) {
+      html += await renderDynamicDelivery(t);
+    }
+
+    /* ===== PREVIEW THUMBNAILS ===== */
+    const previews = [1,2,3].map(i => {
+      if (!p[i]?.previewURL) return "";
+      return `
+        <img src="${p[i].previewURL}"
+          onclick="window.open('${p[i].previewURL}','_blank')"
+          style="
+            width:100%;
+            max-width:100px;
+            height:80px;
+            object-fit:cover;
+            border-radius:6px;
+            border:2px solid #28a745;
+            cursor:pointer;
+          "
+        />
+      `;
+    }).join("");
+
+    if (previews) {
+      html += `
+        <div style="
+          display:grid;
+          grid-template-columns:repeat(3,1fr);
+          gap:6px;
+          margin-top:8px;
+        ">
+          ${previews}
+        </div>
+      `;
+    }
+
+    /* ===== PHOTO BUTTONS ===== */
+    const disable1 = !!p[1];
+    const disable2 = !p[1] || !!p[2];
+    const disable3 = !p[2] || !!p[3];
+    const disableSubmit = Object.keys(p).length === 0;
+
+    html += `
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-top:8px;">
+        <button ${disable1 ? "disabled" : ""}
+          onclick="startPhoto(1,'${t._key}')">
+          📸 Photo 1
+        </button>
+
+        <button ${disable2 ? "disabled" : ""}
+          onclick="startPhoto(2,'${t._key}')">
+          📸 Photo 2
+        </button>
+
+        <button ${disable3 ? "disabled" : ""}
+          onclick="startPhoto(3,'${t._key}')">
+          📸 Photo 3
+        </button>
+      </div>
+
+      <button ${disableSubmit ? "disabled" : ""}
+        onclick="submitTask('${t._key}')">
+        ✅ Submit Task
+      </button>
+    `;
+  }
+
+  if (status === "SYNC_PENDING") {
+    html += `
+      <div class="uploading">
+        📦 Saved safely — will auto-upload when signal is stable,keep app open while uploading
+      </div>
+    `;
+  }
+
+  if (status === "UPLOADING") {
+    html += `<div class="uploading">⏳ Uploading photo…</div>`;
+  }
+
+  if (status === "COMPLETED") {
+    html += `
+      <button class="toggle"
+        onclick="
+          const img = this.parentElement.querySelector('img');
+          if (!img) return;
+          img.style.display = img.style.display === 'none'
+            ? 'block'
+            : 'none';
+        ">
+        👁 Show / Hide Photo
+      </button>
+
+      <img src="${t.imageUrl}" style="display:none">
+    `;
+  }
+
+  div.innerHTML = html;
+  taskList.appendChild(div);
+}
+  
 /* ===== RENDER ===== */
   async function render(tasks) {
+  TASKS_CACHE = tasks;
+
   if (!jobTypeFilterInitialized) {
-  // 🚑 First boot safety
-  return;
-}
+    renderJobTypeFilters(tasks);
+  }
+
   BOOT_WATCHDOG_FIRED = true;
   taskList.innerHTML = "";
 
   const selectedDate = dateFilter.value;
 
   tasks = tasks.filter(t => {
-  const status = resolveStatus(t);    // ✅ ADD THIS
-  if (status === "COMPLETED") return false;   // ✅ CORRECT
-  const taskDate = normalizeDatePH(t.createdAt);
-  if (!taskDate || taskDate !== selectedDate) return false;
+    const status = resolveStatus(t);
+    if (status === "COMPLETED") return false;
 
-  if (
-  jobTypeFilterInitialized &&
-  selectedJobTypes.size > 0 &&
-  !selectedJobTypes.has(t.JOBTYPE)
-) return false;
+    const taskDate = normalizeDatePH(t.createdAt);
+    if (!taskDate || taskDate !== selectedDate) return false;
+
+    if (
+      jobTypeFilterInitialized &&
+      selectedJobTypes.size > 0 &&
+      !selectedJobTypes.has(t.JOBTYPE)
+    ) return false;
 
     if (!matchesSearch(t, SEARCH_TERM)) return false;
 
-  return true;
-});
+    return true;
+  });
 
-  for (const t of tasks) {
-    const p = PHOTO_BUFFER[t._key] || {};
-    // ✅ RESTORE FORM STATE IF EXISTS
-    const savedForms = loadFormCache();
-    if (savedForms[t._key] && !BILLING_CACHE[t._key]) {
-      BILLING_CACHE[t._key] = savedForms[t._key];
-    }
-    if (!BILLING_CACHE[t._key]) {
-      BILLING_CACHE[t._key] = {};
-    }
-    
-    const status = resolveStatus(t);
+  const totalTasks = tasks.length;
+  const limitedTasks = tasks.slice(0, MAX_RENDER_TASKS);
 
-    const div = document.createElement("div");
-    div.className = `task ${status === "COMPLETED" ? "completed" : ""}`;
-
-    const hasGPS =
-  t.LATITUDE &&
-  t.LONGITUDE &&
-  !isNaN(parseFloat(t.LATITUDE)) &&
-  !isNaN(parseFloat(t.LONGITUDE));
-
-
-const mapURL = hasGPS
-  ? `https://www.google.com/maps?q=${t.LATITUDE},${t.LONGITUDE}`
-  : null;
-
-const addressHTML = hasGPS
-  ? `<a href="${mapURL}" target="_blank"
-        style="color:#007bff;text-decoration:underline;font-weight:bold;">
-        📍 ${t.ADDRESS || "—"}
-     </a>`
-  : `<div>📍 ${t.ADDRESS || "—"}</div>`;
-
-    let html = `
-      <b>${t.CUSTOMERNAME || "—"}</b>
-    
-      <div class="small">${addressHTML}</div>
-    
-      <div class="small"><b>Account #:</b> ${t.ACCOUNTNUMBER || "—"}</div>
-      <div class="small"><b>MRU:</b> ${t.MRU || "—"}</div>
-      <div class="small"><b>Meter #:</b> ${t.METERNUMBER || "—"}</div>
-      <div class="small"><b>DMZ:</b> ${t.DMZ || "—"}</div>
-      <div class="small"><b>Sequence:</b> ${t.SEQUENCE || "—"}</div>
-      <div class="small"><b>Job Type:</b> ${t.JOBTYPE || "—"}</div>
-      <div class="small"><b>Status:</b> ${status}</div>
-    `;
-    if (t.lastUploadAttemptAt) {
-      html += `
-        <div class="small" style="color:#888">
-          ⏱ Last upload attempt:
-          ${new Date(t.lastUploadAttemptAt).toLocaleTimeString()}
-        </div>
-      `;
-    }
-
-    /* ===== PENDING (EDITABLE ONLINE + OFFLINE) ===== */
-    if ((status === "PENDING" || status === "CAPTURING" || status === "READY") && !t.finalized) {
-      const p = PHOTO_BUFFER[t._key] || {};
-      const count = Object.keys(p).length;
-    
-      if (count > 0) {
-        html += `
-          <div class="uploading" style="color:green;">
-            📸 Photos taken: ${count} — you may submit
-          </div>
-        `;
-      }
-    
-      // 🔒 Hide delivery options after Photo 1 is taken
-      if (ACTIVE_CAPTURE_TASK !== t._key) {
-        html += await renderDynamicDelivery(t);
-      }
-    
-      /* ===== PREVIEW THUMBNAILS (MOVE ABOVE BUTTONS) ===== */
-      const previews = [1,2,3].map(i => {
-        if (!p[i]?.previewURL) return "";
-        return `
-          <img src="${p[i].previewURL}"
-            onclick="window.open('${p[i].previewURL}','_blank')"
-            style="
-              width:100%;
-              max-width:100px;
-              height:80px;
-              object-fit:cover;
-              border-radius:6px;
-              border:2px solid #28a745;
-              cursor:pointer;
-            "
-          />
-        `;
-      }).join("");
-    
-      if (previews) {
-        html += `
-          <div style="
-            display:grid;
-            grid-template-columns:repeat(3,1fr);
-            gap:6px;
-            margin-top:8px;
-          ">
-            ${previews}
-          </div>
-        `;
-      }
-    
-      /* ===== PHOTO BUTTONS ===== */
-
-      const disable1 = !!p[1];
-      const disable2 = !p[1] || !!p[2];
-      const disable3 = !p[2] || !!p[3];
-      const disableSubmit = Object.keys(p).length === 0;
-      
-      html += `
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-top:8px;">
-          <button
-            ${disable1 ? "disabled" : ""}
-            onclick="startPhoto(1,'${t._key}')"
-            style="
-              background:${p[1] ? '#28a745' : '#007bff'};
-              color:white;
-              opacity:${disable1 ? 0.5 : 1};
-            ">
-            📸 Photo 1
-          </button>
-      
-          <button
-            ${disable2 ? "disabled" : ""}
-            onclick="startPhoto(2,'${t._key}')"
-            style="
-              background:${p[2] ? '#28a745' : '#007bff'};
-              color:white;
-              opacity:${disable2 ? 0.5 : 1};
-            ">
-            📸 Photo 2
-          </button>
-      
-          <button
-            ${disable3 ? "disabled" : ""}
-            onclick="startPhoto(3,'${t._key}')"
-            style="
-              background:${p[3] ? '#28a745' : '#007bff'};
-              color:white;
-              opacity:${disable3 ? 0.5 : 1};
-            ">
-            📸 Photo 3
-          </button>
-        </div>
-      
-        <button
-          ${disableSubmit ? "disabled" : ""}
-          onclick="submitTask('${t._key}')"
-          style="
-            background:#2c3e50;
-            color:white;
-            opacity:${disableSubmit ? 0.5 : 1};
-          ">
-          ✅ Submit Task
-        </button>
-      `;
-    }
-    
-    
-    /* ===== PROCESSING ===== */
-    if (status === "SYNC_PENDING") {
-      html += `
-        <div class="uploading">
-          📦 Saved safely — will auto-upload when signal is stable,keep app open while uploading
-        </div>
-      `;
-    }
-
-    /* ===== UPLOADING ===== */
-    if (status === "UPLOADING") {
-      html += `<div class="uploading">⏳ Uploading photo…</div>`;
-    }
-
-    /* ===== COMPLETED ===== */
-    if (status === "COMPLETED") {
-      html += `
-        <button class="toggle"
-          onclick="
-            const img = this.parentElement.querySelector('img');
-            if (!img) return;
-            img.style.display = img.style.display === 'none'
-              ? 'block'
-              : 'none';
-          ">
-          👁 Show / Hide Photo
-        </button>
-
-        <img src="${t.imageUrl}" style="display:none">
-      `;
-    }
-
-    div.innerHTML = html;
-    taskList.appendChild(div);
+  if (totalTasks > MAX_RENDER_TASKS) {
+    const info = document.createElement("div");
+    info.style =
+      "background:#fff;padding:8px;margin-bottom:8px;" +
+      "border-radius:6px;font-size:13px;text-align:center;";
+    info.innerHTML =
+      `Showing <b>${MAX_RENDER_TASKS}</b> of <b>${totalTasks}</b> tasks.<br>` +
+      `Use date, job type, or search to narrow results.`;
+    taskList.appendChild(info);
   }
+
+  // ✅ Progressive render (ONLY change)
+  let i = 0;
+
+  for (; i < Math.min(INITIAL_RENDER_COUNT, limitedTasks.length); i++) {
+    await renderOneTask(limitedTasks[i]);
+  }
+
+  function renderChunk() {
+    const end = Math.min(i + RENDER_CHUNK_SIZE, limitedTasks.length);
+    for (; i < end; i++) {
+      renderOneTask(limitedTasks[i]);
+    }
+    if (i < limitedTasks.length) {
+      requestAnimationFrame(renderChunk);
+    }
+  }
+
+  requestAnimationFrame(renderChunk);
 }
 
 function canUploadNow() {
