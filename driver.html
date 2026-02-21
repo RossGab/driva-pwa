@@ -227,7 +227,7 @@ import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "htt
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "v3.5.16.13.7-WIP";
+const VERSION = "v3.5.16.13.8-WIP";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -1227,18 +1227,26 @@ async function loadTasks() {
 
   // 1️⃣ OFFLINE FIRST
  if (!navigator.onLine) {
+  const selectedDate = dateFilter.value;
+
   const offlineTasks = (await getTasksFromIndexedDB())
-    .filter(t => resolveStatus(t) !== "COMPLETED");
+    .filter(t => {
+      if (resolveStatus(t) === "COMPLETED") return false;
+      const d = normalizeDatePH(t.createdAt);
+      return d === selectedDate;
+    });
 
   const sorted = sortTasksOfflineSafe(offlineTasks);
+
   TASKS_CACHE = sorted;
-  
+
   renderJobTypeFilters(sorted);
   renderWithPagination(sorted);
-  
+
   updateRemainingCounter(sorted);
   updateUploadCounter(sorted);
- IS_DOWNLOADING = false;
+
+  IS_DOWNLOADING = false;
   return;
 }
 
