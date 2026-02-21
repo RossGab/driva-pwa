@@ -407,41 +407,6 @@ function getTodayPH() {
     timeZone: "Asia/Manila"
   });
 }
-function createThumbnail(file) {
-  return new Promise(resolve => {
-    const img = new Image();
-    const r = new FileReader();
-
-    r.onload = e => (img.src = e.target.result);
-
-    img.onload = () => {
-      const canvas = document.createElement("canvas");
-      const maxW = 240;
-      let w = img.width;
-      let h = img.height;
-
-      if (w > maxW) {
-        h *= maxW / w;
-        w = maxW;
-      }
-
-      canvas.width = w;
-      canvas.height = h;
-
-      canvas
-        .getContext("2d")
-        .drawImage(img, 0, 0, w, h);
-
-      canvas.toBlob(
-        blob => resolve(blob),
-        "image/jpeg",
-        0.25
-      );
-    };
-
-    r.readAsDataURL(file);
-  });
-}
 
 dateFilter.value = getTodayPH();
 
@@ -933,8 +898,7 @@ cameraInput.onchange = async e => {
 
   
 
-  const thumbBlob = await createThumbnail(file);
-  const previewURL = URL.createObjectURL(thumbBlob);
+  const previewURL = URL.createObjectURL(blob);
   
   PHOTO_BUFFER[CURRENT_TASK][CURRENT_PHOTO_INDEX] = {
     blob,
