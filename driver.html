@@ -227,7 +227,7 @@ import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "htt
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "v3.5.16.13.8-WIP";
+const VERSION = "v3.5.16.13.9-WIP";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -776,19 +776,87 @@ const getQueue = () => JSON.parse(localStorage.getItem(QUEUE_KEY) || "[]");
 const setQueue = q => localStorage.setItem(QUEUE_KEY, JSON.stringify(q));
 
 /* ===== IMAGE ===== */
-function compressImage(file) {
+function compressImage(file, gps, takenAt) {
   return new Promise(resolve => {
     const img = new Image();
     const r = new FileReader();
-    r.onload = e => img.src = e.target.result;
+
+    r.onload = e => (img.src = e.target.result);
+
     img.onload = () => {
-      const c = document.createElement("canvas");
-      let w = img.width, h = img.height;
-      if (w > 1280) { h *= 1280 / w; w = 1280; }
-      c.width = w; c.height = h;
-      c.getContext("2d").drawImage(img, 0, 0, w, h);
-      c.toBlob(b => resolve(b), "image/jpeg", 0.55);
+      const canvas = document.createElement("canvas");
+      let w = img.width;
+      let h = img.height;
+
+      // ✅ Resize (recommended values)
+      if (w > 1024) {
+        h *= 1024 / w;
+        w = 1024;
+      }
+
+      canvas.width = w;
+      canvas.height = h;
+
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(img, 0, 0, w, h);
+
+      // =========================
+      // 🖊️ WATERMARK OVERLAY
+      // =========================
+      if (gps?.latitude && gps?.longitude) {
+        const lat = gps.latitude.toFixed(6);
+        const lng = gps.longitude.toFixed(6);
+
+        const timeStr = new Date(takenAt).toLocaleString("en-GB", {
+          timeZone: "Asia/Manila",
+          hour12: false
+        });
+
+        const padding = 12;
+        const fontSize = Math.max(12, Math.round(w / 45));
+
+        ctx.font = `bold ${fontSize}px Arial`;
+        ctx.textBaseline = "bottom";
+
+        const text1 = `📍 ${lat}, ${lng}`;
+        const text2 = `🕒 ${timeStr} PH`;
+
+        const textWidth = Math.max(
+          ctx.measureText(text1).width,
+          ctx.measureText(text2).width
+        );
+
+        const boxHeight = fontSize * 2 + padding * 1.5;
+        const boxWidth = textWidth + padding * 2;
+
+        const x = padding;
+        const y = h - padding;
+
+        // Background (semi-transparent black)
+        ctx.fillStyle = "rgba(0,0,0,0.55)";
+        ctx.fillRect(
+          x - padding / 2,
+          y - boxHeight,
+          boxWidth,
+          boxHeight
+        );
+
+        // Text
+        ctx.fillStyle = "#ffffff";
+        ctx.fillText(text1, x, y - fontSize - 4);
+        ctx.fillText(text2, x, y);
+      }
+
+      // =========================
+      // 🗜️ FINAL COMPRESSION
+      // =========================
+      canvas.toBlob(
+        blob => resolve(blob),
+        "image/jpeg",
+        0.45 // ✅ recommended quality
+      );
     };
+
     r.readAsDataURL(file);
   });
 }
@@ -816,7 +884,7 @@ cameraInput.onchange = async e => {
 
   let blob;
   try {
-    blob = await compressImage(file);
+    blob = await compressImage(file, gps, new Date().toISOString());
   } catch {
     alert("Image processing failed");
     return;
