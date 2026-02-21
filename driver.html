@@ -211,7 +211,7 @@ import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "htt
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "v3.5.16.8-WIP";
+const VERSION = "v3.5.16.9-WIP";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -2191,15 +2191,30 @@ function isStandalone() {
          window.navigator.standalone === true;
 }
 
-window.addEventListener("scroll", () => {
-  const nearBottom =
-    window.innerHeight + window.scrollY >=
-    document.body.offsetHeight - 300;
+  window.addEventListener("scroll", () => {
+  const doc = document.documentElement;
 
-  if (nearBottom && RENDER_OFFSET < CURRENT_RENDER_LIST.length) {
+  const scrollTop =
+    window.pageYOffset || doc.scrollTop;
+
+  const viewportHeight =
+    window.innerHeight || doc.clientHeight;
+
+  const fullHeight =
+    doc.scrollHeight;
+
+  const nearBottom =
+    scrollTop + viewportHeight >= fullHeight - 300;
+
+  if (
+    nearBottom &&
+    !RENDERING &&
+    RENDER_OFFSET < CURRENT_RENDER_LIST.length
+  ) {
     renderNextPage();
   }
 });
+
 
 window.addEventListener("beforeinstallprompt", e => {
   // already installed → do nothing
