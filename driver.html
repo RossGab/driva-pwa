@@ -211,7 +211,7 @@ import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "htt
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "v3.5.15.19-WIP";
+const VERSION = "v3.5.15.20-WIP";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -241,7 +241,7 @@ const QUEUE_KEY = "offlineQueue";
 const processingMap = {};
 const uploadingMap = {};
 const DB_NAME = "driver_uploads";
-const DB_VERSION = 3; // ⬅️ bump version ONCE
+const DB_VERSION = 4; // ⬅️ bump version ONCE
 const STORE = "photos";
 const TASK_STORE = "tasks";
 
@@ -400,9 +400,10 @@ function applyFiltersOnly() {
     if (!taskDate || taskDate !== selectedDate) return false;
 
     if (
-      selectedJobTypes.size > 0 &&
-      !selectedJobTypes.has(t.JOBTYPE)
-    ) return false;
+  jobTypeFilterInitialized &&
+  selectedJobTypes.size > 0 &&
+  !selectedJobTypes.has(t.JOBTYPE)
+) return false;
 
     return matchesSearch(t, SEARCH_TERM);
   });
@@ -1130,6 +1131,9 @@ if (isLastPhoto) {
 /* ================= FIX #3 END ================= */
   // ✅ CLEAR FORM CACHE AFTER SUCCESS
   const forms = loadFormCache();
+  if (!jobTypeFilterInitialized) {
+    selectedJobTypes.clear();
+  }
   delete forms[taskKey];
   saveFormCache(forms);
   
@@ -1158,8 +1162,9 @@ async function loadTasks() {
     .filter(t => resolveStatus(t) !== "COMPLETED");
 
   const sorted = sortTasksOfflineSafe(offlineTasks);
-  render(sorted);
   renderJobTypeFilters(sorted);
+  render(sorted);
+  
   updateRemainingCounter(sorted);
   updateUploadCounter(sorted);
   return;
@@ -1202,15 +1207,17 @@ async function loadTasks() {
     // 5️⃣ Cache for offline use
     await saveTasksToIndexedDB(tasks);
     
-    // 🧹 PRUNE INDEXEDDB — REMOVE TASKS NOT IN TODAY'S FETCH
+    // 🧹 PRUNE INDEXEDDB — REMOVE ONLY COMPLETED TASKS
     const cached = await getTasksFromIndexedDB();
     const liveIds = new Set(tasks.map(t => t._key));
     
     for (const t of cached) {
       const taskDate = normalizeDatePH(t.createdAt);
+    
       if (
         taskDate === selectedDate &&
-        !liveIds.has(t._key)
+        !liveIds.has(t._key) &&
+        t.status === "COMPLETED"
       ) {
         await deleteTaskFromIndexedDB(t._key);
       }
@@ -1218,8 +1225,18 @@ async function loadTasks() {
     
     // 6️⃣ Render
     TASKS_CACHE = tasks;
-    render(tasks);
+
+    // 🔥 FORCE RESET ON FIRST LOAD
+    if (!jobTypeFilterInitialized) {
+      selectedJobTypes.clear();
+    }
+    
+    // 🔥 INIT FILTERS FIRST
     renderJobTypeFilters(tasks);
+    
+    // 🔥 THEN RENDER
+    render(tasks);
+    
     updateRemainingCounter(tasks);
     updateUploadCounter(tasks);
 
@@ -1329,6 +1346,10 @@ function updateRemainingCounter(tasks) {
 }  
 /* ===== RENDER ===== */
   async function render(tasks) {
+  if (!jobTypeFilterInitialized) {
+  // 🚑 First boot safety
+  return;
+}
   BOOT_WATCHDOG_FIRED = true;
   taskList.innerHTML = "";
 
@@ -1341,9 +1362,10 @@ function updateRemainingCounter(tasks) {
   if (!taskDate || taskDate !== selectedDate) return false;
 
   if (
-    selectedJobTypes.size > 0 &&
-    !selectedJobTypes.has(t.JOBTYPE)
-  ) return false;
+  jobTypeFilterInitialized &&
+  selectedJobTypes.size > 0 &&
+  !selectedJobTypes.has(t.JOBTYPE)
+) return false;
 
     if (!matchesSearch(t, SEARCH_TERM)) return false;
 
@@ -1593,9 +1615,10 @@ async function renderCachedOnly() {
     if (!taskDate || taskDate !== selectedDate) return false;
 
     if (
-      selectedJobTypes.size > 0 &&
-      !selectedJobTypes.has(t.JOBTYPE)
-    ) return false;
+  jobTypeFilterInitialized &&
+  selectedJobTypes.size > 0 &&
+  !selectedJobTypes.has(t.JOBTYPE)
+) return false;
 
     return matchesSearch(t, SEARCH_TERM);
   });
