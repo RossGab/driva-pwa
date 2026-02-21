@@ -227,7 +227,7 @@ import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "htt
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "v3.5.16.13.2-WIP";
+const VERSION = "v3.5.16.13.3-WIP";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -240,7 +240,7 @@ let jobTypeFilterInitialized = false;
 let LAST_KNOWN_GPS = null;
 let LOAD_IN_PROGRESS = false;
 let RENDER_OFFSET = 0;
-const PAGE_SIZE = 10;   // Instagram-like chunk
+const PAGE_SIZE = 20;   // Instagram-like chunk
 let CURRENT_RENDER_LIST = [];
 let IS_DOWNLOADING = false;
 let LAST_RENDER_SIGNATURE = "";
@@ -412,6 +412,15 @@ dateFilter.value = getTodayPH();
 
 // Re-load when date changes
 dateFilter.addEventListener("change", () => {
+  TASKS_CACHE = [];
+  LAST_RENDER_SIGNATURE = "";
+  CURRENT_RENDER_LIST = [];
+  RENDER_OFFSET = 0;
+
+  jobTypeFilterInitialized = false;
+  selectedJobTypes.clear();
+
+  taskList.innerHTML = "Loading tasks…";
   loadTasks();
 });
 
@@ -452,7 +461,7 @@ function applyFiltersOnly() {
 
   tasks = sortTasksOfflineSafe(tasks);
 
-  render(tasks);
+  renderWithPagination(tasks);
   updateRemainingCounter(tasks);
   updateUploadCounter(tasks);
 }
@@ -657,7 +666,7 @@ function renderJobTypeFilters(tasks) {
       } else {
         selectedJobTypes.delete(type);
       }
-      loadTasks();
+      applyFiltersOnly();
     };
 
     label.appendChild(checkbox);
@@ -1195,11 +1204,17 @@ setInterval(checkStorageQuota, 60_000); // every 60 seconds
   
 /* ===== LOAD TASKS (DATE-BASED, SAFE) ===== */
 async function loadTasks() {
-  if (LOAD_IN_PROGRESS) return;
+  if (LOAD_IN_PROGRESS && !FORCE_REDOWNLOAD && !IS_DOWNLOADING) return;
   LOAD_IN_PROGRESS = true;
 
   try {
-    taskList.innerText = "Loading tasks…";
+    if (
+        !CURRENT_RENDER_LIST.length &&
+        !TASKS_CACHE.length &&
+        !IS_DOWNLOADING
+      ) {
+        taskList.innerText = "Loading tasks…";
+      }
 
     // existing loadTasks code here
 
@@ -1209,8 +1224,10 @@ async function loadTasks() {
     .filter(t => resolveStatus(t) !== "COMPLETED");
 
   const sorted = sortTasksOfflineSafe(offlineTasks);
+  TASKS_CACHE = sorted;
+  
   renderJobTypeFilters(sorted);
-  render(sorted);
+  renderWithPagination(sorted);
   
   updateRemainingCounter(sorted);
   updateUploadCounter(sorted);
@@ -1220,7 +1237,7 @@ async function loadTasks() {
   // 2️⃣ Selected PH date
   const selectedDate = dateFilter.value;
   if (!selectedDate) {
-    render([]);
+    taskList.innerText = "Select a date";
     return;
   }
 
@@ -1234,6 +1251,7 @@ async function loadTasks() {
       cachedTasks.length > 0 &&
       hasCachedTasksForDate(cachedTasks, selectedDate)
     ) {
+      BOOT_WATCHDOG_FIRED = true; // ⬅️ ADD
       const filtered = sortTasksOfflineSafe(
         cachedTasks.filter(t => {
           if (resolveStatus(t) === "COMPLETED") return false;
@@ -1247,9 +1265,12 @@ async function loadTasks() {
         renderJobTypeFilters(filtered);
       }
 
-      render(filtered);
+      LAST_RENDER_SIGNATURE = "";
+      CURRENT_RENDER_LIST = [];
+      renderWithPagination(filtered);
       updateRemainingCounter(filtered);
       updateUploadCounter(filtered);
+      IS_DOWNLOADING = false;   // ✅ ADD THIS LINE
       return; // ⛔ STOP — NO FIREBASE
     }
 
@@ -1262,43 +1283,45 @@ async function loadTasks() {
 
     const taskIds = Object.keys(idsSnap.val() || {});
     if (!taskIds.length) {
-      render([]);
+      BOOT_WATCHDOG_FIRED = true; // ✅ ADD
+      CURRENT_RENDER_LIST = [];
+      RENDER_OFFSET = 0;
+      taskList.innerHTML = "📭 No tasks found for selected date.";
+      taskCounter.innerText = "";
       return;
     }
     const total = taskIds.length;
     let completed = 0;
     IS_DOWNLOADING = true;
-    taskCounter.innerText = `⏬ Downloading tasks… 0 / ${total}`;
+    taskCounter.innerText = "⏬ Checking assigned tasks…";
 
     // 4️⃣ Fetch ONLY those tasks
     const reads = taskIds.map(id =>
-  get(ref(db, `tasks/${id}`)).then(s => {
-    completed++;
-
-    // 🔄 PROGRESS UI (throttled)
-    if (completed % 10 === 0 || completed === total) {
-      requestAnimationFrame(() => {
-        if (IS_DOWNLOADING) {
-          taskCounter.innerText =
-            `⏬ Downloading tasks… ${completed} / ${total}`;
+      get(ref(db, `tasks/${id}`)).then(s => {
+        if (!s.exists()) return null;
+    
+        const task = s.val();
+    
+        // ❌ skip completed
+        if (task.status === "COMPLETED") return null;
+    
+        // ❌ skip other drivers
+        if (
+          String(task.driverId || "").trim().toUpperCase() !==
+          String(DRIVER_ID).trim().toUpperCase()
+        ) return null;
+    
+        completed++;
+    
+        if (completed % 10 === 0 || completed === total) {
+          requestAnimationFrame(() => {
+            taskCounter.innerText =
+              `⏬ Downloading assigned tasks… ${completed}`;
+          });
         }
-      });
-    }
-
-    if (!s.exists()) return null;
-
-    const task = s.val();
-
-    if (task.status === "COMPLETED") return null;
-
-    if (
-      String(task.driverId || "").trim().toUpperCase() !==
-      String(DRIVER_ID).trim().toUpperCase()
-    ) return null;
-
-    return { _key: id, ...task };
-  })
-);
+        return { _key: id, ...task };
+      })
+    );
 
     let tasks = (await Promise.all(reads))
       .filter(Boolean)
@@ -1336,9 +1359,16 @@ async function loadTasks() {
     }
     
     // 🔥 THEN RENDER
-    IS_DOWNLOADING = false;
-    render(tasks);
+    CURRENT_RENDER_LIST = tasks;
+    RENDER_OFFSET = 0;
+    taskList.innerHTML = "";
+    
+    renderNextPage();
+    
+    BOOT_WATCHDOG_FIRED = true;
+    IS_DOWNLOADING = false; // ⬅️ ADD THIS
     taskCounter.innerText = "";
+    setTimeout(() => updateRemainingCounter(tasks), 100);
     
     updateRemainingCounter(tasks);
     updateUploadCounter(tasks);
@@ -1381,7 +1411,13 @@ document.getElementById("refreshTasksBtn").onclick = async () => {
 
   FORCE_REDOWNLOAD = false;
 };
-   
+
+function renderWithPagination(tasks) {
+  CURRENT_RENDER_LIST = tasks;
+  RENDER_OFFSET = 0;
+  taskList.innerHTML = "";
+  requestAnimationFrame(renderNextPage);
+}
 
 async function detectGPSPermission() {
   if (!navigator.permissions) return;
@@ -1483,7 +1519,7 @@ function updateRemainingCounter(tasks) {
   const INITIAL_RENDER_COUNT = 1;   // show 1 card immediately
 const RENDER_CHUNK_SIZE = 3;      // then render 3 per frame
 
-async function renderOneTask(t) {
+function renderOneTask(t) {
   
   const p = PHOTO_BUFFER[t._key] || {};
   // ✅ RESTORE FORM STATE IF EXISTS
@@ -1551,7 +1587,10 @@ async function renderOneTask(t) {
 
     // 🔒 Hide delivery options after Photo 1 is taken
     if (ACTIVE_CAPTURE_TASK !== t._key) {
-      html += await renderDynamicDelivery(t);
+      renderDynamicDelivery(t).then(h => {
+        const box = div.querySelector(`#dyn_${t._key}`);
+        if (box) box.insertAdjacentHTML("beforebegin", h);
+      });
     }
 
     /* ===== PREVIEW THUMBNAILS ===== */
@@ -1649,62 +1688,6 @@ async function renderOneTask(t) {
   div.innerHTML = html;
   taskList.appendChild(div);
 }
-  
-/* ===== RENDER ===== */
-  async function render(tasks) {
-  if ((IS_DOWNLOADING || LOAD_IN_PROGRESS) && !FORCE_REDOWNLOAD) return;
-  TASKS_CACHE = tasks;
-  BOOT_WATCHDOG_FIRED = true;
-
-  if (!jobTypeFilterInitialized) {
-    renderJobTypeFilters(tasks);
-  }
-
-  const selectedDate = dateFilter.value;
-
-  const filtered = tasks.filter(t => {
-    const status = resolveStatus(t);
-    if (status === "COMPLETED") return false;
-
-    const taskDate = normalizeDatePH(t.createdAt);
-    if (!taskDate || taskDate !== selectedDate) return false;
-
-    if (
-      jobTypeFilterInitialized &&
-      selectedJobTypes.size > 0 &&
-      !selectedJobTypes.has(t.JOBTYPE)
-    ) return false;
-
-    if (!matchesSearch(t, SEARCH_TERM)) return false;
-    return true;
-  });
-
-  if (filtered.length === 0) {
-    if (
-      LOAD_IN_PROGRESS ||
-      IS_DOWNLOADING ||
-      RENDERING ||
-      RENDER_OFFSET > 0 ||
-      !BOOT_WATCHDOG_FIRED
-    ) return;
-  
-    taskList.innerHTML =
-      "📭 No tasks found for selected date.<br><br>" +
-      "<small>If this is unexpected, verify Driver ID.</small>";
-    return;
-  }
-
-  // 🔑 SIGNATURE BASED ON LIST CONTENT
-  const signature = filtered.map(t => t._key).join("|");
-
-  if (signature !== LAST_RENDER_SIGNATURE) {
-    LAST_RENDER_SIGNATURE = signature;
-    taskList.innerHTML = "";
-    RENDER_OFFSET = 0;
-    CURRENT_RENDER_LIST = filtered;
-    renderNextPage();
-  }
-}
 
 let RENDERING = false;
 
@@ -1716,7 +1699,7 @@ async function renderNextPage() {
   const end = Math.min(start + PAGE_SIZE, CURRENT_RENDER_LIST.length);
 
   for (let i = start; i < end; i++) {
-    await renderOneTask(CURRENT_RENDER_LIST[i]);
+    renderOneTask(CURRENT_RENDER_LIST[i]);
   }
 
   RENDER_OFFSET = end;
@@ -1792,7 +1775,7 @@ async function renderCachedOnly() {
 
   filtered = sortTasksOfflineSafe(filtered);
   
-  render(filtered);
+  renderWithPagination(filtered);
   updateRemainingCounter(filtered);
   updateUploadCounter(filtered);
 }
