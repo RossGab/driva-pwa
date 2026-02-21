@@ -1,15 +1,15 @@
-const CACHE_VERSION = "v4";
+const CACHE_VERSION = "v5";
 const CACHE_NAME = `field-task-app-${CACHE_VERSION}`;
 
-const APP_SHELL = [
-  "./driver.html",
-  "./",
-  "./install.html",
-  "./manifest.json",
-  "./logo.jpg",
-  "./icon-192.png",
-  "./icon-512.png"
-];
+// const APP_SHELL = [
+//   "./driver.html",
+//   "./",
+//   "./install.html",
+//   "./manifest.json",
+//   "./logo.jpg",
+//   "./icon-192.png",
+//   "./icon-512.png"
+// ];
 
 self.addEventListener("install", event => {
   event.waitUntil(
