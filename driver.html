@@ -227,7 +227,7 @@ import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "htt
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "v3.5.16.13.4-WIP";
+const VERSION = "v3.5.16.13.5-WIP";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -1564,6 +1564,7 @@ function renderOneTask(t) {
     <div class="small"><b>Job Type:</b> ${t.JOBTYPE || "—"}</div>
     <div class="small"><b>Status:</b> ${status}</div>
   `;
+  html += `<div id="delivery_${t._key}"></div>`;
   if (t.lastUploadAttemptAt) {
     html += `
       <div class="small" style="color:#888">
@@ -1690,8 +1691,23 @@ function renderOneTask(t) {
   }
 
   div.innerHTML = html;
-  taskList.appendChild(div);
+taskList.appendChild(div);
+
+// ✅ NOW the container exists
+if (
+  (status === "PENDING" || status === "CAPTURING" || status === "READY") &&
+  !t.finalized &&
+  ACTIVE_CAPTURE_TASK !== t._key
+) {
+  renderDynamicDelivery(t).then(h => {
+    const target = div.querySelector(`#delivery_${t._key}`);
+    if (target && h) {
+      target.innerHTML = h;
+    }
+  });
 }
+}
+
 
 let RENDERING = false;
 
