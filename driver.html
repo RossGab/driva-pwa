@@ -227,7 +227,7 @@ import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "htt
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "v3.5.16.13.5-WIP";
+const VERSION = "v3.5.16.13.6-WIP";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -940,8 +940,11 @@ cameraInput.onchange = async e => {
   
   // 🧠 Photos already saved to IndexedDB at capture time
   delete PHOTO_BUFFER[taskKey];
-  delete processingMap[taskKey];
   ACTIVE_CAPTURE_TASK = null;
+  
+  delete processingMap[taskKey];
+  delete uploadingMap[taskKey];
+  updateRefreshLock();
   
   loadTasks();
   
@@ -991,6 +994,7 @@ cameraInput.onchange = async e => {
     delete PHOTO_BUFFER[taskKey];
     delete processingMap[taskKey];
     ACTIVE_CAPTURE_TASK = null;
+    updateRefreshLock();
     
     loadTasks();
 
@@ -1151,6 +1155,10 @@ async function uploadNow(
 
   await update(ref(db, `tasks/${taskKey}`), updatePayload);
   await deleteTaskFromIndexedDB(taskKey);
+  // ✅ THIS WAS MISSING
+  delete processingMap[taskKey];
+  delete uploadingMap[taskKey];
+  updateRefreshLock()
 
   // ===============================
 // ✅ ADMIN STATS UPDATE (ONCE)
@@ -1231,6 +1239,7 @@ async function loadTasks() {
   
   updateRemainingCounter(sorted);
   updateUploadCounter(sorted);
+ IS_DOWNLOADING = false;
   return;
 }
 
@@ -1238,6 +1247,7 @@ async function loadTasks() {
   const selectedDate = dateFilter.value;
   if (!selectedDate) {
     taskList.innerText = "Select a date";
+    IS_DOWNLOADING = false;
     return;
   }
 
@@ -1294,6 +1304,7 @@ async function loadTasks() {
     let completed = 0;
     IS_DOWNLOADING = true;
     taskCounter.innerText = "⏬ Checking assigned tasks…";
+    BOOT_WATCHDOG_FIRED = true; // ✅ ADD HERE
 
     // 4️⃣ Fetch ONLY those tasks
     const reads = taskIds.map(id =>
@@ -1312,7 +1323,7 @@ async function loadTasks() {
         ) return null;
     
         completed++;
-    
+        
         if (completed % 10 === 0 || completed === total) {
           requestAnimationFrame(() => {
             taskCounter.innerText =
@@ -1378,6 +1389,7 @@ async function loadTasks() {
     taskList.innerHTML =
       "⚠️ Failed to load tasks.<br><br>" +
       "<small>Please check internet or try again.</small>";
+    IS_DOWNLOADING = false;
   }
 } finally {
     LOAD_IN_PROGRESS = false;
@@ -1520,7 +1532,7 @@ function updateRemainingCounter(tasks) {
 const RENDER_CHUNK_SIZE = 3;      // then render 3 per frame
 
 function renderOneTask(t) {
-  
+  if (!t || !t._key) return;
   const p = PHOTO_BUFFER[t._key] || {};
   // ✅ RESTORE FORM STATE IF EXISTS
   const savedForms = loadFormCache();
@@ -1585,18 +1597,7 @@ function renderOneTask(t) {
         </div>
       `;
     }
-
-    // 🔒 Hide delivery options after Photo 1 is taken
-    if (ACTIVE_CAPTURE_TASK !== t._key) {
-      if (ACTIVE_CAPTURE_TASK !== t._key) {
-        renderDynamicDelivery(t).then(h => {
-          const slot = div.querySelector(`#delivery_${t._key}`);
-          if (slot && h) {
-            slot.innerHTML = h;
-          }
-        });
-      }
-    }
+    
 
     /* ===== PREVIEW THUMBNAILS ===== */
     const previews = [1,2,3].map(i => {
@@ -1700,6 +1701,7 @@ if (
   ACTIVE_CAPTURE_TASK !== t._key
 ) {
   renderDynamicDelivery(t).then(h => {
+    if (!document.body.contains(div)) return;
     const target = div.querySelector(`#delivery_${t._key}`);
     if (target && h) {
       target.innerHTML = h;
@@ -2040,6 +2042,7 @@ async function processOfflineQueue() {
       .filter(r => r.submitIntent !== false);
     if (!records.length) {
       OFFLINE_REPLAY_RUNNING = false;
+      updateRefreshLock()
       return;
     }
 
@@ -2092,6 +2095,7 @@ async function processOfflineQueue() {
             // ✅ CLEAN UP STATE SO UI DOES NOT GET STUCK
             delete uploadingMap[p.taskKey];
             delete processingMap[p.taskKey];
+            updateRefreshLock()
             loadTasks();
           
             continue; // ⛔ stop this task, retry later
@@ -2102,7 +2106,11 @@ async function processOfflineQueue() {
 
       delete uploadingMap[taskKey];
       delete processingMap[taskKey];
+      // 🔥 REMOVE THIS TASK FROM QUEUE
+      let q = getQueue().filter(x => x.taskKey !== taskKey);
+      setQueue(q);
       //loadTasks();
+      updateRefreshLock();
     }
     checkStorageQuota();
 
@@ -2110,6 +2118,7 @@ async function processOfflineQueue() {
     if (!remaining.length) {
       setQueue([]);
     }
+        updateRefreshLock();
 
   } finally {
     OFFLINE_REPLAY_RUNNING = false;
