@@ -211,7 +211,7 @@ import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "htt
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "v3.5.16.3-WIP";
+const VERSION = "v3.5.16.2-WIP";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -224,7 +224,6 @@ let jobTypeFilterInitialized = false;
 let LAST_KNOWN_GPS = null;
 let LOAD_IN_PROGRESS = false;
 const MAX_RENDER_TASKS = 50;
-let HAS_RENDERED_AT_LEAST_ONE_TASK = false;
 
 const firebaseConfig = {
   apiKey: "AIzaSyDFW61pnwLvh6HGKWt10zLYNr860fI8vkg",
@@ -383,8 +382,6 @@ dateFilter.value = getTodayPH();
 
 // Re-load when date changes
 dateFilter.addEventListener("change", () => {
-  HAS_RENDERED_AT_LEAST_ONE_TASK = false;
-  BOOT_WATCHDOG_FIRED = false;
   loadTasks();
 });
 
@@ -399,11 +396,6 @@ function normalizeDatePH(dateStr) {
   });
 }
 function applyFiltersOnly() {
-  // ⛔ Prevent premature render during initial load
-  if (LOAD_IN_PROGRESS && TASKS_CACHE.length === 0) {
-    return;
-  }
-
   let tasks = [...TASKS_CACHE];
 
   if (ACTIVE_CAPTURE_TASK) {
@@ -420,21 +412,19 @@ function applyFiltersOnly() {
     if (!taskDate || taskDate !== selectedDate) return false;
 
     if (
-      jobTypeFilterInitialized &&
-      selectedJobTypes.size > 0 &&
-      !selectedJobTypes.has(t.JOBTYPE)
-    ) return false;
+  jobTypeFilterInitialized &&
+  selectedJobTypes.size > 0 &&
+  !selectedJobTypes.has(t.JOBTYPE)
+) return false;
 
     return matchesSearch(t, SEARCH_TERM);
   });
 
   tasks = sortTasksOfflineSafe(tasks);
 
-  if (tasks.length > 0) {
-    render(tasks);
-    updateRemainingCounter(tasks);
-    updateUploadCounter(tasks);
-  }
+  render(tasks);
+  updateRemainingCounter(tasks);
+  updateUploadCounter(tasks);
 }
 
 function isBusy() {
@@ -1187,18 +1177,18 @@ async function loadTasks() {
     .filter(t => resolveStatus(t) !== "COMPLETED");
 
   const sorted = sortTasksOfflineSafe(offlineTasks);
-
-  if (sorted.length > 0) {
+  renderJobTypeFilters(sorted);
   render(sorted);
+  
   updateRemainingCounter(sorted);
   updateUploadCounter(sorted);
+  return;
 }
-return;
 
   // 2️⃣ Selected PH date
   const selectedDate = dateFilter.value;
   if (!selectedDate) {
-    taskList.innerText = "Loading tasks…";
+    render([]);
     return;
   }
 
@@ -1221,18 +1211,18 @@ return;
     
         TASKS_CACHE = sorted;
     
-
-    
-        if (sorted.length > 0) {
-          render(sorted);
-          updateRemainingCounter(sorted);
-          updateUploadCounter(sorted);
+        if (!jobTypeFilterInitialized) {
+          renderJobTypeFilters(sorted);
         }
+    
+        render(sorted);
+        updateRemainingCounter(sorted);
+        updateUploadCounter(sorted);
         return;
       }
     
       // only now is it truly empty
-      taskList.innerText = "Loading tasks…";
+      render([]);
       return;
     }
 
@@ -1274,12 +1264,20 @@ return;
     // 6️⃣ Render
     TASKS_CACHE = tasks;
 
+    // 🔥 FORCE RESET ON FIRST LOAD
     if (!jobTypeFilterInitialized) {
-  selectedJobTypes.clear();
-  renderJobTypeFilters(tasks);
-}
-
-render(tasks);
+      selectedJobTypes.clear();
+    }
+    
+    // 🔥 INIT FILTERS FIRST
+    if (!jobTypeFilterInitialized) {
+      if (!jobTypeFilterInitialized && tasks.length < 300) {
+          renderJobTypeFilters(tasks);
+        }
+    }
+    
+    // 🔥 THEN RENDER
+    render(tasks);
     
     updateRemainingCounter(tasks);
     updateUploadCounter(tasks);
@@ -1560,18 +1558,24 @@ async function renderOneTask(t) {
 
   div.innerHTML = html;
   taskList.appendChild(div);
-  
-  BOOT_WATCHDOG_FIRED = true;
-  HAS_RENDERED_AT_LEAST_ONE_TASK = true;
 }
   
-async function render(tasks) {
-  taskList.innerHTML = ""; // ✅ CLEAR ONCE, IMMEDIATELY
+/* ===== RENDER ===== */
+  async function render(tasks) {
   TASKS_CACHE = tasks;
 
+  if (!jobTypeFilterInitialized) {
+    renderJobTypeFilters(tasks);
+  }
+
+  BOOT_WATCHDOG_FIRED = true;
+
+  // 🔴 Clear ONCE
+  taskList.innerHTML = "";
 
   const selectedDate = dateFilter.value;
 
+  // 🔍 FILTER FIRST (same logic as before)
   const filtered = tasks.filter(t => {
     const status = resolveStatus(t);
     if (status === "COMPLETED") return false;
@@ -1591,8 +1595,9 @@ async function render(tasks) {
   });
 
   const totalTasks = filtered.length;
-  const visibleTasks = filtered.slice(0, MAX_RENDER_TASKS);
+  const limitedTasks = filtered.slice(0, MAX_RENDER_TASKS);
 
+  // ℹ️ Info banner
   if (totalTasks > MAX_RENDER_TASKS) {
     const info = document.createElement("div");
     info.style =
@@ -1604,21 +1609,23 @@ async function render(tasks) {
     taskList.appendChild(info);
   }
 
+  // 🚀 PROGRESSIVE RENDER
   let i = 0;
   const CHUNK_SIZE = 5;
 
   async function renderChunk() {
-    const end = Math.min(i + CHUNK_SIZE, visibleTasks.length);
+    const end = Math.min(i + CHUNK_SIZE, limitedTasks.length);
 
     for (; i < end; i++) {
-      await renderOneTask(visibleTasks[i]);
+      await renderOneTask(limitedTasks[i]); // ⬅️ FULL card, unchanged
     }
 
-    if (i < visibleTasks.length) {
+    if (i < limitedTasks.length) {
       requestAnimationFrame(renderChunk);
     }
   }
 
+  // 🔥 Render first chunk immediately
   renderChunk();
 }
 
@@ -1851,10 +1858,9 @@ async function validateDynamic(taskKey) {
 setTimeout(() => {
   if (
     !BOOT_WATCHDOG_FIRED &&
-    !HAS_RENDERED_AT_LEAST_ONE_TASK &&
     taskList &&
     taskList.innerText.includes("Loading")
-  ){
+  ) {
     taskList.innerHTML =
       "📭 No tasks found for selected date.<br><br>" +
       "<small>If this is unexpected, open ⚙️ and verify Driver ID.</small>";
