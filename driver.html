@@ -211,7 +211,7 @@ import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "htt
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "v3.5.15.17-WIP";
+const VERSION = "v3.5.15.18-WIP";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -393,7 +393,11 @@ function isBusy() {
 
 searchBox.addEventListener("input", e => {
   SEARCH_TERM = e.target.value.toLowerCase();
-  renderCachedOnly(); // ✅ NO Firebase, NO sorting
+
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => {
+    renderCachedOnly();
+  }, 120);
 });
 
 let DRIVER_ID = localStorage.getItem("driverId");
@@ -1155,7 +1159,10 @@ async function loadTasks() {
 
     let tasks = (await Promise.all(reads))
       .filter(Boolean)
-      .filter(t => t.driverId === DRIVER_ID)
+      .filter(t =>
+        String(t.driverId || "").trim().toUpperCase() ===
+        String(DRIVER_ID).trim().toUpperCase()
+      )
       .filter(t => t.status !== "COMPLETED");   // ✅ HARD BLOCK
 
     // 5️⃣ Cache for offline use
@@ -1518,6 +1525,19 @@ function canUploadNow() {
   }
   return true;
 }
+function matchesSearch(task, term) {
+  if (!term) return true;
+  term = term.toLowerCase();
+
+  return (
+    String(task.CUSTOMERNAME || "").toLowerCase().includes(term) ||
+    String(task.ADDRESS || "").toLowerCase().includes(term) ||
+    String(task.ACCOUNTNUMBER || "").toLowerCase().includes(term) ||
+    String(task.METERNUMBER || "").toLowerCase().includes(term) ||
+    String(task.DMZ || "").toLowerCase().includes(term) ||
+    String(task.SEQUENCE || "").toLowerCase().includes(term)
+  );
+}
 
 async function renderCachedOnly() {
   let tasks = await getTasksFromIndexedDB();
@@ -1540,7 +1560,7 @@ async function renderCachedOnly() {
       !selectedJobTypes.has(t.JOBTYPE)
     ) return false;
 
-    return true;
+    return matchesSearch(t, SEARCH_TERM);
   });
 
   filtered = sortTasksOfflineSafe(filtered);
