@@ -57,7 +57,7 @@ button:hover {
 
 <body>
 
-<h2>📊 Task Report V3.1</h2>
+<h2>📊 Task Report V3.2</h2>
 
 <button
   onclick="location.href='admin.html'"
@@ -265,12 +265,14 @@ function buildFilterOptions() {
   fillSelect("dmzFilter", "DMZ");
 }
 
-function fillSelect(id, field) {
+function fillSelect(id, field, fallbackLabel = field) {
   const select = document.getElementById(id);
-  select.innerHTML = `<option value="">All ${field}</option>`;
+  select.innerHTML = `<option value="">All ${fallbackLabel}</option>`;
 
   const values = [...new Set(
-    ALL_TASKS.map(t => t[field]).filter(Boolean)
+    ALL_TASKS
+      .map(t => t[field])
+      .filter(v => v !== undefined && v !== null && v !== "")
   )].sort();
 
   values.forEach(v => {
@@ -325,12 +327,17 @@ window.generateReport = async function () {
 /* ===============================
    INIT
 ================================ */
-(function init() {
+(async function init() {
   const today = new Date().toISOString().slice(0,10);
+
   document.getElementById("dateFrom").value = today;
   document.getElementById("dateTo").value = today;
 
-  loadDrivers();
+  // 1️⃣ Load driver snapshot first
+  await loadDrivers();
+
+  // 2️⃣ Preload today's tasks so dropdowns populate
+  await loadTasksByDateRange(today, today);
 })();
 </script>
 </body>
