@@ -163,6 +163,23 @@ img { width:100%;margin-top:8px;border-radius:6px; }
          margin-bottom:10px;border-radius:6px;
          font-weight:bold;color:#f39c12;">
 </div>
+<div
+  id="uploadNote"
+  style="
+    display:none;
+    background:#fff3cd;
+    color:#856404;
+    padding:10px;
+    margin-bottom:10px;
+    border-radius:6px;
+    font-size:13px;
+    text-align:center;
+  "
+>
+  ℹ️ <b>Upload in progress</b><br>
+  The screen may refresh while uploading.<br>
+  <b>Please wait until the upload is completed.</b>
+</div>
 <button
   id="retryUploadBtn"
   style="
@@ -227,7 +244,7 @@ import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "htt
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "v3.5.16.13.11-WIP";
+const VERSION = "v3.5.16.13.14-WIP";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -1573,20 +1590,37 @@ function updateUploadCounter(tasks) {
   }).length;
 
   const el = document.getElementById("uploadCounter");
+  const note = document.getElementById("uploadNote");
   const retryBtn = document.getElementById("retryUploadBtn");
+  const refreshBtn = document.getElementById("refreshTasksBtn");
 
-  if (!el) return;
+  if (!el || !refreshBtn) return;
 
   if (uploadingCount > 0) {
+    // 🔼 Upload UI
     el.innerText = `⏫ Pending Uploads: ${uploadingCount}`;
     el.style.display = "block";
 
+    if (note) note.style.display = "block";
     if (retryBtn) retryBtn.style.display = "block";
+
+    // 🔒 LOCK REFRESH
+    refreshBtn.disabled = true;
+    refreshBtn.style.opacity = "0.6";
+    refreshBtn.innerText = "⏳ Upload in progress…";
+
   } else {
+    // ✅ Clear upload UI
     el.innerText = "";
     el.style.display = "none";
 
+    if (note) note.style.display = "none";
     if (retryBtn) retryBtn.style.display = "none";
+
+    // 🔓 UNLOCK REFRESH
+    refreshBtn.disabled = false;
+    refreshBtn.style.opacity = "1";
+    refreshBtn.innerText = "🔄 Download / Refresh Tasks";
   }
 }
   
