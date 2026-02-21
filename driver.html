@@ -176,7 +176,7 @@ img { width:100%;margin-top:8px;border-radius:6px; }
     text-align:center;
   "
 >
-  ℹ️ <b>For upload | Upload is available</b><br>
+  ℹ️ <b>Upload in progress</b><br>
   The screen may refresh while uploading.<br>
   <b>Please wait until the upload is completed.</b>
 </div>
@@ -244,7 +244,7 @@ import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "htt
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "v3.5.16.13.16-WIP";
+const VERSION = "v3.5.16.13.14-WIP";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -2184,7 +2184,6 @@ async function processOfflineQueue() {
     }
 
     for (const taskKey of Object.keys(grouped)) {
-      
       if (!canUploadNow()) break;
 
       await update(ref(db, `tasks/${taskKey}`), {
@@ -2194,8 +2193,6 @@ async function processOfflineQueue() {
       const photos = grouped[taskKey]
         .sort((a, b) => a.photoIndex - b.photoIndex);
 
-      
-        try {
       uploadingMap[taskKey] = true;
       //loadTasks();
 
@@ -2203,6 +2200,7 @@ async function processOfflineQueue() {
         const p = photos[i];
         const isLast = i === photos.length - 1;
 
+        try {
           await new Promise(r => setTimeout(r, 120));
           
           await uploadNow(
