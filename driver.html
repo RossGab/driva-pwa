@@ -211,7 +211,7 @@ import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "htt
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "v3.5.15.23-WIP";
+const VERSION = "v3.5.15.24-WIP";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -222,6 +222,7 @@ const FORM_CACHE_KEY = "driverFormCache";
 let ACTIVE_CAPTURE_TASK = null;
 let jobTypeFilterInitialized = false;
 let LAST_KNOWN_GPS = null;
+let LOAD_IN_PROGRESS = false;
 
 const firebaseConfig = {
   apiKey: "AIzaSyDFW61pnwLvh6HGKWt10zLYNr860fI8vkg",
@@ -311,6 +312,16 @@ async function getTasksFromIndexedDB() {
     const req = tx.objectStore("tasks").getAll();
     req.onsuccess = () => resolve(req.result || []);
   });
+}
+
+async function getWithRetry(dbRef, retries = 1, delay = 400) {
+  try {
+    const snap = await get(dbRef);
+    if (snap.exists() || retries === 0) return snap;
+  } catch {}
+
+  await new Promise(r => setTimeout(r, delay));
+  return getWithRetry(dbRef, retries - 1, delay);
 }
 
 async function deletePhotoFromDB(id) {
@@ -1151,7 +1162,13 @@ checkStorageQuota();
 setInterval(checkStorageQuota, 60_000); // every 60 seconds
 /* ===== LOAD TASKS (DATE-BASED, SAFE) ===== */
 async function loadTasks() {
-  taskList.innerText = "Loading tasks…";
+  if (LOAD_IN_PROGRESS) return;
+  LOAD_IN_PROGRESS = true;
+
+  try {
+    taskList.innerText = "Loading tasks…";
+
+    // existing loadTasks code here
 
   // 1️⃣ OFFLINE FIRST
  if (!navigator.onLine) {
@@ -1178,10 +1195,33 @@ async function loadTasks() {
 
   try {
     // 3️⃣ Read ONLY task IDs for that date
-    const idsSnap = await get(ref(db, `tasksByDate/${dateKey}`));
+    const idsSnap = await getWithRetry(
+      ref(db, `tasksByDate/${dateKey}`),
+      1   // retry ONCE only
+    );
 
     if (!idsSnap.exists()) {
-      render([]); // ✅ no infinite loading
+      const offlineTasks = await getTasksFromIndexedDB();
+    
+      if (offlineTasks.length > 0) {
+        const sorted = sortTasksOfflineSafe(
+          offlineTasks.filter(t => resolveStatus(t) !== "COMPLETED")
+        );
+    
+        TASKS_CACHE = sorted;
+    
+        if (!jobTypeFilterInitialized) {
+          renderJobTypeFilters(sorted);
+        }
+    
+        render(sorted);
+        updateRemainingCounter(sorted);
+        updateUploadCounter(sorted);
+        return;
+      }
+    
+      // only now is it truly empty
+      render([]);
       return;
     }
 
@@ -1245,7 +1285,11 @@ async function loadTasks() {
       "⚠️ Failed to load tasks.<br><br>" +
       "<small>Please check internet or try again.</small>";
   }
+} finally {
+    LOAD_IN_PROGRESS = false;
+  }
 }
+   
 
 async function detectGPSPermission() {
   if (!navigator.permissions) return;
