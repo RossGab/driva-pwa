@@ -227,7 +227,7 @@ import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "htt
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "v3.5.16.15-WIP";
+const VERSION = "v3.5.16.16-WIP";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -1464,7 +1464,7 @@ function updateUploadCounter(tasks) {
 }
   
 function updateRemainingCounter(tasks) {
-  if (LOAD_IN_PROGRESS || IS_DOWNLOADING) return;
+  // if (LOAD_IN_PROGRESS || IS_DOWNLOADING) return;
   const selectedDate =
     document.getElementById("dateFilter")?.value;
 
