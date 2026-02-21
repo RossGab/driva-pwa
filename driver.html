@@ -211,7 +211,7 @@ import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "htt
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "v3.5.15.20-WIP";
+const VERSION = "v3.5.15.21-WIP";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -813,11 +813,13 @@ cameraInput.onchange = async e => {
   setTimeout(() => {
     cameraInput.value = "";
   }, 150);
-  
+
+  // ✅ Re-render locally (NO reload, NO flicker)
+  applyFiltersOnly();
   // ✅ Delay UI refresh to prevent Android camera crash
-  setTimeout(() => {
-    loadTasks();
-  }, 300);
+  // setTimeout(() => {
+  //   loadTasks();
+  // }, 300);
   } catch (err) {
       console.error("📸 Camera handler crash:", err);
       alert("Camera error — please retry.");
