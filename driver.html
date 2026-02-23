@@ -244,7 +244,7 @@ import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "htt
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "v3.5.16.13.18-WIP";
+const VERSION = "v3.5.16.13.19-WIP";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -333,16 +333,19 @@ async function saveTasksToIndexedDB(tasks) {
 
   for (const t of tasks) {
     if (!t._key) continue;
-
+  
+    if (!t.dateKey) continue; // 🔥 GUARANTEE dateKey exists
+  
     const existing = await new Promise(resolve => {
       const r = store.get(t._key);
       r.onsuccess = () => resolve(r.result || {});
       r.onerror = () => resolve({});
     });
-
+  
     store.put({
       ...existing,
-      ...t
+      ...t,
+      dateKey: t.dateKey // 🔥 FORCE overwrite
     });
   }
 }
