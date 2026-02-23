@@ -244,7 +244,7 @@ import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "htt
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "v3.5.16.13.16-WIP";
+const VERSION = "v3.5.16.13.17-WIP";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -1407,6 +1407,7 @@ async function loadTasks() {
 
     const taskIds = Object.keys(idsSnap.val() || {});
     if (!taskIds.length) {
+      document.getElementById("jobTypeOptions").innerHTML = "";
       BOOT_WATCHDOG_FIRED = true;
       CURRENT_RENDER_LIST = [];
       RENDER_OFFSET = 0;
