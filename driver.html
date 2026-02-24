@@ -261,7 +261,7 @@ import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "htt
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "v4.0.10-WIP";
+const VERSION = "v4.0.11-WIP";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -410,6 +410,10 @@ let searchTimer
 let TASKS_CACHE = [];
 let UPLOAD_QUEUE_COUNT = 0;
 const dateFilter = document.getElementById("dateFilter");
+  const appVersion = document.getElementById("appVersion");
+const taskList = document.getElementById("taskList");
+const offlineBanner = document.getElementById("offlineBanner");
+const cameraInput = document.getElementById("cameraInput");
 
 const STORAGE_WARNING_THRESHOLD_MB = 300; // warn below 300 MB
 
@@ -1114,13 +1118,6 @@ cameraInput.onchange = async e => {
   // ==============================
   // ✅ ALWAYS QUEUE (ONLINE OR OFFLINE)
   // ==============================
-  
-  
-  
-  // 🔁 STORE QUEUE ENTRY
-  let q = getQueue().filter(x => x.taskKey !== taskKey);
-  q.push({ taskKey });
-  setQueue(q);
 
   await saveTasksToIndexedDB([{
     _key: taskKey,
