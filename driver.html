@@ -261,7 +261,7 @@ import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "htt
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "v4.0.13-WIP";
+const VERSION = "v4.0.14-WIP";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -482,22 +482,27 @@ function applyFiltersOnly() {
   const dateKey = selectedDate.replace(/-/g, "");
 
   let tasks = TASKS_CACHE.filter(t => {
-    if (!t || !t._key) return false;
+  if (!t || !t._key) return false;
 
-    // correct driver
-    if (
-      String(t.driverId || "").trim().toUpperCase() !==
-      String(DRIVER_ID).trim().toUpperCase()
-    ) return false;
+  // ✅ If capturing — only show active task
+  if (ACTIVE_CAPTURE_TASK) {
+    return t._key === ACTIVE_CAPTURE_TASK;
+  }
 
-    // correct date
-    if (t.dateKey !== dateKey) return false;
+  // correct driver
+  if (
+    String(t.driverId || "").trim().toUpperCase() !==
+    String(DRIVER_ID).trim().toUpperCase()
+  ) return false;
 
-    // hide completed
-    if (resolveStatus(t) === "COMPLETED") return false;
+  // correct date
+  if (t.dateKey !== dateKey) return false;
 
-    return true;
-  });
+  // hide completed
+  if (resolveStatus(t) === "COMPLETED") return false;
+
+  return true;
+});
 
   // job type filter
   if (jobTypeFilterInitialized && selectedJobTypes.size > 0) {
@@ -653,6 +658,8 @@ document.getElementById("syncBtn").onclick = async () => {
   }
 
   document.getElementById("uploadNote").style.display = "block";
+  const note = document.getElementById("uploadNote");
+  if (note) note.style.display = "block";
 
   const tasks = await getTasksFromIndexedDB();
 
@@ -694,6 +701,7 @@ document.getElementById("syncBtn").onclick = async () => {
 
   alert("✅ Sync complete.");
   document.getElementById("uploadNote").style.display = "none";
+  if (note) note.style.display = "none";
   loadTasks();
 };
 
@@ -1638,37 +1646,16 @@ function handleGPSError(err) {
 }
 
 function updateUploadCounter() {
-
   const el = document.getElementById("uploadCounter");
   const note = document.getElementById("uploadNote");
   const retryBtn = document.getElementById("retryUploadBtn");
   const refreshBtn = document.getElementById("refreshTasksBtn");
 
-  if (!el || !refreshBtn) return;
+  if (el) el.style.display = "none";
+  if (note) note.style.display = "none";
+  if (retryBtn) retryBtn.style.display = "none";
 
-  if (UPLOAD_QUEUE_COUNT > 0) {
-
-    // ✅ Show only counter
-    el.innerText = `⏫ Pending Uploads: ${UPLOAD_QUEUE_COUNT}`;
-    el.style.display = "block";
-
-    // ❌ Do NOT show upload-in-progress automatically
-    if (note) note.style.display = "none";
-    if (retryBtn) retryBtn.style.display = "none";
-
-    // ✅ Allow refresh even if there are pending uploads
-    refreshBtn.disabled = false;
-    refreshBtn.style.opacity = "1";
-    refreshBtn.innerText = "🔄 Download / Refresh Tasks";
-
-  } else {
-
-    el.innerText = "";
-    el.style.display = "none";
-
-    if (note) note.style.display = "none";
-    if (retryBtn) retryBtn.style.display = "none";
-
+  if (refreshBtn) {
     refreshBtn.disabled = false;
     refreshBtn.style.opacity = "1";
     refreshBtn.innerText = "🔄 Download / Refresh Tasks";
