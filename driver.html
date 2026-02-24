@@ -261,7 +261,7 @@ import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "htt
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "v4.0.15-WIP";
+const VERSION = "v4.0.16-WIP";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -1113,7 +1113,15 @@ cameraInput.onchange = async e => {
     cameraInput.value = "";
   }, 150);
   // ✅ LOCAL UI UPDATE ONLY — NO FULL RELOAD
-  applyFiltersOnly()
+    applyFiltersOnly();
+    
+    // ⬇️ Auto scroll to bottom of page after render
+    requestAnimationFrame(() => {
+      window.scrollTo({
+        top: document.body.scrollHeight,
+        behavior: "smooth"
+      });
+  });
   } catch (err) {
       console.error("📸 Camera handler crash:", err);
       alert("Camera error — please retry.");
