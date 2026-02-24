@@ -261,7 +261,7 @@ import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "htt
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "v4.0.3-WIP";
+const VERSION = "v4.0.4-WIP";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -1485,14 +1485,23 @@ async function loadTasks() {
     }
 
     // ===============================
-    // 2️⃣ SHOW CACHE IMMEDIATELY (FAST UI)
+    // 2️⃣ CACHE-FIRST STRICT MODE
     // ===============================
-    if (!FORCE_REDOWNLOAD && localTasks.length > 0) {
+    
+    const hasPendingLocal = localTasks.some(
+      t => resolveStatus(t) === "PENDING"
+    );
+    
+    if (!FORCE_REDOWNLOAD && hasPendingLocal) {
       TASKS_CACHE = sortTasksOfflineSafe(localTasks);
+    
       selectedJobTypes.clear();
       jobTypeFilterInitialized = false;
       renderJobTypeFilters(TASKS_CACHE);
       refreshUI();
+    
+      LOAD_IN_PROGRESS = false;
+      return; // ⛔ STOP — DO NOT FETCH FIREBASE
     }
 
     // ===============================
@@ -1709,20 +1718,17 @@ function updateRemainingCounter(tasks) {
 }  
 
   const INITIAL_RENDER_COUNT = 1;   // show 1 card immediately
-  function renderWithPagination(tasks) {
-  const signature = JSON.stringify(
-    tasks.map(t => `${t._key}_${resolveStatus(t)}`)
-  );
-
-  if (signature === LAST_RENDER_SIGNATURE && !FORCE_REDOWNLOAD) return;
-
-  LAST_RENDER_SIGNATURE = signature;
-
+ function renderWithPagination(tasks) {
   CURRENT_RENDER_LIST = tasks;
   RENDER_OFFSET = 0;
+
+  // Clear list safely
   taskList.innerHTML = "";
+
+  // Always re-attach sentinel at bottom
   taskList.appendChild(sentinel);
 
+  // Start rendering first chunk
   requestAnimationFrame(renderNextPage);
 }
 const RENDER_CHUNK_SIZE = 3;      // then render 3 per frame
@@ -1916,7 +1922,7 @@ async function renderNextPage() {
   RENDERING = true;
 
   const start = RENDER_OFFSET;
-  const end = Math.min(start + PAGE_SIZE, CURRENT_RENDER_LIST.length);
+  const end = Math.min(start + RENDER_CHUNK_SIZE, CURRENT_RENDER_LIST.length);
 
   for (let i = start; i < end; i++) {
     renderOneTask(CURRENT_RENDER_LIST[i]);
