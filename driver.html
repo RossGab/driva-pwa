@@ -261,7 +261,7 @@ import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "htt
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "v4.0.9-WIP";
+const VERSION = "v4.0.10-WIP";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -1165,7 +1165,7 @@ cameraInput.onchange = async e => {
   ACTIVE_CAPTURE_TASK = null;
   
   removeTaskFromUI(taskKey);
-  applyFiltersOnly();
+  
   
   submitLock[taskKey] = false;
   if (btn) {
@@ -1512,16 +1512,20 @@ async function loadTasks() {
       }
 
     if (!freshTasks.length) {
-      if (!localTasks.length) {
+
         TASKS_CACHE = [];
-        updateRemainingCounter([]);
-        updateUploadCounter([]);
+        selectedJobTypes.clear();
+        jobTypeFilterInitialized = false;
         toggleJobTypeFilter(false);
+      
+        updateRemainingCounter([]);
+        updateUploadCounter();
+      
         showMessage("📭 No tasks found for selected date.");
+      
+        LOAD_IN_PROGRESS = false;
+        return;
       }
-      LOAD_IN_PROGRESS = false;
-      return;
-    }
 
     // ===============================
     // 4️⃣ SAVE TO INDEXEDDB
@@ -1703,7 +1707,7 @@ async function updateRemainingCounter(tasks) {
 
     // 🔥 Safety kick
     if (
-      document.documentElement.scrollHeight <= window.innerHeight + 150
+      document.documentElement.scrollHeight <= window.innerHeight + 250
     ) {
       renderNextPage();
     }
@@ -2039,6 +2043,16 @@ const observer = new IntersectionObserver(entries => {
 });
 
 observer.observe(sentinel);
+// 🔥 Extra scroll fallback
+window.addEventListener("scroll", () => {
+  if (
+    !RENDERING &&
+    RENDER_OFFSET < CURRENT_RENDER_LIST.length &&
+    window.innerHeight + window.scrollY >= document.body.offsetHeight - 400
+  ) {
+    renderNextPage();
+  }
+});
 
 function dedupeTasks(tasks) {
   const map = new Map();
@@ -2144,7 +2158,7 @@ setTimeout(() => {
 
     BOOT_WATCHDOG_FIRED = true;
   }
-}, 15000);
+}, 20000);
 
 // 🧹 BOOT CLEANUP — REMOVE COMPLETED TASKS FROM INDEXEDDB
 (async () => {
