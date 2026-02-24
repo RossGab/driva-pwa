@@ -1,19 +1,19 @@
-const CACHE_VERSION = "v5";
+const CACHE_VERSION = "v6";
 const CACHE_NAME = `field-task-app-${CACHE_VERSION}`;
 
-// const APP_SHELL = [
-//   "./driver.html",
-//   "./",
-//   "./install.html",
-//   "./manifest.json",
-//   "./logo.jpg",
-//   "./icon-192.png",
-//   "./icon-512.png"
-// ];
+const APP_SHELL = [
+  "./",
+  "./driver.html",
+  "./manifest.json",
+  "./icon-192.png",
+  "./icon-512.png"
+];
 
 self.addEventListener("install", event => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then(cache => cache.addAll(APP_SHELL))
+    caches.open(CACHE_NAME).then(cache => {
+      return cache.addAll(APP_SHELL);
+    })
   );
   self.skipWaiting();
 });
@@ -32,24 +32,35 @@ self.addEventListener("activate", event => {
 self.addEventListener("fetch", event => {
   const { request } = event;
 
-  // ✅ PAGE NAVIGATION: always fallback to driver.html
+  // 🔹 Navigation requests (page loads)
   if (request.mode === "navigate") {
     event.respondWith(
-      fetch(request).catch(async () => {
-        const cached = await caches.match("./driver.html");
-        return cached || new Response(
-          "<h1>Offline</h1><p>Please reconnect once.</p>",
-          { headers: { "Content-Type": "text/html" } }
-        );
-      })
+      fetch(request)
+        .then(response => {
+          const copy = response.clone();
+          caches.open(CACHE_NAME).then(cache => {
+            cache.put("./driver.html", copy);
+          });
+          return response;
+        })
+        .catch(() => caches.match("./driver.html"))
     );
     return;
   }
 
-  // ✅ ASSET FETCH: cache-first
+  // 🔹 Assets (CSS, JS, images)
   event.respondWith(
-    caches.match(request).then(
-      cached => cached || fetch(request)
-    )
+    caches.match(request).then(cached => {
+      return (
+        cached ||
+        fetch(request).then(response => {
+          const copy = response.clone();
+          caches.open(CACHE_NAME).then(cache => {
+            cache.put(request, copy);
+          });
+          return response;
+        })
+      );
+    })
   );
 });
