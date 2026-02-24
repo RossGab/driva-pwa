@@ -261,7 +261,7 @@ import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "htt
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "v4.0.12-WIP";
+const VERSION = "v4.0.13-WIP";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -652,6 +652,8 @@ document.getElementById("syncBtn").onclick = async () => {
     return;
   }
 
+  document.getElementById("uploadNote").style.display = "block";
+
   const tasks = await getTasksFromIndexedDB();
 
   const completed = tasks.filter(t =>
@@ -691,6 +693,7 @@ document.getElementById("syncBtn").onclick = async () => {
   }
 
   alert("✅ Sync complete.");
+  document.getElementById("uploadNote").style.display = "none";
   loadTasks();
 };
 
@@ -1645,15 +1648,18 @@ function updateUploadCounter() {
 
   if (UPLOAD_QUEUE_COUNT > 0) {
 
+    // ✅ Show only counter
     el.innerText = `⏫ Pending Uploads: ${UPLOAD_QUEUE_COUNT}`;
     el.style.display = "block";
 
-    if (note) note.style.display = "block";
-    if (retryBtn) retryBtn.style.display = "block";
+    // ❌ Do NOT show upload-in-progress automatically
+    if (note) note.style.display = "none";
+    if (retryBtn) retryBtn.style.display = "none";
 
-    refreshBtn.disabled = true;
-    refreshBtn.style.opacity = "0.6";
-    refreshBtn.innerText = "⏳ Upload in progress…";
+    // ✅ Allow refresh even if there are pending uploads
+    refreshBtn.disabled = false;
+    refreshBtn.style.opacity = "1";
+    refreshBtn.innerText = "🔄 Download / Refresh Tasks";
 
   } else {
 
@@ -2183,17 +2189,6 @@ function markTaskCompletedInCache(taskKey) {
   }
 }
 
-let startY = 0;
-
-window.addEventListener(
-  "touchstart",
-  e => {
-    if (e.touches.length === 1) {
-      startY = e.touches[0].clientY;
-    }
-  },
-  { passive: true }
-);
 
 window.handleDeliveryMethod = async function(taskKey, jobType, method) {
   if (!BILLING_CACHE[taskKey]) BILLING_CACHE[taskKey] = {};
@@ -2296,19 +2291,6 @@ window.handleRadioTrigger = async function(taskKey, jobType, method, radioKey) {
   html += `</div>`;
   box.innerHTML = html;
 };
-  
-window.addEventListener(
-  "touchmove",
-  e => {
-    const y = e.touches[0].clientY;
-    const pullingDown = y > startY;
-
-    if (pullingDown && window.scrollY === 0) {
-      e.preventDefault();
-    }
-  },
-  { passive: false }
-);
   
 </script>
 
