@@ -261,7 +261,7 @@ import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "htt
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "v4.0.1-WIP";
+const VERSION = "v4.0.2-WIP";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -278,7 +278,7 @@ const PAGE_SIZE = 10;   // Instagram-like chunk
 let CURRENT_RENDER_LIST = [];
 let IS_DOWNLOADING = false;
 let LAST_RENDER_SIGNATURE = "";
-let OFFLINE_REPLAY_RUNNING = false;
+
 
 
 
@@ -296,9 +296,6 @@ const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 const storage = getStorage(app);
 
-const QUEUE_KEY = "offlineQueue";
-const processingMap = {};
-const uploadingMap = {};
 const DB_NAME = "driver_uploads";
 const DB_VERSION = 4; // ⬅️ bump version ONCE
 const STORE = "photos";
@@ -911,9 +908,6 @@ function updateNetwork() {
 window.addEventListener("offline", updateNetwork);
 updateNetwork();
 
-/* ===== QUEUE ===== */
-const getQueue = () => JSON.parse(localStorage.getItem(QUEUE_KEY) || "[]");
-const setQueue = q => localStorage.setItem(QUEUE_KEY, JSON.stringify(q));
 
 /* ===== IMAGE ===== */
 function compressImage(file, gps, takenAt) {
@@ -1250,25 +1244,17 @@ function updateRefreshLock() {
     enablePullToRefresh();
   }
 }
-  
-  
+
 function resolveStatus(task) {
   if (task.status === "COMPLETED") return "COMPLETED";
+  if (task.status === "LOCAL_COMPLETED") return "LOCAL_COMPLETED";
 
   const p = PHOTO_BUFFER[task._key];
+  if (p && Object.keys(p).length > 0) return "READY";
 
-  if (p) {
-    const count = Object.keys(p).length;
-
-    if (count > 0) return "READY";   // 🔥 ANY photo makes task ready
-  }
-
-  if (processingMap[task._key]) return "PROCESSING";
-  if (uploadingMap[task._key]) return "UPLOADING";
-  if (task.status === "OFFLINE_PENDING") return "SYNC_PENDING";
-
-  return task.status || "PENDING";
+  return "PENDING";
 }
+ 
 
 function removeTaskFromUI(taskKey) {
   TASKS_CACHE = TASKS_CACHE.filter(t => t._key !== taskKey);
@@ -2351,129 +2337,6 @@ function markTaskCompletedInCache(taskKey) {
     t.status = "COMPLETED";
   }
 }
-  
-async function processOfflineQueue() {
-  const dbg = await getAllPhotosFromDB();
-    
-  if (OFFLINE_REPLAY_RUNNING) return;
-      OFFLINE_REPLAY_RUNNING = true;
-    
-      try {
-        if (!navigator.onLine || !canUploadNow()) {
-      console.log("⏸ Upload paused — will retry");
-      OFFLINE_REPLAY_RUNNING = false;
-    
-      
-      return;
-    }
-
-    const records = (await getAllPhotosFromDB())
-      .filter(r => r.submitIntent !== false);
-    if (!records.length) {
-      OFFLINE_REPLAY_RUNNING = false;
-      updateRefreshLock()
-      return;
-    }
-
-    // ✅ GROUP BY TASK
-    const grouped = {};
-    for (const r of records) {
-      if (!grouped[r.taskKey]) grouped[r.taskKey] = [];
-      grouped[r.taskKey].push(r);
-    }
-
-    for (const taskKey of Object.keys(grouped)) {
-      if (!canUploadNow()) break;
-
-      await update(ref(db, `tasks/${taskKey}`), {
-        lastUploadAttemptAt: new Date().toISOString()
-      });
-      
-      const photos = grouped[taskKey]
-        .sort((a, b) => a.photoIndex - b.photoIndex);
-
-      uploadingMap[taskKey] = true;
-      //loadTasks();
-
-      for (let i = 0; i < photos.length; i++) {
-        const p = photos[i];
-        const isLast = i === photos.length - 1;
-
-        try {
-          await new Promise(r => setTimeout(r, 120));
-          
-          await uploadNow(
-            p.taskKey,
-            p.blob,
-            p.takenAt,
-            null,
-            p.deliveryData || {},
-            p.gps,
-            p.photoIndex,
-            isLast
-          );
-
-          await deletePhotoFromDB(p.id);
-          if (p.previewURL) {
-            URL.revokeObjectURL(p.previewURL);
-          }
-
-        } catch (e) {
-            console.error("❌ Upload failed", p.taskKey, p.photoIndex, e);
-          
-            // ✅ CLEAN UP STATE SO UI DOES NOT GET STUCK
-            delete uploadingMap[p.taskKey];
-            delete processingMap[p.taskKey];
-            updateRefreshLock()
-            loadTasks();
-          
-            continue; // ⛔ stop this task, retry later
-          }
-      }
-
-      
-
-      delete uploadingMap[taskKey];
-      delete processingMap[taskKey];
-      // 🔥 REMOVE THIS TASK FROM QUEUE
-      let q = getQueue().filter(x => x.taskKey !== taskKey);
-      setQueue(q);
-      //loadTasks();
-      updateRefreshLock();
-    }
-    checkStorageQuota();
-
-    const remaining = await getAllPhotosFromDB();
-    if (!remaining.length) {
-      setQueue([]);
-    }
-    
-    // ✅ FINAL UI SYNC
-    updateUploadCounter(TASKS_CACHE);
-    updateRemainingCounter(TASKS_CACHE);
-        updateRefreshLock();
-
-  } finally {
-    OFFLINE_REPLAY_RUNNING = false;
-  }
-}
-
-window.manualRetryUploads = async function () {
-  if (OFFLINE_REPLAY_RUNNING) {
-    alert("⏳ Upload already in progress");
-    return;
-  }
-
-  if (!navigator.onLine) {
-    alert("📴 You are offline. Connect to the internet first.");
-    return;
-  }
-
-  alert("🔁 Retrying pending uploads…\n\nPlease keep the app open.");
-
-  await processOfflineQueue();
-  loadTasks();
-};
 
 let startY = 0;
 
