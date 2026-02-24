@@ -261,7 +261,7 @@ import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "htt
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "v4.0.4-WIP";
+const VERSION = "v4.0.5-WIP";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -1488,11 +1488,9 @@ async function loadTasks() {
     // 2️⃣ CACHE-FIRST STRICT MODE
     // ===============================
     
-    const hasPendingLocal = localTasks.some(
-      t => resolveStatus(t) === "PENDING"
-    );
+    const hasLocalTasks = localTasks.length > 0;
     
-    if (!FORCE_REDOWNLOAD && hasPendingLocal) {
+    if (!FORCE_REDOWNLOAD && hasLocalTasks) {
       TASKS_CACHE = sortTasksOfflineSafe(localTasks);
     
       selectedJobTypes.clear();
