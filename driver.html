@@ -261,7 +261,7 @@ import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "htt
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "v4.0.7-WIP";
+const VERSION = "v4.0.8-WIP";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -410,6 +410,7 @@ function hasCachedTasksForDate(tasks, selectedDate) {
 let SEARCH_TERM = "";
 let searchTimer
 let TASKS_CACHE = [];
+let UPLOAD_QUEUE_COUNT = 0;
 const dateFilter = document.getElementById("dateFilter");
 
 const STORAGE_WARNING_THRESHOLD_MB = 300; // warn below 300 MB
@@ -508,7 +509,7 @@ function applyFiltersOnly() {
 
   renderWithPagination(tasks);
   updateRemainingCounter(tasks);
-  updateUploadCounter(tasks);
+  updateUploadCounter();
 }
 
 function isBusy() {
@@ -1132,6 +1133,8 @@ cameraInput.onchange = async e => {
     driverId: DRIVER_ID,
     dateKey: dateFilter.value.replace(/-/g, "")
   }]);
+  UPLOAD_QUEUE_COUNT++;
+  updateUploadCounter();
 
   // 🔓 MARK ALL INDEXEDDB PHOTOS FOR THIS TASK AS SUBMITTED
     const dbi = await openDB();
@@ -1376,8 +1379,9 @@ async function uploadNow(
   if (isLastPhoto) {
     await deleteTaskFromIndexedDB(taskKey);
     markTaskCompletedInCache(taskKey);
-    updateUploadCounter(TASKS_CACHE);
-    updateRemainingCounter(TASKS_CACHE);
+    UPLOAD_QUEUE_COUNT = Math.max(0, UPLOAD_QUEUE_COUNT - 1);
+    updateUploadCounter();
+    updateRemainingCounter(CURRENT_RENDER_LIST);
     removeTaskFromUI(taskKey);
   }
   // ✅ THIS WAS MISSING
@@ -1456,6 +1460,13 @@ async function loadTasks() {
     // 1️⃣ ALWAYS READ INDEXEDDB FIRST
     // ===============================
     const cached = await getTasksFromIndexedDB();
+    // 🔥 Calculate upload queue once
+    UPLOAD_QUEUE_COUNT = cached.filter(t =>
+      String(t.driverId || "").trim().toUpperCase() ===
+      String(DRIVER_ID).trim().toUpperCase() &&
+      t.status === "LOCAL_COMPLETED"
+    ).length;
+    updateUploadCounter();
 
     const localTasks = cached.filter(t =>
       t.dateKey === dateKey &&
@@ -1689,17 +1700,7 @@ function handleGPSError(err) {
   if (gpsStatus) gpsStatus.innerText = msg;
 }
 
-function updateUploadCounter(tasks) {
-  if (!Array.isArray(tasks)) return;
-
-  const uploadingCount = tasks.filter(t => {
-    const status = resolveStatus(t);
-    return (
-      status === "SYNC_PENDING" ||
-      status === "PROCESSING" ||
-      status === "UPLOADING"
-    );
-  }).length;
+function updateUploadCounter() {
 
   const el = document.getElementById("uploadCounter");
   const note = document.getElementById("uploadNote");
@@ -1708,56 +1709,54 @@ function updateUploadCounter(tasks) {
 
   if (!el || !refreshBtn) return;
 
-  if (uploadingCount > 0) {
-    // 🔼 Upload UI
-    el.innerText = `⏫ Pending Uploads: ${uploadingCount}`;
+  if (UPLOAD_QUEUE_COUNT > 0) {
+
+    el.innerText = `⏫ Pending Uploads: ${UPLOAD_QUEUE_COUNT}`;
     el.style.display = "block";
 
     if (note) note.style.display = "block";
     if (retryBtn) retryBtn.style.display = "block";
 
-    // 🔒 LOCK REFRESH
     refreshBtn.disabled = true;
     refreshBtn.style.opacity = "0.6";
     refreshBtn.innerText = "⏳ Upload in progress…";
 
   } else {
-    // ✅ Clear upload UI
+
     el.innerText = "";
     el.style.display = "none";
 
     if (note) note.style.display = "none";
     if (retryBtn) retryBtn.style.display = "none";
 
-    // 🔓 UNLOCK REFRESH
     refreshBtn.disabled = false;
     refreshBtn.style.opacity = "1";
     refreshBtn.innerText = "🔄 Download / Refresh Tasks";
   }
 }
   
-function updateRemainingCounter(tasks) {
-  const selectedDate =
-    document.getElementById("dateFilter")?.value;
+async function updateRemainingCounter(tasks) {
 
+  const selectedDate = document.getElementById("dateFilter")?.value;
   if (!selectedDate) return;
 
+  const dateKey = selectedDate.replace(/-/g, "");
+
   const remaining = tasks.filter(t => {
-    const status = resolveStatus(t);
+    if (resolveStatus(t) !== "PENDING") return false;
+    if (t.dateKey !== dateKey) return false;
 
-    // ✅ pending only
-    if (status !== "PENDING") return false;
-
-    // ✅ must match selected date
-    const dateKey = selectedDate.replace(/-/g, "");
-      if (t.dateKey !== dateKey) return false;
-
-    return true;
+    return (
+      String(t.driverId || "").trim().toUpperCase() ===
+      String(DRIVER_ID).trim().toUpperCase()
+    );
   }).length;
 
   const el = document.getElementById("taskCounter");
-  if (el && !IS_DOWNLOADING) {
-    el.innerText = `📄 Remaining Tasks: ${remaining}`;
+
+  if (el) {
+    el.innerHTML =
+      `📄 Remaining: ${remaining} &nbsp;&nbsp; | &nbsp;&nbsp; ⏫ Total For Upload: ${UPLOAD_QUEUE_COUNT}`;
   }
 }  
 
