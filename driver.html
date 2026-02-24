@@ -143,6 +143,20 @@ img { width:100%;margin-top:8px;border-radius:6px; }
 >
   🔄 Download / Refresh Tasks
 </button>
+<button id="syncBtn"
+  style="
+    width:100%;
+    padding:10px;
+    margin-bottom:10px;
+    border-radius:6px;
+    border:none;
+    font-size:14px;
+    font-weight:bold;
+    background:#2ecc71;
+    color:#fff;
+  ">
+  🔄 Sync Completed Tasks
+</button>
 <div id="offlineBanner">⚠ Offline — photos will upload automatically</div>
   <div id="storageBanner"
   style="
@@ -247,7 +261,7 @@ import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "htt
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "v3.5.16.13.31-WIP";
+const VERSION = "v4.0.1-WIP";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -633,6 +647,53 @@ async function loadDriverUI(jobType) {
 
 //   return data;
 // }
+document.getElementById("syncBtn").onclick = async () => {
+  if (!navigator.onLine) {
+    alert("📴 Connect to internet first.");
+    return;
+  }
+
+  const tasks = await getTasksFromIndexedDB();
+
+  const completed = tasks.filter(t =>
+    t.status === "LOCAL_COMPLETED" &&
+    t.driverId === DRIVER_ID
+  );
+
+  if (!completed.length) {
+    alert("No completed tasks to sync.");
+    return;
+  }
+
+  if (!confirm(`Upload ${completed.length} completed tasks?`)) return;
+
+  for (const task of completed) {
+    const photos = await getAllPhotosFromDB();
+    const related = photos.filter(p => p.taskKey === task._key);
+
+    for (let i = 0; i < related.length; i++) {
+      const p = related[i];
+
+      await uploadNow(
+        p.taskKey,
+        p.blob,
+        p.takenAt,
+        null,
+        p.deliveryData || {},
+        p.gps,
+        p.photoIndex,
+        i === related.length - 1
+      );
+
+      await deletePhotoFromDB(p.id);
+    }
+
+    await deleteTaskFromIndexedDB(task._key);
+  }
+
+  alert("✅ Sync complete.");
+  loadTasks();
+};
 
 function disablePullToRefresh() {
   document.body.style.overscrollBehaviorY = "contain";
@@ -847,7 +908,6 @@ function startGPSTracking(driverId) {
 function updateNetwork() {
   offlineBanner.style.display = navigator.onLine ? "none" : "block";
 }
-window.addEventListener("online", updateNetwork);
 window.addEventListener("offline", updateNetwork);
 updateNetwork();
 
@@ -1067,7 +1127,9 @@ cameraInput.onchange = async e => {
 
   await saveTasksToIndexedDB([{
     _key: taskKey,
-    status: "OFFLINE_PENDING"
+    status: "LOCAL_COMPLETED",
+    driverId: DRIVER_ID,
+    dateKey: dateFilter.value.replace(/-/g, "")
   }]);
 
   // 🔓 MARK ALL INDEXEDDB PHOTOS FOR THIS TASK AS SUBMITTED
@@ -1110,8 +1172,6 @@ cameraInput.onchange = async e => {
     btn.innerText = "✅ Submit Task";
   }
   
-  // 🚀 Let background uploader handle it
-  setTimeout(processOfflineQueue, 1500);
   
   return;
 
@@ -2285,30 +2345,6 @@ await pruneOldTasks();
 loadTasks();
 
 
-// 🔁 Resume offline uploads AFTER UI is ready
-setTimeout(processOfflineQueue, 1500);
-
-
-
-// 🔁 Resume uploads when app returns to foreground
-document.addEventListener("visibilitychange", () => {
-  if (!document.hidden) {
-    processOfflineQueue();
-  }
-});
-
-// 🔁 Resume uploads when app gains focus
-window.addEventListener("focus", () => {
-  processOfflineQueue();
-});
-
-// 🔁 Safety retry while app is open
-setInterval(() => {
-  if (!OFFLINE_REPLAY_RUNNING && canUploadNow()) {
-    processOfflineQueue();
-  }
-}, 15000);
-
 function markTaskCompletedInCache(taskKey) {
   const t = TASKS_CACHE.find(x => x._key === taskKey);
   if (t) {
@@ -2327,8 +2363,7 @@ async function processOfflineQueue() {
       console.log("⏸ Upload paused — will retry");
       OFFLINE_REPLAY_RUNNING = false;
     
-      // 🔁 auto-retry later even if no network event fires
-      setTimeout(processOfflineQueue, 5000);
+      
       return;
     }
 
@@ -2439,11 +2474,6 @@ window.manualRetryUploads = async function () {
   await processOfflineQueue();
   loadTasks();
 };
-
-window.addEventListener("online", async () => {
-  await processOfflineQueue();
-  loadTasks();
-});
 
 let startY = 0;
 
