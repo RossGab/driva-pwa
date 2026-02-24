@@ -261,7 +261,7 @@ import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "htt
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "v4.0.11-WIP";
+const VERSION = "v4.0.12-WIP";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -1125,6 +1125,7 @@ cameraInput.onchange = async e => {
     driverId: DRIVER_ID,
     dateKey: dateFilter.value.replace(/-/g, "")
   }]);
+    
   const cached = await getTasksFromIndexedDB();
   UPLOAD_QUEUE_COUNT = cached.filter(t =>
     t.status === "LOCAL_COMPLETED" &&
@@ -1172,6 +1173,7 @@ cameraInput.onchange = async e => {
   
   
   return;
+  }
 
 /* ===== CAMERA ===== */
 
