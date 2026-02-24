@@ -261,7 +261,7 @@ import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "htt
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "v4.0.16-WIP";
+const VERSION = "v4.0.17-WIP";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -453,7 +453,7 @@ function getTodayPH() {
 
 dateFilter.value = getTodayPH();
 
-dateFilter.addEventListener("change", () => {
+dateFilter.addEventListener("change", async () => {
 
   // 🔒 Reset capture mode
   ACTIVE_CAPTURE_TASK = null;
@@ -462,9 +462,15 @@ dateFilter.addEventListener("change", () => {
   selectedJobTypes.clear();
   jobTypeFilterInitialized = false;
 
-  // 🧹 Clear UI immediately
+  // 🧹 Clear job type UI immediately
+  const jobTypeOptions = document.getElementById("jobTypeOptions");
+  if (jobTypeOptions) jobTypeOptions.innerHTML = "";
+  toggleJobTypeFilter(false);
+
+  // 🧹 Clear render state
   CURRENT_RENDER_LIST = [];
   RENDER_OFFSET = 0;
+
   taskList.innerHTML = `
     <div style="padding:20px;text-align:center;font-size:14px;">
       ⏳ Please wait... Loading tasks
@@ -472,12 +478,17 @@ dateFilter.addEventListener("change", () => {
   `;
   taskList.appendChild(sentinel);
 
-  // Reset counters immediately
+  // ✅ Immediately show 0 remaining but KEEP upload count
   const counter = document.getElementById("taskCounter");
-  if (counter) counter.innerHTML = "";
+  if (counter) {
+    counter.innerHTML =
+      `📄 Remaining: 0 &nbsp;&nbsp; | &nbsp;&nbsp; ⏫ Total For Upload: ${UPLOAD_QUEUE_COUNT}`;
+  }
 
-  // 🚀 Load new date
-  loadTasks();
+  // 🚀 Load new date (next frame so UI paints first)
+  requestAnimationFrame(() => {
+    loadTasks();
+  });
 });
 
 function normalizeDatePH(dateStr) {
