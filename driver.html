@@ -261,7 +261,7 @@ import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "htt
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "v4.0.8-WIP";
+const VERSION = "v4.0.9-WIP";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -274,12 +274,10 @@ let jobTypeFilterInitialized = false;
 let LAST_KNOWN_GPS = null;
 let LOAD_IN_PROGRESS = false;
 let RENDER_OFFSET = 0;
-const PAGE_SIZE = 10;   // Instagram-like chunk
 let CURRENT_RENDER_LIST = [];
 let IS_DOWNLOADING = false;
 let LAST_RENDER_SIGNATURE = "";
-const processingMap = {};
-const uploadingMap = {};
+
 
 
 
@@ -369,8 +367,8 @@ async function saveTasksToIndexedDB(tasks) {
 async function getTasksFromIndexedDB() {
   const db = await openDB();
   return new Promise(resolve => {
-    const tx = db.transaction("tasks", "readonly");
-    const req = tx.objectStore("tasks").getAll();
+    const tx = db.transaction(TASK_STORE, "readonly");
+    const req = tx.objectStore(TASK_STORE).getAll();
     req.onsuccess = () => resolve(req.result || []);
   });
 }
@@ -393,8 +391,8 @@ async function deletePhotoFromDB(id) {
 
 async function deleteTaskFromIndexedDB(taskKey) {
   const db = await openDB();
-  const tx = db.transaction("tasks", "readwrite");
-  tx.objectStore("tasks").delete(taskKey);
+  const tx = db.transaction(TASK_STORE, "readwrite");
+  tx.objectStore(TASK_STORE).delete(taskKey);
 }
 
 function hasCachedTasksForDate(tasks, selectedDate) {
@@ -510,14 +508,6 @@ function applyFiltersOnly() {
   renderWithPagination(tasks);
   updateRemainingCounter(tasks);
   updateUploadCounter();
-}
-
-function isBusy() {
-  return (
-    OFFLINE_REPLAY_RUNNING ||
-    Object.keys(processingMap).length > 0 ||
-    Object.keys(uploadingMap).length > 0
-  );
 }
 
 const searchBox = document.getElementById("searchBox");
@@ -700,13 +690,6 @@ document.getElementById("syncBtn").onclick = async () => {
   loadTasks();
 };
 
-function disablePullToRefresh() {
-  document.body.style.overscrollBehaviorY = "contain";
-}
-
-function enablePullToRefresh() {
-  document.body.style.overscrollBehaviorY = "";
-}
   
 function toggleJobTypeFilter(show) {
   const box = document.getElementById("jobTypeFilter");
@@ -916,6 +899,18 @@ function updateNetwork() {
 window.addEventListener("offline", updateNetwork);
 updateNetwork();
 
+function showMessage(message) {
+  CURRENT_RENDER_LIST = [];
+  RENDER_OFFSET = 0;
+
+  taskList.innerHTML = `
+    <div style="padding:20px;text-align:center;font-size:14px;">
+      ${message}
+    </div>
+  `;
+
+  taskList.appendChild(sentinel);
+}
 
 /* ===== IMAGE ===== */
 function compressImage(file, gps, takenAt) {
@@ -1101,7 +1096,7 @@ cameraInput.onchange = async e => {
 
   if (btn) {
     btn.disabled = true;
-    btn.innerText = "⏳ Uploading...";
+    btn.innerText = "📦 Saved Locally";
   }
 
   const photos = PHOTO_BUFFER[taskKey];
@@ -1133,7 +1128,12 @@ cameraInput.onchange = async e => {
     driverId: DRIVER_ID,
     dateKey: dateFilter.value.replace(/-/g, "")
   }]);
-  UPLOAD_QUEUE_COUNT++;
+  const cached = await getTasksFromIndexedDB();
+  UPLOAD_QUEUE_COUNT = cached.filter(t =>
+    t.status === "LOCAL_COMPLETED" &&
+    String(t.driverId).toUpperCase() === DRIVER_ID.toUpperCase()
+  ).length;
+  
   updateUploadCounter();
 
   // 🔓 MARK ALL INDEXEDDB PHOTOS FOR THIS TASK AS SUBMITTED
@@ -1164,11 +1164,8 @@ cameraInput.onchange = async e => {
   delete PHOTO_BUFFER[taskKey];
   ACTIVE_CAPTURE_TASK = null;
   
-  delete processingMap[taskKey];
-  delete uploadingMap[taskKey];
-  updateRefreshLock();
-  
-  loadTasks();
+  removeTaskFromUI(taskKey);
+  applyFiltersOnly();
   
   submitLock[taskKey] = false;
   if (btn) {
@@ -1178,54 +1175,6 @@ cameraInput.onchange = async e => {
   
   
   return;
-
-  // ==============================
-  // ✅ ONLINE MODE (CURRENT FLOW)
-  // ==============================
-
-  processingMap[taskKey] = true;
-  loadTasks();
-
-  try {
-    const indices = Object.keys(photos).map(Number).sort((a,b)=>a-b);
-  
-    for (const i of indices) {
-      const p = photos[i];
-  
-      await uploadNow(
-        taskKey,
-        p.blob,
-        p.takenAt,
-        null,
-        p.deliveryData,
-        p.gps,
-        i,
-        i === indices[indices.length - 1]   // ✅ last upload flag
-      );
-    }
-
-    // 🧠 FREE ALL PREVIEW MEMORY AFTER SUBMIT
-    if (PHOTO_BUFFER[taskKey]) {
-      Object.values(PHOTO_BUFFER[taskKey]).forEach(p => {
-        if (p.previewURL) URL.revokeObjectURL(p.previewURL);
-      });
-    }
-    
-    delete PHOTO_BUFFER[taskKey];
-    delete processingMap[taskKey];
-    ACTIVE_CAPTURE_TASK = null;
-    updateRefreshLock();
-    
-    loadTasks();
-
-  } catch (e) {
-    console.error(e);
-    alert("❌ Upload failed.");
-  }
-
-  delete submitLock[taskKey];
-};
-
 
 /* ===== CAMERA ===== */
 
@@ -1245,22 +1194,9 @@ function saveToGallery(blob, filename) {
 
 window.CURRENT_TASK = null;
 
-
-  
-function updateRefreshLock() {
-  if (isBusy()) {
-    disablePullToRefresh();
-  } else {
-    enablePullToRefresh();
-  }
-}
-
 function resolveStatus(task) {
   if (task.status === "COMPLETED") return "COMPLETED";
   if (task.status === "LOCAL_COMPLETED") return "SYNC_PENDING";
-
-  if (uploadingMap[task._key]) return "UPLOADING";
-  if (processingMap[task._key]) return "PROCESSING";
 
   const p = PHOTO_BUFFER[task._key];
   if (p && Object.keys(p).length > 0) return "READY";
@@ -1381,13 +1317,9 @@ async function uploadNow(
     markTaskCompletedInCache(taskKey);
     UPLOAD_QUEUE_COUNT = Math.max(0, UPLOAD_QUEUE_COUNT - 1);
     updateUploadCounter();
-    updateRemainingCounter(CURRENT_RENDER_LIST);
+    applyFiltersOnly();
     removeTaskFromUI(taskKey);
   }
-  // ✅ THIS WAS MISSING
-  delete processingMap[taskKey];
-  delete uploadingMap[taskKey];
-  updateRefreshLock()
   
 
   // ===============================
@@ -1425,7 +1357,6 @@ if (isLastPhoto) {
   delete forms[taskKey];
   saveFormCache(forms);
   
-  updateRefreshLock();
 }
 
 async function preloadDriverUIConfig(tasks) {
@@ -1448,7 +1379,7 @@ async function loadTasks() {
 
   const selectedDate = dateFilter.value;
   if (!selectedDate) {
-    taskList.innerHTML = "Select a date.";
+    showMessage("Select a date.");
     LOAD_IN_PROGRESS = false;
     return;
   }
@@ -1479,11 +1410,10 @@ async function loadTasks() {
       // 🔒 OFFLINE MODE
       if (!localTasks.length) {
         TASKS_CACHE = [];
-        renderWithPagination([]);
-        updateRemainingCounter([]);
-        updateUploadCounter([]);
         toggleJobTypeFilter(false);
-        taskList.innerHTML = "📭 No tasks found for selected date.";
+        updateRemainingCounter([]);
+        updateUploadCounter();
+        showMessage("📭 No tasks found for selected date.");
         LOAD_IN_PROGRESS = false;
         return;
       }
@@ -1523,20 +1453,28 @@ async function loadTasks() {
 
     if (!ids.length) {
 
-      if (!localTasks.length) {
+      if (localTasks.length) {
+        TASKS_CACHE = sortTasksOfflineSafe(localTasks);
+    
+        selectedJobTypes.clear();
+        jobTypeFilterInitialized = false;
+    
+        renderJobTypeFilters(TASKS_CACHE);
+        refreshUI();
+    
+      } else {
         TASKS_CACHE = [];
-        renderWithPagination([]);
+        toggleJobTypeFilter(false);
         updateRemainingCounter([]);
         updateUploadCounter([]);
-        toggleJobTypeFilter(false);
     
-        taskList.innerHTML = `
+        showMessage(`
           📭 No tasks found for selected date.<br><br>
           <small>
             Date: ${selectedDate}<br>
             Driver: ${DRIVER_ID}
           </small>
-        `;
+        `);
       }
     
       LOAD_IN_PROGRESS = false;
@@ -1562,12 +1500,13 @@ async function loadTasks() {
     let freshTasks = (await Promise.all(reads)).filter(Boolean);
 
     if (ids.length > 0 && freshTasks.length === 0) {
-        taskList.innerHTML = `
-          ⚠ Tasks exist for this date,
+        showMessage(`
+          ⚠ Tasks exist for this date,<br>
           but none assigned to Driver ID: <b>${DRIVER_ID}</b>
           <br><br>
           Check ⚙️ Driver ID setting.
-        `;
+        `);
+      
         LOAD_IN_PROGRESS = false;
         return;
       }
@@ -1575,11 +1514,10 @@ async function loadTasks() {
     if (!freshTasks.length) {
       if (!localTasks.length) {
         TASKS_CACHE = [];
-        renderWithPagination([]);
         updateRemainingCounter([]);
         updateUploadCounter([]);
         toggleJobTypeFilter(false);
-        taskList.innerHTML = "📭 No tasks found for selected date.";
+        showMessage("📭 No tasks found for selected date.");
       }
       LOAD_IN_PROGRESS = false;
       return;
@@ -1615,17 +1553,10 @@ async function loadTasks() {
     reason = err?.message || "Unknown error.";
   }
 
-  taskList.innerHTML = `
+  showMessage(`
     ⚠ <b>Failed to load tasks</b><br><br>
-    <div style="font-size:12px;opacity:.8">
-      ${reason}
-    </div>
-    <br>
-    <button onclick="loadTasks()"
-      style="padding:8px;border:none;border-radius:6px;background:#3498db;color:#fff">
-      🔄 Try Again
-    </button>
-  `;
+    ${reason}
+    `);
 }
 
   LOAD_IN_PROGRESS = false;
@@ -1652,7 +1583,7 @@ document.getElementById("refreshTasksBtn").onclick = async () => {
 
   FORCE_REDOWNLOAD = true;
 
-  taskList.innerHTML = "⏬ Downloading tasks…";
+  showMessage("⏬ Downloading tasks…");
 
   await loadTasks();
 
@@ -1760,19 +1691,23 @@ async function updateRemainingCounter(tasks) {
   }
 }  
 
-  const INITIAL_RENDER_COUNT = 1;   // show 1 card immediately
  function renderWithPagination(tasks) {
   CURRENT_RENDER_LIST = tasks;
   RENDER_OFFSET = 0;
 
-  // Clear list safely
   taskList.innerHTML = "";
-
-  // Always re-attach sentinel at bottom
   taskList.appendChild(sentinel);
 
-  // Start rendering first chunk
-  requestAnimationFrame(renderNextPage);
+  requestAnimationFrame(() => {
+    renderNextPage();
+
+    // 🔥 Safety kick
+    if (
+      document.documentElement.scrollHeight <= window.innerHeight + 150
+    ) {
+      renderNextPage();
+    }
+  });
 }
 const RENDER_CHUNK_SIZE = 3;      // then render 3 per frame
 
@@ -1910,13 +1845,9 @@ function renderOneTask(t) {
   if (status === "SYNC_PENDING") {
     html += `
       <div class="uploading">
-        📦 Saved safely — will auto-upload when signal is stable,keep app open while uploading
+        📦 Saved locally — press “Sync Completed Tasks” to upload
       </div>
     `;
-  }
-
-  if (status === "UPLOADING") {
-    html += `<div class="uploading">⏳ Uploading photo…</div>`;
   }
 
   if (status === "COMPLETED") {
@@ -1961,6 +1892,7 @@ let RENDERING = false;
 async function renderNextPage() {
   if (RENDERING) return;
   if (RENDER_OFFSET >= CURRENT_RENDER_LIST.length) return;
+  if (!document.body.contains(sentinel)) return;
 
   RENDERING = true;
 
@@ -1979,7 +1911,7 @@ async function renderNextPage() {
     const doc = document.documentElement;
 
     const notScrollable =
-    doc.scrollHeight <= window.innerHeight + 150;
+    doc.scrollHeight <= window.innerHeight + 200;
 
     if (
       notScrollable &&
@@ -2102,7 +2034,7 @@ const observer = new IntersectionObserver(entries => {
   }
 }, {
   root: null,
-  rootMargin: "300px",
+  rootMargin: "800px",
   threshold: 0
 });
 
@@ -2196,20 +2128,23 @@ async function validateDynamic(taskKey) {
 
   return true;
 } 
-  
-// ⏳ Prevent infinite loading screen (BOOT SAFETY)
+  // ⏳ Boot Safety (SAFE VERSION)
 setTimeout(() => {
   if (
     !BOOT_WATCHDOG_FIRED &&
-    taskList &&
-    taskList.innerText.includes("Loading")
+    CURRENT_RENDER_LIST.length === 0 &&
+    RENDER_OFFSET === 0 &&
+    LOAD_IN_PROGRESS === false &&
+    TASKS_CACHE.length === 0 // 🔥 critical extra guard
   ) {
-    taskList.innerHTML =
+    showMessage(
       "📭 No tasks found for selected date.<br><br>" +
-      "<small>If this is unexpected, open ⚙️ and verify Driver ID.</small>";
+      "<small>If this is unexpected, open ⚙️ and verify Driver ID.</small>"
+    );
+
     BOOT_WATCHDOG_FIRED = true;
   }
-}, 8000);
+}, 15000);
 
 // 🧹 BOOT CLEANUP — REMOVE COMPLETED TASKS FROM INDEXEDDB
 (async () => {
@@ -2355,7 +2290,7 @@ window.addEventListener(
     const y = e.touches[0].clientY;
     const pullingDown = y > startY;
 
-    if (pullingDown && window.scrollY === 0 && isBusy()) {
+    if (pullingDown && window.scrollY === 0) {
       e.preventDefault();
     }
   },
