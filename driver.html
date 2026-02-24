@@ -261,7 +261,7 @@ import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "htt
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "v4.0.17-WIP";
+const VERSION = "v4.0.17.1-WIP";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -1616,6 +1616,16 @@ async function loadTasks() {
 }
 
 document.getElementById("refreshTasksBtn").onclick = async () => {
+
+  // 🔒 BLOCK if there are pending uploads
+  if (UPLOAD_QUEUE_COUNT > 0) {
+    alert(
+      `⚠ You have ${UPLOAD_QUEUE_COUNT} task(s) waiting for upload.\n\n` +
+      "Please press 'Sync Completed Tasks' first before downloading new tasks."
+    );
+    return;
+  }
+
   if (!navigator.onLine) {
     alert("📴 You are offline.\n\nConnect to the internet to download tasks.");
     return;
