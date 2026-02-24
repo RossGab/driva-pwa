@@ -261,7 +261,7 @@ import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "htt
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "v4.0.5-WIP";
+const VERSION = "v4.0.6-WIP";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -1509,14 +1509,23 @@ async function loadTasks() {
     const ids = Object.keys(idsSnap.val() || {});
 
     if (!ids.length) {
+
       if (!localTasks.length) {
         TASKS_CACHE = [];
         renderWithPagination([]);
         updateRemainingCounter([]);
         updateUploadCounter([]);
         toggleJobTypeFilter(false);
-        taskList.innerHTML = "📭 No tasks found for selected date.";
+    
+        taskList.innerHTML = `
+          📭 No tasks found for selected date.<br><br>
+          <small>
+            Date: ${selectedDate}<br>
+            Driver: ${DRIVER_ID}
+          </small>
+        `;
       }
+    
       LOAD_IN_PROGRESS = false;
       return;
     }
@@ -1538,6 +1547,17 @@ async function loadTasks() {
     });
 
     let freshTasks = (await Promise.all(reads)).filter(Boolean);
+
+    if (ids.length > 0 && freshTasks.length === 0) {
+        taskList.innerHTML = `
+          ⚠ Tasks exist for this date,
+          but none assigned to Driver ID: <b>${DRIVER_ID}</b>
+          <br><br>
+          Check ⚙️ Driver ID setting.
+        `;
+        LOAD_IN_PROGRESS = false;
+        return;
+      }
 
     if (!freshTasks.length) {
       if (!localTasks.length) {
@@ -1566,10 +1586,34 @@ async function loadTasks() {
     refreshUI();
 
   } catch (err) {
-    console.error("❌ loadTasks error:", err);
-    taskList.innerHTML =
-      "⚠ Failed to load tasks.<br><br>Check internet or tap Refresh.";
+  console.error("❌ loadTasks error:", err);
+
+  let reason = "";
+
+  if (!navigator.onLine) {
+    reason = "📴 You are offline.";
+  } else if (err?.message?.includes("permission")) {
+    reason = "🔒 Permission denied. Check Firebase rules.";
+  } else if (err?.message?.includes("network")) {
+    reason = "🌐 Network error while contacting server.";
+  } else if (err?.message?.includes("timeout")) {
+    reason = "⏳ Request timed out.";
+  } else {
+    reason = err?.message || "Unknown error.";
   }
+
+  taskList.innerHTML = `
+    ⚠ <b>Failed to load tasks</b><br><br>
+    <div style="font-size:12px;opacity:.8">
+      ${reason}
+    </div>
+    <br>
+    <button onclick="loadTasks()"
+      style="padding:8px;border:none;border-radius:6px;background:#3498db;color:#fff">
+      🔄 Try Again
+    </button>
+  `;
+}
 
   LOAD_IN_PROGRESS = false;
 }
