@@ -261,7 +261,7 @@ import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "htt
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "v4.0.2-WIP";
+const VERSION = "v4.0.3-WIP";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -448,17 +448,10 @@ function getTodayPH() {
 
 dateFilter.value = getTodayPH();
 
-// Re-load when date changes
 dateFilter.addEventListener("change", () => {
-  TASKS_CACHE = [];
-  LAST_RENDER_SIGNATURE = "";
-  CURRENT_RENDER_LIST = [];
-  RENDER_OFFSET = 0;
-
-  jobTypeFilterInitialized = false;
   selectedJobTypes.clear();
+  jobTypeFilterInitialized = false;
 
-  taskList.innerHTML = "Loading tasks…";
   loadTasks();
 });
 
@@ -472,30 +465,42 @@ function normalizeDatePH(dateStr) {
     timeZone: "Asia/Manila"
   });
 }
-function applyFiltersOnly() {
-  let tasks = [...TASKS_CACHE];
 
-  if (ACTIVE_CAPTURE_TASK) {
-    tasks = tasks.filter(t => t._key === ACTIVE_CAPTURE_TASK);
+function refreshUI() {
+  applyFiltersOnly();
+}
+
+function applyFiltersOnly() {
+  const selectedDate = dateFilter.value;
+  if (!selectedDate) return;
+
+  const dateKey = selectedDate.replace(/-/g, "");
+
+  let tasks = TASKS_CACHE.filter(t => {
+    if (!t || !t._key) return false;
+
+    // correct driver
+    if (
+      String(t.driverId || "").trim().toUpperCase() !==
+      String(DRIVER_ID).trim().toUpperCase()
+    ) return false;
+
+    // correct date
+    if (t.dateKey !== dateKey) return false;
+
+    // hide completed
+    if (resolveStatus(t) === "COMPLETED") return false;
+
+    return true;
+  });
+
+  // job type filter
+  if (jobTypeFilterInitialized && selectedJobTypes.size > 0) {
+    tasks = tasks.filter(t => selectedJobTypes.has(t.JOBTYPE));
   }
 
-  const selectedDate = dateFilter.value;
-
-  tasks = tasks.filter(t => {
-    const status = resolveStatus(t);
-    if (status === "COMPLETED") return false;
-
-    const dateKey = selectedDate.replace(/-/g, "");
-      if (t.dateKey !== dateKey) return false;
-
-    if (
-  jobTypeFilterInitialized &&
-  selectedJobTypes.size > 0 &&
-  !selectedJobTypes.has(t.JOBTYPE)
-) return false;
-
-    return matchesSearch(t, SEARCH_TERM);
-  });
+  // search
+  tasks = tasks.filter(t => matchesSearch(t, SEARCH_TERM));
 
   tasks = sortTasksOfflineSafe(tasks);
 
@@ -1247,7 +1252,10 @@ function updateRefreshLock() {
 
 function resolveStatus(task) {
   if (task.status === "COMPLETED") return "COMPLETED";
-  if (task.status === "LOCAL_COMPLETED") return "LOCAL_COMPLETED";
+  if (task.status === "LOCAL_COMPLETED") return "SYNC_PENDING";
+
+  if (uploadingMap[task._key]) return "UPLOADING";
+  if (processingMap[task._key]) return "PROCESSING";
 
   const p = PHOTO_BUFFER[task._key];
   if (p && Object.keys(p).length > 0) return "READY";
@@ -1428,261 +1436,135 @@ checkStorageQuota();
 setInterval(checkStorageQuota, 60_000); // every 60 seconds
 
   
-/* ===== LOAD TASKS (DATE-BASED, SAFE) ===== */
 async function loadTasks() {
-  if (OFFLINE_REPLAY_RUNNING) {
-    console.log("⏸ Skipping loadTasks — uploads in progress");
-    LOAD_IN_PROGRESS = false;
-    return;
-  }
-  if (LOAD_IN_PROGRESS && !FORCE_REDOWNLOAD && !IS_DOWNLOADING) return;
+  if (LOAD_IN_PROGRESS) return;
   LOAD_IN_PROGRESS = true;
 
-  try {
-    if (
-        !CURRENT_RENDER_LIST.length &&
-        !TASKS_CACHE.length &&
-        !IS_DOWNLOADING
-      ) {
-        taskList.innerText = "Loading tasks…";
-      }
-
-    // existing loadTasks code here
-
-  // 1️⃣ OFFLINE FIRST
- if (!navigator.onLine) {
-  const selectedDate = dateFilter.value;
-
-  const offlineTasks = (await getTasksFromIndexedDB())
-  .filter(t => {
-    if (resolveStatus(t) === "COMPLETED") return false;
-
-    const dateKey = selectedDate.replace(/-/g, "");
-
-    return (
-      t.dateKey === dateKey &&
-      String(t.driverId || "").trim().toUpperCase() ===
-      String(DRIVER_ID).trim().toUpperCase()
-    );
-  });
-
-  if (!offlineTasks.length) {
-    TASKS_CACHE = [];
-    CURRENT_RENDER_LIST = [];
-    RENDER_OFFSET = 0;
-
-    document.getElementById("jobTypeOptions").innerHTML = "";
-    toggleJobTypeFilter(false);
-
-    taskList.innerHTML = "📭 No tasks found for selected date.";
-    updateRemainingCounter([]);
-    updateUploadCounter([]);
-
-    IS_DOWNLOADING = false;
-    return;
-  }
-
-  const sorted = sortTasksOfflineSafe(offlineTasks);
-
-  TASKS_CACHE = sorted;
-
-  selectedJobTypes.clear();
-  jobTypeFilterInitialized = false;
-
-  renderJobTypeFilters(sorted);
-  toggleJobTypeFilter(true);
-
-  renderWithPagination(sorted);
-  updateRemainingCounter(sorted);
-  updateUploadCounter(sorted);
-
-  IS_DOWNLOADING = false;
-  return;
-}
-
-  // 2️⃣ Selected PH date
   const selectedDate = dateFilter.value;
   if (!selectedDate) {
-    taskList.innerText = "Select a date";
-    IS_DOWNLOADING = false;
+    taskList.innerHTML = "Select a date.";
+    LOAD_IN_PROGRESS = false;
     return;
   }
 
   const dateKey = selectedDate.replace(/-/g, "");
 
-  // ✅ CACHE-FIRST (DATE AWARE)
-  // ✅ CACHE-FIRST (DATE AWARE)
-const cachedTasks = await getTasksFromIndexedDB();
-
-const filtered = sortTasksOfflineSafe(
-  cachedTasks.filter(t =>
-    t.dateKey === dateKey &&
-    String(t.driverId || "").trim().toUpperCase() ===
-    String(DRIVER_ID).trim().toUpperCase()
-  )
-);
-
-if (!FORCE_REDOWNLOAD && filtered.length > 0) {
-  // 1️⃣ Show cached immediately
-  BOOT_WATCHDOG_FIRED = true;
-
-  TASKS_CACHE = filtered;
-
-  selectedJobTypes.clear();
-  jobTypeFilterInitialized = false;
-  renderJobTypeFilters(filtered);
-
-  LAST_RENDER_SIGNATURE = "";
-  CURRENT_RENDER_LIST = [];
-  renderWithPagination(filtered);
-
-  updateRemainingCounter(filtered);
-  updateUploadCounter(filtered);
-
-  // 2️⃣ DO NOT RETURN — continue to Firebase check
-}
-
   try {
-    // 3️⃣ Read ONLY task IDs for that date
-    const idsSnap = await getWithRetry(
-      ref(db, `tasksByDate/${dateKey}`),
-      1   // retry ONCE only
+    // ===============================
+    // 1️⃣ ALWAYS READ INDEXEDDB FIRST
+    // ===============================
+    const cached = await getTasksFromIndexedDB();
+
+    const localTasks = cached.filter(t =>
+      t.dateKey === dateKey &&
+      String(t.driverId || "").trim().toUpperCase() ===
+      String(DRIVER_ID).trim().toUpperCase() &&
+      resolveStatus(t) !== "COMPLETED"
     );
 
-    const taskIds = Object.keys(idsSnap.val() || {});
-    if (!taskIds.length) {
-
-      // 🔥 If we already showed cached tasks — KEEP THEM
-      if (TASKS_CACHE.length > 0) {
-        IS_DOWNLOADING = false;
-        taskCounter.innerText = "";
+    if (!navigator.onLine) {
+      // 🔒 OFFLINE MODE
+      if (!localTasks.length) {
+        TASKS_CACHE = [];
+        renderWithPagination([]);
+        updateRemainingCounter([]);
+        updateUploadCounter([]);
+        toggleJobTypeFilter(false);
+        taskList.innerHTML = "📭 No tasks found for selected date.";
+        LOAD_IN_PROGRESS = false;
         return;
       }
-    
-      // Otherwise truly empty
-      TASKS_CACHE = [];
-      CURRENT_RENDER_LIST = [];
-      RENDER_OFFSET = 0;
-    
-      document.getElementById("jobTypeOptions").innerHTML = "";
-      toggleJobTypeFilter(false);
-    
-      taskList.innerHTML = "📭 No tasks found for selected date.";
-      taskCounter.innerText = "";
-      IS_DOWNLOADING = false;
-    
-      return;
-    }
-    toggleJobTypeFilter(true);
-    const total = taskIds.length;
-    let completed = 0;
-    IS_DOWNLOADING = true;
-    taskCounter.innerText = "⏬ Checking assigned tasks…";
-    BOOT_WATCHDOG_FIRED = true; // ✅ ADD HERE
 
-    // 4️⃣ Fetch ONLY those tasks
-    
-    const reads = taskIds.map(async id => {
-      try {
-        const s = await get(ref(db, `tasks/${id}`));
-        if (!s.exists()) return null;
-    
-        const task = s.val();
-    
-        if (task.status === "COMPLETED") return null;
-    
-        if (
-          String(task.driverId || "").trim().toUpperCase() !==
-          String(DRIVER_ID).trim().toUpperCase()
-        ) return null;
-    
-        return { _key: id, ...task, dateKey };
-    
-      } catch (e) {
-        console.warn("⚠️ Skipped task due to error:", id, e);
-        return null; // ⬅️ critical
-      }
-    });
-    
-    let tasks = (await Promise.all(reads))
-      .filter(Boolean)
-      .filter(t =>
-        String(t.driverId || "").trim().toUpperCase() ===
-        String(DRIVER_ID).trim().toUpperCase()
-      )
-      .filter(t => t.status !== "COMPLETED");
-      tasks = tasks.map(t => ({
-      ...t,
-      dateKey // 🔥 FORCE SOURCE OF TRUTH
-    }));
-
-    if (!tasks.length) {
-      TASKS_CACHE = [];
-      CURRENT_RENDER_LIST = [];
-      RENDER_OFFSET = 0;
-    
-      document.getElementById("jobTypeOptions").innerHTML = "";
-      toggleJobTypeFilter(false);
-    
-      taskList.innerHTML = "📭 No tasks found for selected date.";
-      taskCounter.innerText = "";
-    
-      IS_DOWNLOADING = false;
-      updateUploadCounter([]);
-      updateRemainingCounter([]);
-    
-      return;
-    }
-
-    // 5️⃣ Cache for offline use
-    await saveTasksToIndexedDB(tasks);
-    
-    // 🧹 HARD PRUNE — REMOVE ALL COMPLETED TASKS FROM INDEXEDDB
-    const cached = await getTasksFromIndexedDB();
-    
-    for (const t of cached) {
-      if (t.status === "COMPLETED") {
-        await deleteTaskFromIndexedDB(t._key);
-      }
-    }
-    
-    // 6️⃣ Render
-    tasks = sortTasksOfflineSafe(tasks);   // 🔥 ADD THIS
-    
-    TASKS_CACHE = tasks;
-
-    // 🔥 FORCE RESET ON FIRST LOAD
-    if (!jobTypeFilterInitialized) {
+      TASKS_CACHE = sortTasksOfflineSafe(localTasks);
       selectedJobTypes.clear();
+      jobTypeFilterInitialized = false;
+      renderJobTypeFilters(TASKS_CACHE);
+      refreshUI();
+      LOAD_IN_PROGRESS = false;
+      return;
     }
-    
-    // 🔥 INIT FILTERS FIRST
-    // ✅ ALWAYS rebuild job type filters for this date
+
+    // ===============================
+    // 2️⃣ SHOW CACHE IMMEDIATELY (FAST UI)
+    // ===============================
+    if (!FORCE_REDOWNLOAD && localTasks.length > 0) {
+      TASKS_CACHE = sortTasksOfflineSafe(localTasks);
+      selectedJobTypes.clear();
+      jobTypeFilterInitialized = false;
+      renderJobTypeFilters(TASKS_CACHE);
+      refreshUI();
+    }
+
+    // ===============================
+    // 3️⃣ FETCH FROM FIREBASE
+    // ===============================
+    const idsSnap = await get(ref(db, `tasksByDate/${dateKey}`));
+    const ids = Object.keys(idsSnap.val() || {});
+
+    if (!ids.length) {
+      if (!localTasks.length) {
+        TASKS_CACHE = [];
+        renderWithPagination([]);
+        updateRemainingCounter([]);
+        updateUploadCounter([]);
+        toggleJobTypeFilter(false);
+        taskList.innerHTML = "📭 No tasks found for selected date.";
+      }
+      LOAD_IN_PROGRESS = false;
+      return;
+    }
+
+    const reads = ids.map(async id => {
+      const s = await get(ref(db, `tasks/${id}`));
+      if (!s.exists()) return null;
+
+      const task = s.val();
+
+      if (
+        String(task.driverId || "").trim().toUpperCase() !==
+        String(DRIVER_ID).trim().toUpperCase()
+      ) return null;
+
+      if (task.status === "COMPLETED") return null;
+
+      return { _key: id, ...task, dateKey };
+    });
+
+    let freshTasks = (await Promise.all(reads)).filter(Boolean);
+
+    if (!freshTasks.length) {
+      if (!localTasks.length) {
+        TASKS_CACHE = [];
+        renderWithPagination([]);
+        updateRemainingCounter([]);
+        updateUploadCounter([]);
+        toggleJobTypeFilter(false);
+        taskList.innerHTML = "📭 No tasks found for selected date.";
+      }
+      LOAD_IN_PROGRESS = false;
+      return;
+    }
+
+    // ===============================
+    // 4️⃣ SAVE TO INDEXEDDB
+    // ===============================
+    await saveTasksToIndexedDB(freshTasks);
+
+    TASKS_CACHE = sortTasksOfflineSafe(freshTasks);
+
     selectedJobTypes.clear();
     jobTypeFilterInitialized = false;
-    renderJobTypeFilters(tasks);
-    
-    // 🔥 THEN RENDER
-    renderWithPagination(tasks);
-    
-    BOOT_WATCHDOG_FIRED = true;
-    IS_DOWNLOADING = false; // ⬅️ ADD THIS
-    taskCounter.innerText = "";
-    setTimeout(() => updateRemainingCounter(tasks), 100);
-    
-    updateRemainingCounter(tasks);
-    updateUploadCounter(tasks);
+    renderJobTypeFilters(TASKS_CACHE);
+
+    refreshUI();
 
   } catch (err) {
-    console.error("❌ loadTasks failed", err);
+    console.error("❌ loadTasks error:", err);
     taskList.innerHTML =
-      "📭 No tasks found for selected date.<br><br>" +
-      "<small>If this is unexpected, tap Refresh or check connection.</small>";
-    IS_DOWNLOADING = false;
+      "⚠ Failed to load tasks.<br><br>Check internet or tap Refresh.";
   }
-} finally {
-    LOAD_IN_PROGRESS = false;
-  }
+
+  LOAD_IN_PROGRESS = false;
 }
 
 document.getElementById("refreshTasksBtn").onclick = async () => {
@@ -1832,7 +1714,7 @@ function updateRemainingCounter(tasks) {
     tasks.map(t => `${t._key}_${resolveStatus(t)}`)
   );
 
-  if (signature === LAST_RENDER_SIGNATURE) return;
+  if (signature === LAST_RENDER_SIGNATURE && !FORCE_REDOWNLOAD) return;
 
   LAST_RENDER_SIGNATURE = signature;
 
@@ -2084,40 +1966,6 @@ function matchesSearch(task, term) {
     String(task.SEQUENCE || "").toLowerCase().includes(term)
   );
 }
-
-async function renderCachedOnly() {
-  let tasks = await getTasksFromIndexedDB();
-
-  if (ACTIVE_CAPTURE_TASK) {
-    tasks = tasks.filter(t => t._key === ACTIVE_CAPTURE_TASK);
-  }
-
-  const selectedDate = dateFilter.value;
-
-  let filtered = tasks.filter(t => {
-    const status = resolveStatus(t);
-    if (status === "COMPLETED") return false;
-
-    const dateKey = selectedDate.replace(/-/g, "");
-      if (t.dateKey !== dateKey) return false;
-
-    if (
-  jobTypeFilterInitialized &&
-  selectedJobTypes.size > 0 &&
-  !selectedJobTypes.has(t.JOBTYPE)
-) return false;
-
-    return matchesSearch(t, SEARCH_TERM);
-  });
-
-  filtered = sortTasksOfflineSafe(filtered);
-  
-  renderWithPagination(filtered);
-  updateRemainingCounter(filtered);
-  updateUploadCounter(filtered);
-}
-
-
   
 async function renderDynamicDelivery(t) {
   const methods = await loadDriverUI(t.JOBTYPE);
