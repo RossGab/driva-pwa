@@ -261,7 +261,7 @@ import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "htt
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "v4.0.14-WIP";
+const VERSION = "v4.0.15-WIP";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -454,9 +454,29 @@ function getTodayPH() {
 dateFilter.value = getTodayPH();
 
 dateFilter.addEventListener("change", () => {
+
+  // 🔒 Reset capture mode
+  ACTIVE_CAPTURE_TASK = null;
+
+  // 🔄 Reset filters
   selectedJobTypes.clear();
   jobTypeFilterInitialized = false;
 
+  // 🧹 Clear UI immediately
+  CURRENT_RENDER_LIST = [];
+  RENDER_OFFSET = 0;
+  taskList.innerHTML = `
+    <div style="padding:20px;text-align:center;font-size:14px;">
+      ⏳ Please wait... Loading tasks
+    </div>
+  `;
+  taskList.appendChild(sentinel);
+
+  // Reset counters immediately
+  const counter = document.getElementById("taskCounter");
+  if (counter) counter.innerHTML = "";
+
+  // 🚀 Load new date
   loadTasks();
 });
 
