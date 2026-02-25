@@ -261,7 +261,7 @@ import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "htt
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "v4.0.18-WIP";
+const VERSION = "v4.0.18.1-WIP";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -1278,7 +1278,11 @@ function sortTasksOfflineSafe(tasks) {
     if (ra !== rb) return ra - rb;
 
     // secondary: oldest first
-    return new Date(a.createdAt || 0) - new Date(b.createdAt || 0);
+    if (a.excelOrder && b.excelOrder) {
+  return a.excelOrder - b.excelOrder;
+}
+
+return new Date(a.createdAt || 0) - new Date(b.createdAt || 0);
   });
 }
 
