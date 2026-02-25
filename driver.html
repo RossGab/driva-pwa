@@ -261,7 +261,7 @@ import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "htt
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "v4.0.17.1-WIP";
+const VERSION = "v4.0.18-WIP";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -1580,6 +1580,19 @@ async function loadTasks() {
     // 4️⃣ SAVE TO INDEXEDDB
     // ===============================
     await saveTasksToIndexedDB(freshTasks);
+
+    // 🔥 REMOVE LOCAL TASKS NOT IN FIREBASE
+    const freshIds = new Set(freshTasks.map(t => t._key));
+    
+    for (const local of cached) {
+      if (
+        local.dateKey === dateKey &&
+        local.driverId === DRIVER_ID &&
+        !freshIds.has(local._key)
+      ) {
+        await deleteTaskFromIndexedDB(local._key);
+      }
+    }
 
     TASKS_CACHE = sortTasksOfflineSafe(freshTasks);
 
