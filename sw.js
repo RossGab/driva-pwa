@@ -1,19 +1,18 @@
-const CACHE_VERSION = "v6";
+const CACHE_VERSION = "v7";
 const CACHE_NAME = `field-task-app-${CACHE_VERSION}`;
+const BASE_PATH = "/driva-pwa/";
 
 const APP_SHELL = [
-  "./",
-  "./driver.html",
-  "./manifest.json",
-  "./icon-192.png",
-  "./icon-512.png"
+  BASE_PATH,
+  BASE_PATH + "driver.html",
+  BASE_PATH + "manifest.json",
+  BASE_PATH + "icon-192.png",
+  BASE_PATH + "icon-512.png"
 ];
 
 self.addEventListener("install", event => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then(cache => {
-      return cache.addAll(APP_SHELL);
-    })
+    caches.open(CACHE_NAME).then(cache => cache.addAll(APP_SHELL))
   );
   self.skipWaiting();
 });
@@ -30,37 +29,22 @@ self.addEventListener("activate", event => {
 });
 
 self.addEventListener("fetch", event => {
-  const { request } = event;
+  const request = event.request;
 
-  // 🔹 Navigation requests (page loads)
+  // 🔥 Navigation handling
   if (request.mode === "navigate") {
     event.respondWith(
-      fetch(request)
-        .then(response => {
-          const copy = response.clone();
-          caches.open(CACHE_NAME).then(cache => {
-            cache.put("./driver.html", copy);
-          });
-          return response;
-        })
-        .catch(() => caches.match("./driver.html"))
+      caches.match(BASE_PATH).then(cached => {
+        return cached || fetch(request);
+      })
     );
     return;
   }
 
-  // 🔹 Assets (CSS, JS, images)
+  // 🔹 Cache-first for other assets
   event.respondWith(
     caches.match(request).then(cached => {
-      return (
-        cached ||
-        fetch(request).then(response => {
-          const copy = response.clone();
-          caches.open(CACHE_NAME).then(cache => {
-            cache.put(request, copy);
-          });
-          return response;
-        })
-      );
+      return cached || fetch(request);
     })
   );
 });
