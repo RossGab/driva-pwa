@@ -1,12 +1,78 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Export Local Completed Tasks</title>
   <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Export Tasks</title>
+
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f4f4f4;
+      padding: 16px;
+      margin: 0;
+    }
+
+    h2 {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+
+    .card {
+      background: #fff;
+      padding: 20px;
+      border-radius: 12px;
+      box-shadow: 0 2px 8px rgba(0,0,0,.1);
+      margin-bottom: 20px;
+    }
+
+    .status {
+      font-size: 14px;
+      margin-bottom: 10px;
+      color: #555;
+    }
+
+    button {
+      width: 100%;
+      padding: 16px;
+      font-size: 16px;
+      font-weight: bold;
+      border: none;
+      border-radius: 10px;
+      background: #2ecc71;
+      color: white;
+    }
+
+    button:disabled {
+      background: #95a5a6;
+    }
+
+    .small {
+      font-size: 12px;
+      color: #888;
+      margin-top: 10px;
+      text-align: center;
+    }
+  </style>
 </head>
+
 <body>
-  <h2>📤 Export LOCAL_COMPLETED Tasks (with Photos)</h2>
-  <button onclick="exportData()">Export JSON</button>
+
+  <h2>📤 Export Completed Tasks</h2>
+
+  <div class="card">
+    <div id="taskCount" class="status">
+      Checking local data...
+    </div>
+
+    <button id="exportBtn" onclick="exportData()">
+      📦 Export LOCAL_COMPLETED Tasks
+    </button>
+
+    <div class="small">
+      This will export tasks saved locally (not yet synced).
+    </div>
+  </div>
 
 <script>
 const DB_NAME = "driver_uploads";
@@ -41,27 +107,39 @@ function blobToBase64(blob) {
   });
 }
 
+async function checkTaskCount() {
+  const db = await openDB();
+  const tasks = await getAll(TASK_STORE, db);
+
+  const localCompleted = tasks.filter(
+    t => t.status === "LOCAL_COMPLETED"
+  );
+
+  const el = document.getElementById("taskCount");
+  const btn = document.getElementById("exportBtn");
+
+  el.innerText = `LOCAL_COMPLETED tasks: ${localCompleted.length}`;
+
+  btn.disabled = localCompleted.length === 0;
+}
+
 async function exportData() {
+  const btn = document.getElementById("exportBtn");
+  btn.disabled = true;
+  btn.innerText = "⏳ Preparing export...";
+
   try {
     const db = await openDB();
-
     const tasks = await getAll(TASK_STORE, db);
     const photos = await getAll(PHOTO_STORE, db);
 
-    // 🔥 Only LOCAL_COMPLETED (not COMPLETED)
     const completed = tasks.filter(
       t => t.status === "LOCAL_COMPLETED"
     );
 
-    if (!completed.length) {
-      alert("No LOCAL_COMPLETED tasks found.");
-      return;
-    }
-
     const exportPayload = [];
 
     for (const task of completed) {
-
       const relatedPhotos = photos.filter(
         p => p.taskKey === task._key
       );
@@ -87,12 +165,11 @@ async function exportData() {
     }
 
     const blob = new Blob(
-      [JSON.stringify(exportPayload, null, 2)],
+      [JSON.stringify(exportPayload)],
       { type: "application/json" }
     );
 
     const url = URL.createObjectURL(blob);
-
     const a = document.createElement("a");
     a.href = url;
     a.download = `LOCAL_COMPLETED_export_${Date.now()}.json`;
@@ -103,10 +180,15 @@ async function exportData() {
     alert(`✅ Exported ${exportPayload.length} task(s)`);
 
   } catch (err) {
-    console.error(err);
     alert("Export failed: " + err.message);
   }
+
+  btn.innerText = "📦 Export LOCAL_COMPLETED Tasks";
+  checkTaskCount();
 }
+
+// Run on load
+checkTaskCount();
 </script>
 
 </body>
