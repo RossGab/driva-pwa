@@ -1,44 +1,113 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Export Tasks</title>
+  <title>Export Local Completed Tasks</title>
+  <meta charset="UTF-8" />
 </head>
 <body>
-  <h2>Export Completed Tasks</h2>
+  <h2>📤 Export LOCAL_COMPLETED Tasks (with Photos)</h2>
   <button onclick="exportData()">Export JSON</button>
 
 <script>
-async function exportData() {
-  const db = await openDB();
-
-  const tx = db.transaction("tasks", "readonly");
-  const store = tx.objectStore("tasks");
-  const all = await store.getAll();
-
-  const completed = all.filter(t => t.status === "COMPLETED");
-
-  const blob = new Blob(
-    [JSON.stringify(completed, null, 2)],
-    { type: "application/json" }
-  );
-
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `completed_tasks_${Date.now()}.json`;
-  a.click();
-
-  alert("Exported!");
-}
+const DB_NAME = "driver_uploads";
+const DB_VERSION = 4;
+const TASK_STORE = "tasks";
+const PHOTO_STORE = "photos";
 
 function openDB() {
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open("field-task-db");
-
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
   });
 }
+
+function getAll(storeName, db) {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(storeName, "readonly");
+    const store = tx.objectStore(storeName);
+    const req = store.getAll();
+    req.onsuccess = () => resolve(req.result || []);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+function blobToBase64(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+
+async function exportData() {
+  try {
+    const db = await openDB();
+
+    const tasks = await getAll(TASK_STORE, db);
+    const photos = await getAll(PHOTO_STORE, db);
+
+    // 🔥 Only LOCAL_COMPLETED (not COMPLETED)
+    const completed = tasks.filter(
+      t => t.status === "LOCAL_COMPLETED"
+    );
+
+    if (!completed.length) {
+      alert("No LOCAL_COMPLETED tasks found.");
+      return;
+    }
+
+    const exportPayload = [];
+
+    for (const task of completed) {
+
+      const relatedPhotos = photos.filter(
+        p => p.taskKey === task._key
+      );
+
+      const photoExports = [];
+
+      for (const p of relatedPhotos) {
+        const base64 = await blobToBase64(p.blob);
+
+        photoExports.push({
+          photoIndex: p.photoIndex,
+          takenAt: p.takenAt,
+          gps: p.gps,
+          deliveryData: p.deliveryData || {},
+          imageBase64: base64
+        });
+      }
+
+      exportPayload.push({
+        task,
+        photos: photoExports
+      });
+    }
+
+    const blob = new Blob(
+      [JSON.stringify(exportPayload, null, 2)],
+      { type: "application/json" }
+    );
+
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `LOCAL_COMPLETED_export_${Date.now()}.json`;
+    a.click();
+
+    URL.revokeObjectURL(url);
+
+    alert(`✅ Exported ${exportPayload.length} task(s)`);
+
+  } catch (err) {
+    console.error(err);
+    alert("Export failed: " + err.message);
+  }
+}
 </script>
+
 </body>
 </html>
