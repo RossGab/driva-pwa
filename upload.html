@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Upload Tasks to Firebase</title>
+</head>
+<body>
+  <h2>Upload Exported Tasks</h2>
+  <input type="file" id="fileInput">
+  <button onclick="upload()">Upload to Firebase</button>
+
+<script type="module">
+import { initializeApp } from 
+  "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import {
+  getDatabase, ref, update
+} from 
+  "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+
+const firebaseConfig = {
+  databaseURL: "YOUR_DATABASE_URL"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
+
+async function upload() {
+  const file = document.getElementById("fileInput").files[0];
+  if (!file) return alert("Select file");
+
+  const text = await file.text();
+  const tasks = JSON.parse(text);
+
+  for (const task of tasks) {
+    await update(ref(db, "tasks/" + task._key), task);
+  }
+
+  alert("Upload complete!");
+}
+
+window.upload = upload;
+</script>
+</body>
+</html>
