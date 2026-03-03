@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Export Tasks</title>
+</head>
+<body>
+  <h2>Export Completed Tasks</h2>
+  <button onclick="exportData()">Export JSON</button>
+
+<script>
+async function exportData() {
+  const db = await openDB();
+
+  const tx = db.transaction("tasks", "readonly");
+  const store = tx.objectStore("tasks");
+  const all = await store.getAll();
+
+  const completed = all.filter(t => t.status === "COMPLETED");
+
+  const blob = new Blob(
+    [JSON.stringify(completed, null, 2)],
+    { type: "application/json" }
+  );
+
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `completed_tasks_${Date.now()}.json`;
+  a.click();
+
+  alert("Exported!");
+}
+
+function openDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open("field-task-db");
+
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+</script>
+</body>
+</html>
