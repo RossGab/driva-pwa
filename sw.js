@@ -1,4 +1,4 @@
-const CACHE_VERSION = "v9";
+const CACHE_VERSION = "v11"; // ⬅ bump version
 const CACHE_NAME = `field-task-app-${CACHE_VERSION}`;
 
 const BASE_PATH = "/driva-pwa/";
@@ -26,7 +26,9 @@ self.addEventListener("activate", event => {
   event.waitUntil(
     caches.keys().then(keys =>
       Promise.all(
-        keys.map(k => k !== CACHE_NAME && caches.delete(k))
+        keys.map(k => {
+          if (k !== CACHE_NAME) return caches.delete(k);
+        })
       )
     )
   );
@@ -34,26 +36,36 @@ self.addEventListener("activate", event => {
 });
 
 
-// 🔹 FETCH — Navigation always loads driver.html offline
+// 🔥 FETCH — App-Shell First Strategy
 self.addEventListener("fetch", event => {
   const request = event.request;
 
-  // 🟢 Handle page navigation
+  // 🟢 Always serve driver.html for navigation
   if (request.mode === "navigate") {
     event.respondWith(
       caches.match(BASE_PATH + "driver.html")
-        .then(response => {
-          return response || fetch(request);
-        })
-        .catch(() => caches.match(BASE_PATH + "driver.html"))
     );
     return;
   }
 
-  // 🟢 Handle other assets
+  // 🟢 Cache-first for static assets
   event.respondWith(
     caches.match(request).then(cached => {
-      return cached || fetch(request);
+      if (cached) return cached;
+
+      return fetch(request).then(response => {
+        // Optional: cache new assets
+        if (response && response.status === 200) {
+          const copy = response.clone();
+          caches.open(CACHE_NAME).then(cache => {
+            cache.put(request, copy);
+          });
+        }
+        return response;
+      }).catch(() => {
+        // If completely offline and not cached
+        return null;
+      });
     })
   );
 });
