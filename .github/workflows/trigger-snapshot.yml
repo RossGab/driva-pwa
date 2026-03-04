@@ -1,7 +1,8 @@
 name: Trigger Snapshot
 
 on:
-  workflow_dispatch:
+  repository_dispatch:
+    types: [trigger-snapshot]
 
 jobs:
   trigger:
