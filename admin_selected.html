@@ -296,7 +296,7 @@ button {
 <div class="admin-header" style="justify-content:space-between;">
   <div style="display:flex;align-items:center;gap:14px;">
     <img src="./logo.jpg" class="admin-logo" alt="Company Logo">
-    <h1>Admin Dashboard <span class="version">V3.1.7-WIP</span></h1>
+    <h1>Admin Dashboard <span class="version">V3.1.8-WIP</span></h1>
   </div>
 
   <!-- 📅 DATE FILTER -->
@@ -928,26 +928,88 @@ async function updateSnapshotFreshness() {
       day: "numeric"
     });
 
-    btn.className = "snapshot-btn"; // reset
+    btn.className = "snapshot-btn";
 
     // 🔴 stale (> 1 hour)
     if (diffMin > 60) {
       btn.classList.add("snapshot-stale");
       btn.textContent = `🔴 Snapshot Updated: ${dateStr} ${timeStr}`;
+      btn.disabled = false;
+      btn.style.cursor = "pointer";
+      btn.onclick = triggerSnapshotWorkflow;
     }
+    
     // 🟡 warning (> 15 mins)
     else if (diffMin > 15) {
       btn.classList.add("snapshot-warn");
       btn.textContent = `🟡 Snapshot Updated: ${timeStr}`;
+      btn.disabled = false;
+      btn.style.cursor = "pointer";
+      btn.onclick = triggerSnapshotWorkflow;
     }
+    
     // 🟢 fresh
     else {
       btn.classList.add("snapshot-fresh");
       btn.textContent = `🟢 Snapshot Updated: ${timeStr}`;
+      btn.disabled = true;
+      btn.style.cursor = "default";
+      btn.onclick = null;
     }
 
   } catch {
     // silently fail — availability handled elsewhere
+  }
+}
+
+async function triggerSnapshotWorkflow() {
+
+  const btn = document.getElementById("snapshotStatusBtn");
+  if (!btn) return;
+
+  const OWNER = "RossGab";
+  const REPO = "driva-task-snapshots";
+  const WORKFLOW = "snapshot.yml";
+
+  btn.textContent = "⏳ Checking workflow...";
+  btn.style.cursor = "wait";
+
+  try {
+
+    // 1️⃣ Check if workflow already running
+    const check = await fetch(
+      `https://api.github.com/repos/${OWNER}/${REPO}/actions/workflows/${WORKFLOW}/runs?status=in_progress`
+    );
+
+    const data = await check.json();
+
+    if (data.total_count > 0) {
+      btn.textContent = "⏳ Snapshot already running";
+      return;
+    }
+
+    // 2️⃣ Trigger workflow
+    btn.textContent = "🚀 Starting snapshot...";
+
+    await fetch(
+      `https://api.github.com/repos/${OWNER}/${REPO}/actions/workflows/${WORKFLOW}/dispatches`,
+      {
+        method: "POST",
+        headers: {
+          "Accept": "application/vnd.github+json"
+        },
+        body: JSON.stringify({
+          ref: "main"
+        })
+      }
+    );
+
+    btn.textContent = "🚀 Snapshot started";
+
+  } catch (err) {
+    btn.textContent = "❌ Failed to trigger snapshot";
+  } finally {
+    btn.style.cursor = "pointer";
   }
 }
 
