@@ -972,7 +972,7 @@ async function triggerSnapshotWorkflow() {
   try {
 
     const res = await fetch(
-      "https://api.github.com/repos/RossGab/driva-pwa/actions/workflows/trigger-snapshot.yml/dispatches",
+      "https://api.github.com/repos/RossGab/driva-pwa/dispatches",
       {
         method: "POST",
         headers: {
@@ -980,12 +980,12 @@ async function triggerSnapshotWorkflow() {
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
-          ref: "main"
+          event_type: "trigger-snapshot"
         })
       }
     );
 
-    if (res.status === 204) {
+    if (res.ok) {
       btn.textContent = "⚙ Snapshot workflow started";
     } else {
       throw new Error("GitHub rejected request");
