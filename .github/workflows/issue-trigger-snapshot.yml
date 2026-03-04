@@ -1,12 +1,11 @@
-name: Issue Snapshot Trigger
+name: Trigger Snapshot
 
 on:
-  issues:
-    types: [opened]
+  repository_dispatch:
+    types: [snapshot-trigger]
 
 jobs:
   trigger:
-    if: contains(github.event.issue.title, '[SNAPSHOT]')
     runs-on: ubuntu-latest
 
     steps:
@@ -17,8 +16,3 @@ jobs:
           -H "Accept: application/vnd.github+json" \
           https://api.github.com/repos/RossGab/driva-task-snapshots/actions/workflows/snapshot-today.yml/dispatches \
           -d '{"ref":"main","inputs":{"force_run":"1"}}'
-
-      - name: Close issue
-        uses: peter-evans/close-issue@v3
-        with:
-          issue-number: ${{ github.event.issue.number }}
