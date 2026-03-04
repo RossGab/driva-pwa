@@ -296,7 +296,7 @@ button {
 <div class="admin-header" style="justify-content:space-between;">
   <div style="display:flex;align-items:center;gap:14px;">
     <img src="./logo.jpg" class="admin-logo" alt="Company Logo">
-    <h1>Admin Dashboard <span class="version">V3.1.14-WIP</span></h1>
+    <h1>Admin Dashboard <span class="version">V3.1.14.1-WIP</span></h1>
   </div>
 
   <!-- 📅 DATE FILTER -->
@@ -972,33 +972,26 @@ async function triggerSnapshotWorkflow() {
   try {
 
     const res = await fetch(
-      "https://api.github.com/repos/RossGab/driva-task-snapshots/actions/workflows/snapshot-today.yml/dispatches",
+      "https://api.github.com/repos/RossGab/driva-task-snapshots/dispatches",
       {
         method: "POST",
         headers: {
-          "Authorization": "Bearer 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",
-          "Accept": "application/vnd.github+json",
-          "X-GitHub-Api-Version": "2022-11-28",
-          "Content-Type": "application/json"
+          "Accept": "application/vnd.github+json"
         },
         body: JSON.stringify({
-          ref: "main",
-          inputs: {
-            force_run: "1"
-          }
+          event_type: "trigger-snapshot"
         })
       }
     );
 
     if (res.status === 204) {
-      btn.textContent = "🚀 Snapshot started";
+      btn.textContent = "⚙ Snapshot workflow started";
     } else {
-      throw new Error("GitHub rejected request");
+      throw new Error();
     }
 
   } catch (err) {
     btn.textContent = "❌ Failed to trigger snapshot";
-    console.error(err);
   }
 
   btn.style.cursor = "pointer";
