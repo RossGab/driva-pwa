@@ -296,7 +296,7 @@ button {
 <div class="admin-header" style="justify-content:space-between;">
   <div style="display:flex;align-items:center;gap:14px;">
     <img src="./logo.jpg" class="admin-logo" alt="Company Logo">
-    <h1>Admin Dashboard <span class="version">V3.1.14.4-WIP</span></h1>
+    <h1>Admin Dashboard <span class="version">V3.1.14.5-WIP</span></h1>
   </div>
 
   <!-- 📅 DATE FILTER -->
@@ -972,19 +972,15 @@ async function triggerSnapshotWorkflow() {
   try {
 
     const res = await fetch(
-      "https://api.github.com/repos/RossGab/driva-task-snapshots/actions/workflows/snapshot-today.yml/dispatches",
+      "https://api.github.com/repos/RossGab/driva-pwa/actions/workflows/trigger-snapshot.yml/dispatches",
       {
         method: "POST",
         headers: {
           "Accept": "application/vnd.github+json",
-          "Content-Type": "application/json",
-          "Authorization": "Bearer YOUR_GITHUB_TOKEN"
+          "Content-Type": "application/json"
         },
         body: JSON.stringify({
-          ref: "main",
-          inputs: {
-            force_run: "1"
-          }
+          ref: "main"
         })
       }
     );
@@ -1002,6 +998,7 @@ async function triggerSnapshotWorkflow() {
 
   btn.style.cursor = "pointer";
 }
+
 
 window.onerror = (msg, src, line) => {
   alert(`JS Error:\n${msg}\nLine: ${line}`);
