@@ -296,7 +296,7 @@ button {
 <div class="admin-header" style="justify-content:space-between;">
   <div style="display:flex;align-items:center;gap:14px;">
     <img src="./logo.jpg" class="admin-logo" alt="Company Logo">
-    <h1>Admin Dashboard <span class="version">V3.1.14.8-WIP</span></h1>
+    <h1>Admin Dashboard <span class="version">V3.1.14.9-WIP</span></h1>
   </div>
 
   <!-- 📅 DATE FILTER -->
@@ -972,20 +972,13 @@ async function triggerSnapshotWorkflow() {
   try {
 
     const res = await fetch(
-      "https://api.github.com/repos/RossGab/driva-pwa/actions/workflows/trigger-snapshot.yml/dispatches",
-      {
-        method: "POST",
-        headers: {
-          "Accept": "application/vnd.github+json",
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          ref: "main"
-        })
-      }
+      "https://trigger.rcnitura.workers.dev",
+      { method: "POST" }
     );
 
-    if (!res.ok) throw new Error(await res.text());
+    const data = await res.json();
+
+    if (!data.ok) throw new Error();
 
     btn.textContent = "⚙ Snapshot requested";
 
