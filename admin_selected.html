@@ -965,13 +965,14 @@ async function updateSnapshotFreshness() {
 async function triggerSnapshotWorkflow() {
 
   const btn = document.getElementById("snapshotStatusBtn");
+
   btn.textContent = "🚀 Triggering snapshot...";
   btn.disabled = true;
 
   try {
 
     const res = await fetch(
-      "https://api.github.com/repos/RossGab/driva-pwa/issues",
+      "https://api.github.com/repos/RossGab/driva-pwa/dispatches",
       {
         method: "POST",
         headers: {
@@ -979,18 +980,18 @@ async function triggerSnapshotWorkflow() {
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
-          title: "snapshot-trigger",
-          body: "snapshot-trigger"
+          event_type: "snapshot-trigger"
         })
       }
     );
 
-    if (!res.ok) throw new Error();
+    if (!res.ok) throw new Error(await res.text());
 
     btn.textContent = "⚙ Snapshot requested";
 
   } catch (e) {
 
+    console.error(e);
     btn.textContent = "❌ Trigger failed";
     btn.disabled = false;
 
