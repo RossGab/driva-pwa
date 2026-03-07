@@ -86,6 +86,9 @@ let SNAPSHOT_TASKS = {};
 document.getElementById("dateFilter").value =
 new Date().toLocaleDateString("en-CA",{timeZone:"Asia/Manila"});
 
+document.getElementById("dateFilter")
+.addEventListener("change", loadTasks);
+
 
 driverFilter.addEventListener("change", renderDriverTasks);
 
@@ -126,7 +129,12 @@ function buildDriverList(){
     }
   }
 
-  driverFilter.innerHTML = `<option value="">Select Driver</option>`;
+  driverFilter.innerHTML = "";
+
+  const first = document.createElement("option");
+  first.value = "";
+  first.textContent = "Select Driver";
+  driverFilter.appendChild(first);
 
   drivers.forEach(d=>{
     const opt=document.createElement("option");
