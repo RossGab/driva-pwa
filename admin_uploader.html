@@ -37,7 +37,7 @@ margin-top:8px;
 
 <body>
 
-<h2>Admin Manual Photo Upload</h2>
+<h2>Admin Manual Upload</h2>
 
 <div class="topbar">
 
@@ -49,12 +49,12 @@ margin-top:8px;
 <option value="">Select Driver</option>
 </select>
 
-<button onclick="loadTasks()">Load Tasks</button>
+<button id="loadBtn">Load Tasks</button>
 
 </div>
 
 <div id="taskList">
-Select date then press Load Tasks.
+Select date then click Load Tasks.
 </div>
 
 <script type="module">
@@ -79,11 +79,14 @@ const storage = getStorage(app);
 
 const taskList = document.getElementById("taskList");
 const driverFilter = document.getElementById("driverFilter");
+const loadBtn = document.getElementById("loadBtn");
 
 let ALL_TASKS = {};
 
 document.getElementById("dateFilter").value =
 new Date().toLocaleDateString("en-CA",{timeZone:"Asia/Manila"});
+
+loadBtn.onclick = loadTasks;
 
 async function loadTasks(){
 
@@ -98,12 +101,10 @@ taskList.innerHTML = "Loading...";
 
 const dateKey = date.replace(/-/g,"");
 
-/* READ TASK IDS */
-
 const snap = await get(ref(db,`tasksByDate/${dateKey}`));
 
 if(!snap.exists()){
-taskList.innerHTML="No tasks found";
+taskList.innerHTML = "No tasks found.";
 return;
 }
 
@@ -112,38 +113,29 @@ const ids = Object.keys(snap.val());
 ALL_TASKS = {};
 const drivers = new Set();
 
-/* READ EACH TASK */
-
 for(const id of ids){
 
-const s = await get(ref(db,`tasks/${id}`));
+const taskSnap = await get(ref(db,`tasks/${id}`));
 
-if(!s.exists()) continue;
+if(!taskSnap.exists()) continue;
 
-const t = s.val();
+const t = taskSnap.val();
 
-/* SHOW ONLY PENDING */
 if(t.status !== "PENDING") continue;
-
-/* DRIVER FIELD */
-const driver = t.driverID;
-
-if(driver){
-drivers.add(driver);
-}
 
 ALL_TASKS[id] = t;
 
+if(t.driverID){
+drivers.add(t.driverID);
 }
 
-/* BUILD DRIVER DROPDOWN */
+}
 
 driverFilter.innerHTML = `<option value="">Select Driver</option>`;
 
 drivers.forEach(d => {
 
 const opt = document.createElement("option");
-
 opt.value = d;
 opt.textContent = d;
 
@@ -151,20 +143,20 @@ driverFilter.appendChild(opt);
 
 });
 
-taskList.innerHTML = "Select driver";
+taskList.innerHTML = "Select driver.";
 
 }
 
-/* expose function to button */
+driverFilter.addEventListener("change", renderTasks);
 
-window.loadTasks = loadTasks;
-
-
-/* RENDER TASKS */
-
-driverFilter.addEventListener("change", () => {
+function renderTasks(){
 
 const driver = driverFilter.value;
+
+if(!driver){
+taskList.innerHTML = "Select driver.";
+return;
+}
 
 taskList.innerHTML = "";
 
@@ -178,41 +170,38 @@ renderTask(id,t);
 
 }
 
-});
-
+}
 
 function renderTask(id,t){
 
 const div = document.createElement("div");
 
-div.className="task";
-
+div.className = "task";
 div.setAttribute("data-task",id);
 
 div.innerHTML = `
-<b>${t.CUSTOMERNAME}</b>
-<div>${t.ADDRESS}</div>
+<b>${t.CUSTOMERNAME || ""}</b>
+<div>${t.ADDRESS || ""}</div>
 
 <input type="file" multiple accept="image/*" id="file_${id}">
 
-<button onclick="uploadTask('${id}')">
+<button data-id="${id}" class="uploadBtn">
 Upload Photos
 </button>
 `;
 
 taskList.appendChild(div);
 
+div.querySelector(".uploadBtn").onclick = () => uploadTask(id);
+
 }
 
-
-/* UPLOAD */
-
-window.uploadTask = async function(taskKey){
+async function uploadTask(taskKey){
 
 const input = document.getElementById(`file_${taskKey}`);
 
 if(!input.files.length){
-alert("Select photos");
+alert("Select photos first.");
 return;
 }
 
@@ -244,7 +233,7 @@ await update(ref(db,`tasks/${taskKey}`),{
 status:"COMPLETED"
 });
 
-alert("Upload complete");
+alert("Upload complete.");
 
 const card = document.querySelector(`[data-task="${taskKey}"]`);
 if(card) card.remove();
