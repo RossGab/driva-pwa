@@ -5,33 +5,35 @@
 <title>Admin Manual Upload</title>
 
 <style>
+
 body{
-  font-family:Arial;
-  background:#f4f4f4;
-  padding:20px;
+font-family:Arial;
+background:#f4f4f4;
+padding:20px;
 }
 
 .task{
-  background:#fff;
-  padding:15px;
-  margin-bottom:12px;
-  border-radius:8px;
-  border-left:5px solid orange;
-}
-
-button{
-  padding:8px 12px;
-  margin-top:8px;
+background:#fff;
+padding:15px;
+margin-bottom:12px;
+border-radius:8px;
+border-left:5px solid orange;
 }
 
 .topbar{
-  margin-bottom:20px;
+margin-bottom:20px;
 }
 
 select,input{
-  padding:6px;
-  margin-right:10px;
+padding:6px;
+margin-right:10px;
 }
+
+button{
+padding:8px 12px;
+margin-top:8px;
+}
+
 </style>
 </head>
 
@@ -41,19 +43,21 @@ select,input{
 
 <div class="topbar">
 
-<label>Date:</label>
+<label>Date</label>
 <input type="date" id="dateFilter">
 
-<label>Driver:</label>
+<label>Driver</label>
 <select id="driverFilter">
 <option value="">Select Driver</option>
 </select>
 
-<button onclick="loadTasks()">Load Snapshot</button>
+<button onclick="loadTasks()">Load Tasks</button>
 
 </div>
 
-<div id="taskList">Select a driver to load tasks.</div>
+<div id="taskList">
+Select date and driver.
+</div>
 
 
 <script type="module">
@@ -64,13 +68,13 @@ import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://ww
 
 
 const firebaseConfig = {
-  apiKey: "AIzaSyDFW61pnwLvh6HGKWt10zLYNr860fI8vkg",
-  authDomain: "driva-pwa.firebaseapp.com",
-  databaseURL: "https://driva-pwa-default-rtdb.firebaseio.com",
-  projectId: "driva-pwa",
-  storageBucket: "driva-pwa.firebasestorage.app",
-  messagingSenderId: "299138219722",
-  appId: "1:299138219722:web:623ff6b0a067ea822dfe33"
+apiKey: "AIzaSyDFW61pnwLvh6HGKWt10zLYNr860fI8vkg",
+authDomain: "driva-pwa.firebaseapp.com",
+databaseURL: "https://driva-pwa-default-rtdb.firebaseio.com",
+projectId: "driva-pwa",
+storageBucket: "driva-pwa.firebasestorage.app",
+messagingSenderId: "299138219722",
+appId: "1:299138219722:web:623ff6b0a067ea822dfe33"
 };
 
 const app = initializeApp(firebaseConfig);
@@ -80,95 +84,114 @@ const storage = getStorage(app);
 const taskList = document.getElementById("taskList");
 const driverFilter = document.getElementById("driverFilter");
 
-let SNAPSHOT_TASKS = {};
-
+let ALL_TASKS = {};
 
 document.getElementById("dateFilter").value =
 new Date().toLocaleDateString("en-CA",{timeZone:"Asia/Manila"});
 
-document.getElementById("dateFilter")
-.addEventListener("change", loadTasks);
-
-
-driverFilter.addEventListener("change", renderDriverTasks);
-
-
 
 async function loadTasks(){
 
-  const date = document.getElementById("dateFilter").value.replace(/-/g,"");
+const date = document.getElementById("dateFilter").value;
+const driver = driverFilter.value;
 
-  const url =
-  `https://raw.githubusercontent.com/RossGab/driva-task-snapshots/main/snapshots/${date}.json`;
+if(!date){
+alert("Select date");
+return;
+}
 
-  const res = await fetch(url);
+taskList.innerHTML="Loading...";
 
-  if(!res.ok){
-    taskList.innerHTML="Snapshot not found";
-    return;
-  }
+const dateKey = date.replace(/-/g,"");
 
-  SNAPSHOT_TASKS = await res.json();
+const snap = await get(ref(db,`tasksByDate/${dateKey}`));
 
-  buildDriverList();
+if(!snap.exists()){
+taskList.innerHTML="No tasks";
+return;
+}
 
-  taskList.innerHTML = "Select a driver to display tasks.";
+const ids = Object.keys(snap.val());
+
+ALL_TASKS={};
+
+const drivers = new Set();
+
+for(const id of ids){
+
+const s = await get(ref(db,`tasks/${id}`));
+
+if(!s.exists()) continue;
+
+const t = s.val();
+
+/* SHOW ONLY PENDING */
+if(t.status !== "PENDING") continue;
+
+ALL_TASKS[id]=t;
+
+if(t.driverId){
+drivers.add(t.driverId);
+}
+
+}
+
+buildDriverList(drivers);
+
+if(!driver){
+taskList.innerHTML="Select driver";
+return;
+}
+
+renderTasks();
 
 }
 
 
 
-function buildDriverList(){
+function buildDriverList(drivers){
 
-  const drivers = new Set();
+driverFilter.innerHTML=`<option value="">Select Driver</option>`;
 
-  for(const id in SNAPSHOT_TASKS){
-    const t = SNAPSHOT_TASKS[id];
-    if(t.driverId){
-      drivers.add(t.driverId);
-    }
-  }
+drivers.forEach(d=>{
 
-  driverFilter.innerHTML = "";
+const opt=document.createElement("option");
 
-  const first = document.createElement("option");
-  first.value = "";
-  first.textContent = "Select Driver";
-  driverFilter.appendChild(first);
+opt.value=d;
+opt.textContent=d;
 
-  drivers.forEach(d=>{
-    const opt=document.createElement("option");
-    opt.value=d;
-    opt.textContent=d;
-    driverFilter.appendChild(opt);
-  });
+driverFilter.appendChild(opt);
+
+});
 
 }
 
 
 
-function renderDriverTasks(){
+driverFilter.addEventListener("change",renderTasks);
 
-  const driverId = driverFilter.value;
 
-  if(!driverId){
-    taskList.innerHTML="Select a driver.";
-    return;
-  }
 
-  taskList.innerHTML="";
+function renderTasks(){
 
-  for(const id in SNAPSHOT_TASKS){
+const driver = driverFilter.value;
 
-    const t = SNAPSHOT_TASKS[id];
+if(!driver){
+taskList.innerHTML="Select driver";
+return;
+}
 
-    if(t.status === "COMPLETED") continue;
+taskList.innerHTML="";
 
-    if(t.driverId !== driverId) continue;
+for(const id in ALL_TASKS){
 
-    renderTask(id,t);
+const t = ALL_TASKS[id];
 
-  }
+if(t.driverId !== driver) continue;
+
+renderTask(id,t);
+
+}
 
 }
 
@@ -176,30 +199,32 @@ function renderDriverTasks(){
 
 async function renderTask(id,t){
 
-  const div=document.createElement("div");
-  div.className="task";
+const div=document.createElement("div");
 
-  div.innerHTML=`
+div.className="task";
 
-  <b>${t.CUSTOMERNAME || "-"}</b>
-  <div>${t.ADDRESS || "-"}</div>
-  <div><b>Driver:</b> ${t.driverId || "-"}</div>
+div.setAttribute("data-task",id);
 
-  <div id="delivery_${id}">
-  Loading delivery methods...
-  </div>
+div.innerHTML=`
 
-  <input type="file" multiple accept="image/*" id="file_${id}">
+<b>${t.CUSTOMERNAME || ""}</b>
+<div>${t.ADDRESS || ""}</div>
 
-  <button onclick="uploadTask('${id}')">
-  Upload Photos
-  </button>
+<div id="delivery_${id}">
+Loading delivery methods...
+</div>
 
-  `;
+<input type="file" multiple accept="image/*" id="file_${id}">
 
-  taskList.appendChild(div);
+<button onclick="uploadTask('${id}')">
+Upload Photos
+</button>
 
-  loadDeliveryMethods(id,t.JOBTYPE);
+`;
+
+taskList.appendChild(div);
+
+loadDeliveryMethods(id,t.JOBTYPE);
 
 }
 
@@ -207,30 +232,30 @@ async function renderTask(id,t){
 
 async function loadDeliveryMethods(taskKey,jobType){
 
-  const snap =
-  await get(ref(db,`config/driverUI/jobTypes/${jobType}/deliveryMethods`));
+const snap =
+await get(ref(db,`config/driverUI/jobTypes/${jobType}/deliveryMethods`));
 
-  if(!snap.exists()){
-    document.getElementById(`delivery_${taskKey}`).innerHTML="";
-    return;
-  }
+if(!snap.exists()){
+document.getElementById(`delivery_${taskKey}`).innerHTML="";
+return;
+}
 
-  const methods = snap.val();
+const methods = snap.val();
 
-  let html="<b>Delivery Method</b><br>";
+let html="<b>Delivery Method</b><br>";
 
-  for(const m in methods){
+for(const m in methods){
 
-    html+=`
-    <label>
-    <input type="radio" name="delivery_${taskKey}" value="${m}">
-    ${m}
-    </label><br>
-    `;
+html+=`
+<label>
+<input type="radio" name="delivery_${taskKey}" value="${m}">
+${m}
+</label><br>
+`;
 
-  }
+}
 
-  document.getElementById(`delivery_${taskKey}`).innerHTML=html;
+document.getElementById(`delivery_${taskKey}`).innerHTML=html;
 
 }
 
@@ -238,53 +263,65 @@ async function loadDeliveryMethods(taskKey,jobType){
 
 window.uploadTask = async function(taskKey){
 
-  const input=document.getElementById(`file_${taskKey}`);
+const input=document.getElementById(`file_${taskKey}`);
 
-  if(!input.files.length){
-    alert("Select photos first");
-    return;
-  }
+if(!input.files.length){
+alert("Select photos first");
+return;
+}
 
-  const deliveryType =
-  document.querySelector(`input[name="delivery_${taskKey}"]:checked`)?.value;
+const deliveryType =
+document.querySelector(`input[name="delivery_${taskKey}"]:checked`)?.value;
 
-  if(!deliveryType){
-    alert("Select delivery method");
-    return;
-  }
+if(!deliveryType){
+alert("Select delivery method");
+return;
+}
 
-  let index=1;
+let index=1;
 
-  for(const file of input.files){
+for(const file of input.files){
 
-    const filename=`admin_${Date.now()}_${index}.jpg`;
+const filename=`admin_${Date.now()}_${index}.jpg`;
 
-    const imgRef=sRef(storage,`tasks/${taskKey}/${filename}`);
+const imgRef=sRef(storage,`tasks/${taskKey}/${filename}`);
 
-    await uploadBytes(imgRef,file);
+await uploadBytes(imgRef,file);
 
-    const url=await getDownloadURL(imgRef);
+const url=await getDownloadURL(imgRef);
 
-    await update(ref(db,`tasks/${taskKey}`),{
-      [`photo${index}Url`]:url,
-      [`photo${index}Filename`]:filename,
-      uploadedAt:new Date().toISOString(),
-      deliveryType:deliveryType
-    });
+await update(ref(db,`tasks/${taskKey}`),{
 
-    index++;
+[`photo${index}Url`]:url,
+[`photo${index}Filename`]:filename,
+uploadedAt:new Date().toISOString(),
+deliveryType:deliveryType
 
-  }
+});
 
-  await update(ref(db,`tasks/${taskKey}`),{
-    status:"COMPLETED"
-  });
-
-  alert("Upload complete");
-
-  renderDriverTasks();
+index++;
 
 }
+
+await update(ref(db,`tasks/${taskKey}`),{
+
+status:"COMPLETED"
+
+});
+
+alert("Upload complete");
+
+/* REMOVE TASK FROM PAGE */
+
+delete ALL_TASKS[taskKey];
+
+const card=document.querySelector(`[data-task="${taskKey}"]`);
+
+if(card) card.remove();
+
+}
+
+
 
 </script>
 
