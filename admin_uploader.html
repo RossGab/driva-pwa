@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Admin Photo Upload</title>
+
+<style>
+body{
+  font-family:Arial;
+  background:#f4f4f4;
+  padding:20px;
+}
+
+.task{
+  background:#fff;
+  padding:15px;
+  margin-bottom:10px;
+  border-radius:8px;
+  border-left:5px solid orange;
+}
+
+img{
+  width:120px;
+  margin-top:6px;
+}
+
+button{
+  padding:8px 12px;
+  margin-top:6px;
+}
+</style>
+</head>
+
+<body>
+
+<h2>Admin Task Upload</h2>
+
+<input type="date" id="dateFilter">
+<div id="taskList"></div>
+
+<script type="module">
+
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import { getDatabase, ref, get, update } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyDFW61pnwLvh6HGKWt10zLYNr860fI8vkg",
+  authDomain: "driva-pwa.firebaseapp.com",
+  databaseURL: "https://driva-pwa-default-rtdb.firebaseio.com",
+  projectId: "driva-pwa",
+  storageBucket: "driva-pwa.firebasestorage.app",
+  messagingSenderId: "299138219722",
+  appId: "1:299138219722:web:623ff6b0a067ea822dfe33"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
+const storage = getStorage(app);
+
+const taskList = document.getElementById("taskList");
+
+document.getElementById("dateFilter").value =
+new Date().toLocaleDateString("en-CA",{timeZone:"Asia/Manila"});
+
+document.getElementById("dateFilter").addEventListener("change",loadTasks);
+
+loadTasks();
+
+async function loadTasks(){
+
+  const date = document.getElementById("dateFilter").value.replace(/-/g,"");
+
+  const snap = await get(ref(db,`tasksByDate/${date}`));
+
+  if(!snap.exists()){
+    taskList.innerHTML="No tasks";
+    return;
+  }
+
+  taskList.innerHTML="";
+
+  const ids = Object.keys(snap.val());
+
+  for(const id of ids){
+
+    const s = await get(ref(db,`tasks/${id}`));
+    if(!s.exists()) continue;
+
+    const t = s.val();
+
+    if(t.status === "COMPLETED") continue;
+
+    renderTask(id,t);
+
+  }
+
+}
+
+function renderTask(id,t){
+
+  const div=document.createElement("div");
+  div.className="task";
+
+  div.innerHTML=`
+  <b>${t.CUSTOMERNAME}</b>
+  <div>${t.ADDRESS}</div>
+
+  <input type="file" multiple accept="image/*" id="file_${id}">
+
+  <button onclick="uploadTask('${id}')">
+  Upload Photos
+  </button>
+
+  <div id="preview_${id}"></div>
+  `;
+
+  taskList.appendChild(div);
+
+}
+
+window.uploadTask = async function(taskKey){
+
+  const input=document.getElementById(`file_${taskKey}`);
+
+  if(!input.files.length){
+    alert("Select photos first");
+    return;
+  }
+
+  let index=1;
+
+  for(const file of input.files){
+
+    const filename=`admin_${Date.now()}_${index}.jpg`;
+
+    const imgRef=sRef(storage,`tasks/${taskKey}/${filename}`);
+
+    await uploadBytes(imgRef,file);
+
+    const url=await getDownloadURL(imgRef);
+
+    await update(ref(db,`tasks/${taskKey}`),{
+      [`photo${index}Url`]:url,
+      [`photo${index}Filename`]:filename,
+      uploadedAt:new Date().toISOString()
+    });
+
+    index++;
+
+  }
+
+  await update(ref(db,`tasks/${taskKey}`),{
+    status:"COMPLETED"
+  });
+
+  alert("Uploaded");
+
+  loadTasks();
+
+}
+
+</script>
+
+</body>
+</html>
