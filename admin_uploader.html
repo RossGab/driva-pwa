@@ -93,7 +93,6 @@ new Date().toLocaleDateString("en-CA",{timeZone:"Asia/Manila"});
 async function loadTasks(){
 
 const date = document.getElementById("dateFilter").value;
-const driver = driverFilter.value;
 
 if(!date){
 alert("Select date");
@@ -113,37 +112,40 @@ return;
 
 const ids = Object.keys(snap.val());
 
-ALL_TASKS={};
+ALL_TASKS = {};
 
 const drivers = new Set();
 
 for(const id of ids){
 
 const s = await get(ref(db,`tasks/${id}`));
-
 if(!s.exists()) continue;
 
 const t = s.val();
 
-/* SHOW ONLY PENDING */
+/* only keep pending tasks */
 if(t.status !== "PENDING") continue;
 
-ALL_TASKS[id]=t;
+ALL_TASKS[id] = t;
 
+/* collect drivers */
 if(t.driverId){
 drivers.add(t.driverId);
 }
 
 }
 
-buildDriverList(drivers);
+/* populate dropdown */
+driverFilter.innerHTML = `<option value="">Select Driver</option>`;
 
-if(!driver){
-taskList.innerHTML="Select driver";
-return;
-}
+drivers.forEach(d=>{
+const opt=document.createElement("option");
+opt.value=d;
+opt.textContent=d;
+driverFilter.appendChild(opt);
+});
 
-renderTasks();
+taskList.innerHTML = "Select driver";
 
 }
 
