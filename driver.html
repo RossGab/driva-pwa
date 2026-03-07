@@ -261,7 +261,7 @@ import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "htt
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "v4.0.19.2-WIP";
+const VERSION = "v4.0.19.3-WIP";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -1519,12 +1519,16 @@ async function loadTasks() {
       if (!s.exists()) return null;
 
       const task = s.val();
-
+      
       if (
         String(task.driverId || "").trim().toUpperCase() !==
         String(DRIVER_ID).trim().toUpperCase()
       ) return null;
-
+      
+      // 🔒 Skip tasks already completed locally
+      const local = cached.find(t => t._key === id);
+      if (local?.status === "LOCAL_COMPLETED") return null;
+      
       if (task.status === "COMPLETED") return null;
 
       return { _key: id, ...task, dateKey };
