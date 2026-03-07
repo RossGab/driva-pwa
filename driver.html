@@ -261,7 +261,7 @@ import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "htt
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "v4.0.19.0-WIP";
+const VERSION = "v4.0.18.1-WIP";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -277,7 +277,6 @@ let RENDER_OFFSET = 0;
 let CURRENT_RENDER_LIST = [];
 let IS_DOWNLOADING = false;
 let LAST_RENDER_SIGNATURE = "";
-let SYNC_RUNNING = false;
 
 
 
@@ -684,18 +683,10 @@ async function loadDriverUI(jobType) {
 //   return data;
 // }
 document.getElementById("syncBtn").onclick = async () => {
-
-  if (SYNC_RUNNING) {
-    alert("Upload already running.");
-    return;
-  }
-
   if (!navigator.onLine) {
     alert("📴 Connect to internet first.");
     return;
   }
-
-  SYNC_RUNNING = true;
 
   document.getElementById("uploadNote").style.display = "block";
   const note = document.getElementById("uploadNote");
@@ -710,69 +701,38 @@ document.getElementById("syncBtn").onclick = async () => {
 
   if (!completed.length) {
     alert("No completed tasks to sync.");
-    SYNC_RUNNING = false;
     return;
   }
 
-  if (!confirm(`Upload ${completed.length} completed tasks?`)) {
-    SYNC_RUNNING = false;
-    return;
-  }
+  if (!confirm(`Upload ${completed.length} completed tasks?`)) return;
 
   for (const task of completed) {
-
     const photos = await getAllPhotosFromDB();
     const related = photos.filter(p => p.taskKey === task._key);
 
-    let allUploaded = true;
-
     for (let i = 0; i < related.length; i++) {
-
       const p = related[i];
 
-      try {
+      await uploadNow(
+        p.taskKey,
+        p.blob,
+        p.takenAt,
+        null,
+        p.deliveryData || {},
+        p.gps,
+        p.photoIndex,
+        i === related.length - 1
+      );
 
-        await uploadNow(
-          p.taskKey,
-          p.blob,
-          p.takenAt,
-          null,
-          p.deliveryData || {},
-          p.gps,
-          p.photoIndex,
-          i === related.length - 1
-        );
-
-      } catch (err) {
-
-        console.error("Upload failed", err);
-        allUploaded = false;
-        break;
-
-      }
+      await deletePhotoFromDB(p.id);
     }
 
-    if (allUploaded) {
-
-  for (const p of related) {
-    await deletePhotoFromDB(p.id);
-  }
-
-  await deleteTaskFromIndexedDB(task._key);
-
-  UPLOAD_QUEUE_COUNT = Math.max(0, UPLOAD_QUEUE_COUNT - 1);
-  updateUploadCounter();
-
-}
+    await deleteTaskFromIndexedDB(task._key);
   }
 
   alert("✅ Sync complete.");
-
   document.getElementById("uploadNote").style.display = "none";
   if (note) note.style.display = "none";
-
-  SYNC_RUNNING = false;
-
   loadTasks();
 };
 
@@ -1314,15 +1274,15 @@ function sortTasksOfflineSafe(tasks) {
   return tasks.sort((a, b) => {
     const ra = getOfflineRank(a);
     const rb = getOfflineRank(b);
-  
+
     if (ra !== rb) return ra - rb;
-  
-    // ✅ Excel chronological order
-    if (a.rowIndex != null && b.rowIndex != null) {
-      return Number(a.rowIndex) - Number(b.rowIndex);
-    }
-  
-    return 0;
+
+    // secondary: oldest first
+    if (a.excelOrder && b.excelOrder) {
+  return a.excelOrder - b.excelOrder;
+}
+
+return new Date(a.createdAt || 0) - new Date(b.createdAt || 0);
   });
 }
 
@@ -1404,15 +1364,15 @@ async function uploadNow(
     saveToGallery(blob, filename);
   } catch (e) {
     console.warn("Gallery save failed", e);
-  // }
-  // if (isLastPhoto) {
-  //   await deleteTaskFromIndexedDB(taskKey);
-  //   markTaskCompletedInCache(taskKey);
-  //   UPLOAD_QUEUE_COUNT = Math.max(0, UPLOAD_QUEUE_COUNT - 1);
-  //   updateUploadCounter();
-  //   applyFiltersOnly();
-  //   removeTaskFromUI(taskKey);
-  // }
+  }
+  if (isLastPhoto) {
+    await deleteTaskFromIndexedDB(taskKey);
+    markTaskCompletedInCache(taskKey);
+    UPLOAD_QUEUE_COUNT = Math.max(0, UPLOAD_QUEUE_COUNT - 1);
+    updateUploadCounter();
+    applyFiltersOnly();
+    removeTaskFromUI(taskKey);
+  }
   
 
   // ===============================
