@@ -135,12 +135,7 @@ const t = s.val();
 if(t.status !== "PENDING") continue;
 
 /* detect driver field */
-const driver =
-t.driverId ||
-t.driverID ||
-t.DRIVER_ID ||
-t.driver ||
-"";
+const driver = t.driverID || "";
 
 if(driver){
 drivers.add(driver);
@@ -188,7 +183,10 @@ for(const id in ALL_TASKS){
 
 const t = ALL_TASKS[id];
 
-if(t._driver !== driver) continue;
+if(t.driverID){
+drivers.add(t.driverID);
+t._driver = t.driverID;
+}
 
 renderTask(id,t);
 
