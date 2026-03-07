@@ -54,7 +54,7 @@ margin-top:8px;
 </div>
 
 <div id="taskList">
-Select date and load tasks.
+Select date then press Load Tasks.
 </div>
 
 <script type="module">
@@ -118,7 +118,7 @@ if(!s.exists()) continue;
 
 const t = s.val();
 
-/* SHOW ONLY PENDING */
+/* show only pending */
 if(t.status !== "PENDING") continue;
 
 /* detect driver field */
@@ -138,7 +138,8 @@ ALL_TASKS[id] = t;
 
 }
 
-/* populate driver dropdown */
+/* populate dropdown */
+
 driverFilter.innerHTML = `<option value="">Select Driver</option>`;
 
 drivers.forEach(d=>{
@@ -152,10 +153,11 @@ taskList.innerHTML="Select driver";
 
 }
 
+/* expose function to HTML button */
+window.loadTasks = loadTasks;
 
 
 driverFilter.addEventListener("change", renderTasks);
-
 
 
 function renderTasks(){
@@ -292,6 +294,7 @@ status:"COMPLETED"
 alert("Upload complete");
 
 /* remove task from UI */
+
 delete ALL_TASKS[taskKey];
 
 const card=document.querySelector(`[data-task="${taskKey}"]`);
