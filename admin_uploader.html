@@ -5,7 +5,6 @@
 <title>Admin Manual Upload</title>
 
 <style>
-
 body{
 font-family:Arial;
 background:#f4f4f4;
@@ -33,7 +32,6 @@ button{
 padding:8px 12px;
 margin-top:8px;
 }
-
 </style>
 </head>
 
@@ -56,16 +54,14 @@ margin-top:8px;
 </div>
 
 <div id="taskList">
-Select date and driver.
+Select date and load tasks.
 </div>
-
 
 <script type="module">
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 import { getDatabase, ref, get, update } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
-
 
 const firebaseConfig = {
 apiKey: "AIzaSyDFW61pnwLvh6HGKWt10zLYNr860fI8vkg",
@@ -99,21 +95,20 @@ alert("Select date");
 return;
 }
 
-taskList.innerHTML="Loading...";
+taskList.innerHTML="Loading tasks...";
 
 const dateKey = date.replace(/-/g,"");
 
 const snap = await get(ref(db,`tasksByDate/${dateKey}`));
 
 if(!snap.exists()){
-taskList.innerHTML="No tasks";
+taskList.innerHTML="No tasks found";
 return;
 }
 
 const ids = Object.keys(snap.val());
 
 ALL_TASKS = {};
-
 const drivers = new Set();
 
 for(const id of ids){
@@ -123,19 +118,27 @@ if(!s.exists()) continue;
 
 const t = s.val();
 
-/* only keep pending tasks */
+/* SHOW ONLY PENDING */
 if(t.status !== "PENDING") continue;
+
+/* detect driver field */
+const driver =
+t.driverId ||
+t.driverID ||
+t.DRIVER_ID ||
+t.driver ||
+"";
+
+if(driver){
+drivers.add(driver);
+t._driver = driver;
+}
 
 ALL_TASKS[id] = t;
 
-/* collect drivers */
-if(t.driverId){
-drivers.add(t.driverId);
 }
 
-}
-
-/* populate dropdown */
+/* populate driver dropdown */
 driverFilter.innerHTML = `<option value="">Select Driver</option>`;
 
 drivers.forEach(d=>{
@@ -145,32 +148,13 @@ opt.textContent=d;
 driverFilter.appendChild(opt);
 });
 
-taskList.innerHTML = "Select driver";
+taskList.innerHTML="Select driver";
 
 }
 
 
 
-function buildDriverList(drivers){
-
-driverFilter.innerHTML=`<option value="">Select Driver</option>`;
-
-drivers.forEach(d=>{
-
-const opt=document.createElement("option");
-
-opt.value=d;
-opt.textContent=d;
-
-driverFilter.appendChild(opt);
-
-});
-
-}
-
-
-
-driverFilter.addEventListener("change",renderTasks);
+driverFilter.addEventListener("change", renderTasks);
 
 
 
@@ -189,7 +173,7 @@ for(const id in ALL_TASKS){
 
 const t = ALL_TASKS[id];
 
-if(t.driverId !== driver) continue;
+if(t._driver !== driver) continue;
 
 renderTask(id,t);
 
@@ -202,13 +186,10 @@ renderTask(id,t);
 async function renderTask(id,t){
 
 const div=document.createElement("div");
-
 div.className="task";
-
 div.setAttribute("data-task",id);
 
 div.innerHTML=`
-
 <b>${t.CUSTOMERNAME || ""}</b>
 <div>${t.ADDRESS || ""}</div>
 
@@ -221,7 +202,6 @@ Loading delivery methods...
 <button onclick="uploadTask('${id}')">
 Upload Photos
 </button>
-
 `;
 
 taskList.appendChild(div);
@@ -306,24 +286,18 @@ index++;
 }
 
 await update(ref(db,`tasks/${taskKey}`),{
-
 status:"COMPLETED"
-
 });
 
 alert("Upload complete");
 
-/* REMOVE TASK FROM PAGE */
-
+/* remove task from UI */
 delete ALL_TASKS[taskKey];
 
 const card=document.querySelector(`[data-task="${taskKey}"]`);
-
 if(card) card.remove();
 
 }
-
-
 
 </script>
 
