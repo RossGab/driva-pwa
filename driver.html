@@ -261,7 +261,7 @@ import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "htt
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "v4.0.19.1-WIP";
+const VERSION = "v4.0.19.2-WIP";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -697,7 +697,6 @@ document.getElementById("syncBtn").onclick = async () => {
 
   SYNC_RUNNING = true;
 
-  document.getElementById("uploadNote").style.display = "block";
   const note = document.getElementById("uploadNote");
   if (note) note.style.display = "block";
 
@@ -719,10 +718,13 @@ document.getElementById("syncBtn").onclick = async () => {
     return;
   }
 
-  for (const task of completed) {
+  // 🔥 LOAD PHOTOS ONCE
+  await new Promise(r => setTimeout(r, 1000));
 
-    const photos = await getAllPhotosFromDB();
-    const related = photos.filter(p => p.taskKey === task._key);
+const photos = await getAllPhotosFromDB();
+
+for (const task of completed) {
+  const related = photos.filter(p => p.taskKey === task._key);
 
     let allUploaded = true;
 
@@ -732,7 +734,7 @@ document.getElementById("syncBtn").onclick = async () => {
 
       try {
 
-        await uploadNow(
+        const success = await uploadNow(
           p.taskKey,
           p.blob,
           p.takenAt,
@@ -743,6 +745,11 @@ document.getElementById("syncBtn").onclick = async () => {
           i === related.length - 1
         );
 
+        if (!success) {
+          allUploaded = false;
+          break;
+        }
+
       } catch (err) {
 
         console.error("Upload failed", err);
@@ -752,8 +759,29 @@ document.getElementById("syncBtn").onclick = async () => {
       }
     }
 
-    if (allUploaded) {
+    // ✅ DELETE ONLY AFTER SUCCESS
+if (allUploaded) {
 
+  // 🔎 VERIFY FIREBASE REALLY HAS THE PHOTOS
+  const verify = await get(ref(db, `tasks/${task._key}`));
+  const data = verify.val() || {};
+
+  let verified = true;
+
+  for (const p of related) {
+    const key = `photo${p.photoIndex}Url`;
+    if (!data[key]) {
+      verified = false;
+      break;
+    }
+  }
+
+  if (!verified) {
+    console.warn("Verification failed, skipping delete");
+    continue;
+  }
+
+  // ✅ DELETE ONLY IF VERIFIED
   for (const p of related) {
     await deletePhotoFromDB(p.id);
   }
@@ -762,13 +790,11 @@ document.getElementById("syncBtn").onclick = async () => {
 
   UPLOAD_QUEUE_COUNT = Math.max(0, UPLOAD_QUEUE_COUNT - 1);
   updateUploadCounter();
-
 }
   }
 
   alert("✅ Sync complete.");
 
-  document.getElementById("uploadNote").style.display = "none";
   if (note) note.style.display = "none";
 
   SYNC_RUNNING = false;
@@ -1327,129 +1353,43 @@ function sortTasksOfflineSafe(tasks) {
 }
 
 async function uploadNow(
-    taskKey,
-    blob,
-    takenAt,
-    _ignoredFilename,
-    deliveryData = {},
-    photoGPS,
-    photoIndex,
-    isLastPhoto
-  ) {
+  taskKey,
+  blob,
+  takenAt,
+  _ignoredFilename,
+  deliveryData = {},
+  photoGPS,
+  photoIndex,
+  isLastPhoto
+) {
+
   const taskSnap = await get(ref(db, `tasks/${taskKey}`));
   const task = taskSnap.val() || {};
 
-  if (!photoGPS || !photoGPS.latitude) {
-    throw new Error("GPS_REQUIRED_AT_PHOTO_TIME");
-  }
+  const filename = `photo_${photoIndex}_${Date.now()}.jpg`;
 
-  // ===== BUILD FILENAME =====
-  const safe = v => String(v || "")
-    .toUpperCase()
-    .replace(/[^A-Z0-9]+/g, "_")
-    .replace(/^_|_$/g, "");
-
-  const filename =
-  `${safe(task.CUSTOMERNAME)}_${safe(task.ADDRESS)}_` +
-  `P${photoIndex}_` +
-  `${photoGPS.longitude}_${photoGPS.latitude}_` +
-  `${task.driverId}_${new Date().toISOString()
-    .replace(/[-:T.Z]/g, "")
-    .slice(0,14)}.jpg`;
-  
-
-  // 🔁 MARK LAST UPLOAD ATTEMPT (VERY IMPORTANT)
-  await update(ref(db, `tasks/${taskKey}`), {
-    lastUploadAttemptAt: new Date().toISOString()
-  });
-
-  // ===== UPLOAD =====
   const imgRef = sRef(storage, `tasks/${taskKey}/${filename}`);
-  await uploadBytes(imgRef, blob);
-  const url = await getDownloadURL(imgRef);
 
-  // ===== FLATTEN DATA =====
+  try {
+    await uploadBytes(imgRef, blob);
+  } catch {
+    return false;
+  }          // ✔ storage
+  const url = await getDownloadURL(imgRef); // ✔ confirm
+
   const updatePayload = {
-  ...(isLastPhoto ? { status: "COMPLETED", forceReopen: false } : {}),
+    ...(isLastPhoto ? { status: "COMPLETED", forceReopen: false } : {}),
     [`photo${photoIndex}Url`]: url,
     [`photo${photoIndex}Filename`]: filename,
     [`photo${photoIndex}TakenAt`]: takenAt,
-    uploadedAt: new Date().toISOString(),
-    deliveryType: deliveryData.deliveryType || ""
+    uploadedAt: new Date().toISOString()
   };
 
-  for (const [k, v] of Object.entries(deliveryData)) {
-  if (k === "deliveryType") continue;
+  await update(ref(db, `tasks/${taskKey}`), updatePayload); // ✔ realtime DB
 
-  if (k === "deliverytype_2nd") {
-    updatePayload[k] = v;
-    continue;
-  }
+  saveToGallery(blob, filename); // only after both succeed
 
-  // append _2nd for radio child inputs
-  const finalKey = deliveryData.deliverytype_2nd ? `${k}_2nd` : k;
-
-  updatePayload[finalKey] = v;
-}
-
-  if (photoGPS && photoGPS.latitude) {
-    updatePayload.LATITUDE  = photoGPS.latitude;
-    updatePayload.LONGITUDE = photoGPS.longitude;
-    updatePayload.gpsAccuracy = photoGPS.accuracy || null;
-  }
-
-  await update(ref(db, `tasks/${taskKey}`), updatePayload);
-  // ✅ SAVE TO GALLERY ONLY AFTER SUCCESS
-  try {
-    saveToGallery(blob, filename);
-  } catch (e) {
-    console.warn("Gallery save failed", e);
-  }
-  // if (isLastPhoto) {
-  //   await deleteTaskFromIndexedDB(taskKey);
-  //   markTaskCompletedInCache(taskKey);
-  //   UPLOAD_QUEUE_COUNT = Math.max(0, UPLOAD_QUEUE_COUNT - 1);
-  //   updateUploadCounter();
-  //   applyFiltersOnly();
-  //   removeTaskFromUI(taskKey);
-  // }
-  
-
-  // ===============================
-// ✅ ADMIN STATS UPDATE (ONCE)
-// ===============================
-if (isLastPhoto) {
-  const dateKey =
-    task.dateKey ||
-    normalizeDatePH(task.createdAt)?.replace(/-/g, ""); 
-  if (dateKey) {
-    const statsRef = ref(db, `adminStats/${dateKey}`);
-
-    try {
-      await update(statsRef, {
-        open: increment(-1),
-        done: increment(1)
-      });
-    } catch (e) {
-      console.warn("⚠️ adminStats update failed", e);
-      // ❗ DO NOT BLOCK DRIVER FLOW
-    }
-  }
-}
-
-
-/* ================= FIX #3 START ================= */
-
-
-/* ================= FIX #3 END ================= */
-  // ✅ CLEAR FORM CACHE AFTER SUCCESS
-  const forms = loadFormCache();
-  if (!jobTypeFilterInitialized) {
-    selectedJobTypes.clear();
-  }
-  delete forms[taskKey];
-  saveFormCache(forms);
-  
+  return true; // success signal
 }
 
 async function preloadDriverUIConfig(tasks) {
