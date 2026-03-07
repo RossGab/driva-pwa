@@ -24,10 +24,6 @@ button{
   margin-top:8px;
 }
 
-.delivery{
-  margin-top:8px;
-}
-
 .topbar{
   margin-bottom:20px;
 }
@@ -50,14 +46,14 @@ select,input{
 
 <label>Driver:</label>
 <select id="driverFilter">
-<option value="ALL">ALL</option>
+<option value="">Select Driver</option>
 </select>
 
-<button onclick="loadTasks()">Load Tasks</button>
+<button onclick="loadTasks()">Load Snapshot</button>
 
 </div>
 
-<div id="taskList"></div>
+<div id="taskList">Select a driver to load tasks.</div>
 
 
 <script type="module">
@@ -84,10 +80,14 @@ const storage = getStorage(app);
 const taskList = document.getElementById("taskList");
 const driverFilter = document.getElementById("driverFilter");
 
+let SNAPSHOT_TASKS = {};
+
+
 document.getElementById("dateFilter").value =
 new Date().toLocaleDateString("en-CA",{timeZone:"Asia/Manila"});
 
-loadTasks();
+
+driverFilter.addEventListener("change", renderDriverTasks);
 
 
 
@@ -105,21 +105,28 @@ async function loadTasks(){
     return;
   }
 
-  const tasks = await res.json();
+  SNAPSHOT_TASKS = await res.json();
 
-  taskList.innerHTML="";
+  buildDriverList();
+
+  taskList.innerHTML = "Select a driver to display tasks.";
+
+}
 
 
-  // Build driver list
+
+function buildDriverList(){
+
   const drivers = new Set();
 
-  for(const id in tasks){
-    if(tasks[id].driverId){
-      drivers.add(tasks[id].driverId);
+  for(const id in SNAPSHOT_TASKS){
+    const t = SNAPSHOT_TASKS[id];
+    if(t.driverId){
+      drivers.add(t.driverId);
     }
   }
 
-  driverFilter.innerHTML = `<option value="ALL">ALL</option>`;
+  driverFilter.innerHTML = `<option value="">Select Driver</option>`;
 
   drivers.forEach(d=>{
     const opt=document.createElement("option");
@@ -128,18 +135,28 @@ async function loadTasks(){
     driverFilter.appendChild(opt);
   });
 
+}
 
-  const selectedDriver = driverFilter.value;
 
 
-  for(const id in tasks){
+function renderDriverTasks(){
 
-    const t = tasks[id];
+  const driverId = driverFilter.value;
+
+  if(!driverId){
+    taskList.innerHTML="Select a driver.";
+    return;
+  }
+
+  taskList.innerHTML="";
+
+  for(const id in SNAPSHOT_TASKS){
+
+    const t = SNAPSHOT_TASKS[id];
 
     if(t.status === "COMPLETED") continue;
 
-    if(selectedDriver !== "ALL" && t.driverId !== selectedDriver)
-      continue;
+    if(t.driverId !== driverId) continue;
 
     renderTask(id,t);
 
@@ -160,7 +177,7 @@ async function renderTask(id,t){
   <div>${t.ADDRESS || "-"}</div>
   <div><b>Driver:</b> ${t.driverId || "-"}</div>
 
-  <div class="delivery" id="delivery_${id}">
+  <div id="delivery_${id}">
   Loading delivery methods...
   </div>
 
@@ -257,7 +274,7 @@ window.uploadTask = async function(taskKey){
 
   alert("Upload complete");
 
-  loadTasks();
+  renderDriverTasks();
 
 }
 
