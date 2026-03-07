@@ -14,7 +14,7 @@ body{
 .task{
   background:#fff;
   padding:15px;
-  margin-bottom:10px;
+  margin-bottom:12px;
   border-radius:8px;
   border-left:5px solid orange;
 }
@@ -22,11 +22,17 @@ body{
 img{
   width:120px;
   margin-top:6px;
+  border-radius:6px;
 }
 
 button{
   padding:8px 12px;
-  margin-top:6px;
+  margin-top:8px;
+}
+
+.delivery{
+  margin-top:8px;
+  font-size:14px;
 }
 </style>
 </head>
@@ -36,6 +42,7 @@ button{
 <h2>Admin Task Upload</h2>
 
 <input type="date" id="dateFilter">
+
 <div id="taskList"></div>
 
 <script type="module">
@@ -67,27 +74,29 @@ document.getElementById("dateFilter").addEventListener("change",loadTasks);
 
 loadTasks();
 
+
+// LOAD TASKS FROM SNAPSHOT
 async function loadTasks(){
 
   const date = document.getElementById("dateFilter").value.replace(/-/g,"");
 
-  const snap = await get(ref(db,`tasksByDate/${date}`));
+  const url =
+  `https://raw.githubusercontent.com/RossGab/driva-task-snapshots/main/snapshots/${date}.json`;
 
-  if(!snap.exists()){
-    taskList.innerHTML="No tasks";
+  const res = await fetch(url);
+
+  if(!res.ok){
+    taskList.innerHTML="Snapshot not found";
     return;
   }
 
+  const tasks = await res.json();
+
   taskList.innerHTML="";
 
-  const ids = Object.keys(snap.val());
+  for(const id in tasks){
 
-  for(const id of ids){
-
-    const s = await get(ref(db,`tasks/${id}`));
-    if(!s.exists()) continue;
-
-    const t = s.val();
+    const t = tasks[id];
 
     if(t.status === "COMPLETED") continue;
 
@@ -97,14 +106,20 @@ async function loadTasks(){
 
 }
 
-function renderTask(id,t){
+
+// RENDER TASK
+async function renderTask(id,t){
 
   const div=document.createElement("div");
   div.className="task";
 
   div.innerHTML=`
-  <b>${t.CUSTOMERNAME}</b>
-  <div>${t.ADDRESS}</div>
+  <b>${t.CUSTOMERNAME || "-"}</b>
+  <div>${t.ADDRESS || "-"}</div>
+
+  <div class="delivery" id="delivery_${id}">
+  Loading delivery methods...
+  </div>
 
   <input type="file" multiple accept="image/*" id="file_${id}">
 
@@ -117,14 +132,57 @@ function renderTask(id,t){
 
   taskList.appendChild(div);
 
+  renderDeliveryMethods(id,t.JOBTYPE);
+
 }
 
+
+// LOAD DELIVERY METHODS
+async function renderDeliveryMethods(taskKey,jobType){
+
+  const snap =
+  await get(ref(db,`config/driverUI/jobTypes/${jobType}/deliveryMethods`));
+
+  if(!snap.exists()){
+    document.getElementById(`delivery_${taskKey}`).innerHTML="";
+    return;
+  }
+
+  const methods = snap.val();
+
+  let html = "<b>Delivery Method</b><br>";
+
+  for(const m in methods){
+
+    html += `
+    <label>
+      <input type="radio" name="delivery_${taskKey}" value="${m}">
+      ${m}
+    </label><br>
+    `;
+
+  }
+
+  document.getElementById(`delivery_${taskKey}`).innerHTML = html;
+
+}
+
+
+// UPLOAD PHOTOS
 window.uploadTask = async function(taskKey){
 
   const input=document.getElementById(`file_${taskKey}`);
 
   if(!input.files.length){
     alert("Select photos first");
+    return;
+  }
+
+  const deliveryType =
+  document.querySelector(`input[name="delivery_${taskKey}"]:checked`)?.value;
+
+  if(!deliveryType){
+    alert("Select delivery method");
     return;
   }
 
@@ -143,7 +201,8 @@ window.uploadTask = async function(taskKey){
     await update(ref(db,`tasks/${taskKey}`),{
       [`photo${index}Url`]:url,
       [`photo${index}Filename`]:filename,
-      uploadedAt:new Date().toISOString()
+      uploadedAt:new Date().toISOString(),
+      deliveryType:deliveryType
     });
 
     index++;
@@ -154,7 +213,7 @@ window.uploadTask = async function(taskKey){
     status:"COMPLETED"
   });
 
-  alert("Uploaded");
+  alert("Upload complete");
 
   loadTasks();
 
