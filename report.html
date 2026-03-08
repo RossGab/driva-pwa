@@ -57,7 +57,7 @@ button:hover {
 
 <body>
 
-<h2>📊 Task Report V3.3</h2>
+<h2>📊 Task Report V3.4</h2>
 
 <button
   onclick="location.href='admin.html'"
@@ -307,13 +307,29 @@ window.generateReport = async function () {
     return;
   }
 
-  const data = rows.map(t =>
-  flattenTaskForReport(t)
-);
+  const data = rows.map(t => flattenTaskForReport(t));
 
-  const ws = XLSX.utils.json_to_sheet(data, {
-    header: Object.keys(data[0]).sort()
+/* collect ALL columns across all tasks */
+const headers = new Set();
+
+data.forEach(row => {
+  Object.keys(row).forEach(k => headers.add(k));
+});
+
+const headerArray = Array.from(headers).sort();
+
+/* normalize rows so every column exists */
+const normalized = data.map(row => {
+  const r = {};
+  headerArray.forEach(h => {
+    r[h] = row[h] ?? "";
   });
+  return r;
+});
+
+const ws = XLSX.utils.json_to_sheet(normalized, {
+  header: headerArray
+});
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "Tasks");
 
