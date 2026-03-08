@@ -57,7 +57,7 @@ button:hover {
 
 <body>
 
-<h2>📊 Task Report V3.2</h2>
+<h2>📊 Task Report V3.3</h2>
 
 <button
   onclick="location.href='admin.html'"
@@ -134,50 +134,47 @@ async function loadDrivers() {
   DRIVER_MAP = await res.json();
 }
 
-function flattenTaskForReport(task, driverMap) {
+function flattenTaskForReport(task) {
+
   const row = {};
 
-  // Always include ID first
+  // include task ID
   row.TASK_ID = task._key || "";
 
-  for (const [key, value] of Object.entries(task)) {
+  for (const key in task) {
 
-    // ❌ Skip internal/system-only fields
-    if (
-      key === "_key" ||
-      key === "finalized" ||
-      key === "uploading" ||
-      key === "processing"
-    ) {
-      continue;
-    }
+    if (key === "_key") continue;
 
-    // 🔄 Normalize column name
+    const value = task[key];
     const col = key.toUpperCase();
 
-    // 👤 Driver name helper
-    if (key === "driverId") {
-      row.DRIVER_ID = value || "";
-      row.DRIVER_NAME = driverMap[value]?.name || "";
-      continue;
-    }
-
-    // 🕒 Format date-like values
+    // format timestamps to PH time
     if (
       typeof value === "string" &&
       value.match(/^\d{4}-\d{2}-\d{2}T/)
     ) {
-      row[col] = toPHDateTime(value);
+      const d = new Date(value);
+
+      row[col] = d.toLocaleString("en-GB", {
+        timeZone: "Asia/Manila",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: false
+      });
+
       continue;
     }
 
-    // 📦 Objects → stringify (safe for Excel)
+    // objects → stringify
     if (typeof value === "object" && value !== null) {
       row[col] = JSON.stringify(value);
       continue;
     }
 
-    // ✅ Normal scalar
     row[col] = value ?? "";
   }
 
@@ -311,10 +308,12 @@ window.generateReport = async function () {
   }
 
   const data = rows.map(t =>
-  flattenTaskForReport(t, DRIVER_MAP)
+  flattenTaskForReport(t)
 );
 
-  const ws = XLSX.utils.json_to_sheet(data);
+  const ws = XLSX.utils.json_to_sheet(data, {
+    header: Object.keys(data[0]).sort()
+  });
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "Tasks");
 
