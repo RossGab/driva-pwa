@@ -261,7 +261,7 @@ import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "htt
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "v4.0.19.3-WIP";
+const VERSION = "v4.0.20.0-WIP";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -1378,12 +1378,13 @@ async function uploadNow(
   const url = await getDownloadURL(imgRef); // ✔ confirm
 
   const updatePayload = {
-    ...(isLastPhoto ? { status: "COMPLETED", forceReopen: false } : {}),
-    [`photo${photoIndex}Url`]: url,
-    [`photo${photoIndex}Filename`]: filename,
-    [`photo${photoIndex}TakenAt`]: takenAt,
-    uploadedAt: new Date().toISOString()
-  };
+  ...(isLastPhoto ? { status: "COMPLETED", forceReopen: false } : {}),
+  ...(deliveryData || {}), // 🔥 SAVE ALL DRIVER INPUT DATA
+  [`photo${photoIndex}Url`]: url,
+  [`photo${photoIndex}Filename`]: filename,
+  [`photo${photoIndex}TakenAt`]: takenAt,
+  uploadedAt: new Date().toISOString()
+};
 
   await update(ref(db, `tasks/${taskKey}`), updatePayload); // ✔ realtime DB
 
