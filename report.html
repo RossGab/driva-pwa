@@ -57,7 +57,7 @@ button:hover {
 
 <body>
 
-<h2>📊 Task Report V3.4</h2>
+<h2>📊 Task Report V3.5</h2>
 
 <button
   onclick="location.href='admin.html'"
@@ -148,26 +148,32 @@ function flattenTaskForReport(task) {
     const value = task[key];
     const col = key.toUpperCase();
 
-    // format timestamps to PH time
-    if (
-      typeof value === "string" &&
-      value.match(/^\d{4}-\d{2}-\d{2}T/)
-    ) {
-      const d = new Date(value);
+    // special handling for uploadedAt
+if (key === "uploadedAt" && value) {
 
-      row[col] = d.toLocaleString("en-GB", {
-        timeZone: "Asia/Manila",
-        year: "numeric",
-        month: "2-digit",
-        day: "2-digit",
-        hour: "2-digit",
-        minute: "2-digit",
-        second: "2-digit",
-        hour12: false
-      });
+  const d = new Date(value);
 
-      continue;
-    }
+  const parts = d.toLocaleString("en-GB", {
+    timeZone: "Asia/Manila",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false
+  }).replace(",", "").split(" ");
+
+  const [datePart, timePart] = parts;
+  const [day, month, year] = datePart.split("/");
+
+  row["UPLOADED_DATE"] = day;
+  row["UPLOADED_MONTH"] = month;
+  row["UPLOADED_YEAR"] = year;
+  row["UPLOADED_TIME"] = timePart;
+
+  continue;
+}
 
     // objects → stringify
     if (typeof value === "object" && value !== null) {
