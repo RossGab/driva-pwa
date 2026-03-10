@@ -57,7 +57,7 @@ button:hover {
 
 <body>
 
-<h2>📊 Task Report V3.5</h2>
+<h2>📊 Task Report V3.5.1</h2>
 
 <button
   onclick="location.href='admin.html'"
@@ -153,7 +153,7 @@ if (key === "uploadedAt" && value) {
 
   const d = new Date(value);
 
-  const parts = d.toLocaleString("en-GB", {
+  row["UPLOADEDAT"] = d.toLocaleString("en-US", {
     timeZone: "Asia/Manila",
     year: "numeric",
     month: "2-digit",
@@ -162,15 +162,7 @@ if (key === "uploadedAt" && value) {
     minute: "2-digit",
     second: "2-digit",
     hour12: false
-  }).replace(",", "").split(" ");
-
-  const [datePart, timePart] = parts;
-  const [day, month, year] = datePart.split("/");
-
-  row["UPLOADED_DATE"] = day;
-  row["UPLOADED_MONTH"] = month;
-  row["UPLOADED_YEAR"] = year;
-  row["UPLOADED_TIME"] = timePart;
+  });
 
   continue;
 }
