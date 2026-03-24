@@ -296,7 +296,7 @@ button {
 <div class="admin-header" style="justify-content:space-between;">
   <div style="display:flex;align-items:center;gap:14px;">
     <img src="./logo.jpg" class="admin-logo" alt="Company Logo">
-    <h1>Admin Dashboard <span class="version">V3.1.15.1-WIP</span></h1>
+    <h1>Admin Dashboard <span class="version">V3.1.15.2-WIP</span></h1>
   </div>
 
   <!-- 📅 DATE FILTER -->
@@ -1439,11 +1439,25 @@ window.loadTasks = async function (status) {
     DATE_FROM = today;
     DATE_TO = today;
   
-    // reset UI inputs
+    // ✅ Reset UI inputs
     dateFromInput.value = today;
     dateToInput.value = today;
   
-    // 🔥 reload using today only
+    // 🔥 RESET ALL STATES (THIS FIXES YOUR BUG)
+    FILTER_BA.clear();
+    SEARCH_TERM = "";
+    ADMIN_CURRENT_PAGE = 0;
+    FILTERED_TASK_IDS = [];
+    ALL_BA_FOR_DATE.clear();
+  
+    // optional: clear search UI
+    searchBox.value = "";
+    document.getElementById("clearSearchBtn").style.display = "none";
+  
+    // 🔥 CLEAR SNAPSHOT CACHE
+    window.__SNAPSHOT_TASKS__ = null;
+  
+    // reload clean
     return await loadTasks(status);
   }
 
