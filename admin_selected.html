@@ -296,7 +296,7 @@ button {
 <div class="admin-header" style="justify-content:space-between;">
   <div style="display:flex;align-items:center;gap:14px;">
     <img src="./logo.jpg" class="admin-logo" alt="Company Logo">
-    <h1>Admin Dashboard <span class="version">V3.1.15.2-WIP</span></h1>
+    <h1>Admin Dashboard <span class="version">V3.1.15.3-WIP</span></h1>
   </div>
 
   <!-- 📅 DATE FILTER -->
@@ -511,12 +511,28 @@ dateToInput.value = DATE_TO;
 
 async function onDateRangeChange() {
 
-  DATE_FROM = dateFromInput.value;
-  DATE_TO = dateToInput.value;
+  const newFrom = dateFromInput.value;
+  const newTo = dateToInput.value;
 
-  if (!DATE_FROM || !DATE_TO) return;
+  if (!newFrom || !newTo) return;
 
-  // clear cache
+  const keys = getDateRangeKeys(newFrom, newTo);
+
+  // ✅ VALIDATE EARLY (THIS IS THE FIX)
+  if (keys.length > 7) {
+    alert("Max 7 days range only");
+
+    // 🔥 revert UI (DO NOT CHANGE STATE)
+    dateFromInput.value = DATE_FROM;
+    dateToInput.value = DATE_TO;
+
+    return;
+  }
+
+  // ✅ ONLY NOW update state
+  DATE_FROM = newFrom;
+  DATE_TO = newTo;
+
   window.__SNAPSHOT_TASKS__ = null;
 
   showLoader("Loading date range…");
@@ -1430,36 +1446,6 @@ window.loadTasks = async function (status) {
 
   const keys = getDateRangeKeys(DATE_FROM, DATE_TO);
 
-  // ✅ LIMIT RANGE HERE
-  if (keys.length > 7) {
-    alert("Max 7 days range only. Resetting to today.");
-  
-    const today = getTodayPH();
-  
-    DATE_FROM = today;
-    DATE_TO = today;
-  
-    // ✅ Reset UI inputs
-    dateFromInput.value = today;
-    dateToInput.value = today;
-  
-    // 🔥 RESET ALL STATES (THIS FIXES YOUR BUG)
-    FILTER_BA.clear();
-    SEARCH_TERM = "";
-    ADMIN_CURRENT_PAGE = 0;
-    FILTERED_TASK_IDS = [];
-    ALL_BA_FOR_DATE.clear();
-  
-    // optional: clear search UI
-    searchBox.value = "";
-    document.getElementById("clearSearchBtn").style.display = "none";
-  
-    // 🔥 CLEAR SNAPSHOT CACHE
-    window.__SNAPSHOT_TASKS__ = null;
-  
-    // reload clean
-    return await loadTasks(status);
-  }
 
   let snapshotTasks = [];
   
