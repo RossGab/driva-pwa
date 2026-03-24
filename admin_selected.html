@@ -296,20 +296,25 @@ button {
 <div class="admin-header" style="justify-content:space-between;">
   <div style="display:flex;align-items:center;gap:14px;">
     <img src="./logo.jpg" class="admin-logo" alt="Company Logo">
-    <h1>Admin Dashboard <span class="version">V3.1.14.9-WIP</span></h1>
+    <h1>Admin Dashboard <span class="version">V3.1.15-WIP</span></h1>
   </div>
 
   <!-- 📅 DATE FILTER -->
+  <div style="display:flex; gap:8px; align-items:center;">
   <input
     type="date"
-    id="adminDateFilter"
-    style="
-      padding:8px 12px;
-      border-radius:6px;
-      border:1px solid #ccc;
-      font-size:14px;
-    "
+    id="adminDateFrom"
+    style="padding:8px; border-radius:6px; border:1px solid #ccc;"
   >
+
+  <span style="font-size:14px;">to</span>
+
+  <input
+    type="date"
+    id="adminDateTo"
+    style="padding:8px; border-radius:6px; border:1px solid #ccc;"
+  >
+</div>
 </div>
 
 <!-- ===== DASHBOARD ===== -->
@@ -490,37 +495,42 @@ function getTodayPH() {
   });
 }
 
-let SELECTED_DATE = getTodayPH();
 let ALL_BA_FOR_DATE = new Set();
 let FILTERED_TASK_IDS = [];
 let FILTER_READY = false;
 let DRIVER_CACHE = {};
 
-const adminDateFilter = document.getElementById("adminDateFilter");
+let DATE_FROM = getTodayPH();
+let DATE_TO = getTodayPH();
 
-adminDateFilter.value = SELECTED_DATE;
+const dateFromInput = document.getElementById("adminDateFrom");
+const dateToInput = document.getElementById("adminDateTo");
 
-adminDateFilter.addEventListener("change", async e => {
-  const oldDate = SELECTED_DATE;
-  SELECTED_DATE = e.target.value;
+dateFromInput.value = DATE_FROM;
+dateToInput.value = DATE_TO;
 
-  localStorage.setItem("ADMIN_SELECTED_DATE", SELECTED_DATE);
+async function onDateRangeChange() {
 
-  // remove OLD date cache
-  localStorage.removeItem(`ADMIN_TASK_IDS_${oldDate}`);
-  localStorage.removeItem(`ADMIN_TASK_CACHE_${oldDate}`);
+  DATE_FROM = dateFromInput.value;
+  DATE_TO = dateToInput.value;
 
-  // 🔥 CLEAR SNAPSHOT MEMORY (ADD THIS LINE)
+  if (!DATE_FROM || !DATE_TO) return;
+
+  // clear cache
   window.__SNAPSHOT_TASKS__ = null;
 
-  showLoader("Loading selected date…");
+  showLoader("Loading date range…");
+
   try {
-    await refreshDashboard();
     await loadTasks(CURRENT_STATUS || "PENDING");
   } finally {
     hideLoader();
   }
-});
+}
+
+dateFromInput.addEventListener("change", onDateRangeChange);
+dateToInput.addEventListener("change", onDateRangeChange);
+
 
 async function updateSnapshotStatusForDate(dateKey) {
   const btn = document.getElementById("snapshotStatusBtn");
@@ -1392,26 +1402,59 @@ window.softRefresh = async function () {
     hideLoader();
   }
 };
+
+function getDateRangeKeys(from, to) {
+  const keys = [];
+
+  const d1 = new Date(from);
+  const d2 = new Date(to);
+
+  for (let d = new Date(d1); d <= d2; d.setDate(d.getDate() + 1)) {
+    const key = d.toLocaleDateString("en-CA", {
+      timeZone: "Asia/Manila"
+    }).replace(/-/g, "");
+
+    keys.push(key);
+  }
+
+  return keys;
+}
   
-  window.loadTasks = async function (status) {
+window.loadTasks = async function (status) {
   CURRENT_STATUS = status;
   taskList.innerHTML = "Loading...";
 
-  const dateKey = SELECTED_DATE.replace(/-/g, "");
+
 
   showLoader("Loading snapshot…");
 
-  const snapshotTasks = await loadSnapshotTasks(dateKey);
+  const keys = getDateRangeKeys(DATE_FROM, DATE_TO);
+
+  // ✅ LIMIT RANGE HERE
+  if (keys.length > 7) {
+    alert("Max 7 days range only");
+    hideLoader(); // 🔥 ADD THIS
+    return;
+  }
+
+  let snapshotTasks = [];
+  
+  for (const key of keys) {
+    const data = await loadSnapshotTasks(key);
+    if (data) {
+      snapshotTasks = snapshotTasks.concat(data);
+    }
+  }
 
   // ✅ STRICT MODE: NO FALLBACK
-  if (!snapshotTasks) {
+  if (!snapshotTasks.length) {
     window.__SNAPSHOT_TASKS__ = null;
-    showNoSnapshotMessage(SELECTED_DATE);
+    showNoSnapshotMessage(DATE_FROM);
     hideLoader();
     return;
   }
 
-  console.log("📦 Using snapshot for", dateKey);
+  console.log("📦 Using snapshot range:", DATE_FROM, "to", DATE_TO);
 
   ADMIN_TASK_IDS = snapshotTasks.map(t => t._key);
   FILTERED_TASK_IDS = [...ADMIN_TASK_IDS];
@@ -1426,7 +1469,7 @@ window.softRefresh = async function () {
 
   window.__SNAPSHOT_TASKS__ = snapshotTasks;
 
-  updateSnapshotStatusForDate(dateKey);
+  updateSnapshotStatusForDate(keys[keys.length - 1]); // latest date
   updateSnapshotFreshness();
   refreshDashboard();
 
