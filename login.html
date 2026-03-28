@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Admin Login</title>
+  <style>
+    body {
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      height:100vh;
+      font-family:Arial;
+      background:#f3f3f3;
+    }
+    .box {
+      background:#fff;
+      padding:20px;
+      border-radius:10px;
+      width:300px;
+      box-shadow:0 0 10px rgba(0,0,0,.1);
+    }
+    input {
+      width:100%;
+      padding:10px;
+      margin-bottom:10px;
+    }
+    button {
+      width:100%;
+      padding:10px;
+      background:#007bff;
+      color:#fff;
+      border:none;
+    }
+    .error {
+      color:red;
+      font-size:13px;
+    }
+  </style>
+</head>
+
+<body>
+<div class="box">
+  <h3>Admin Login</h3>
+  <input id="email" placeholder="Email">
+  <input id="password" type="password" placeholder="Password">
+  <button onclick="login()">Login</button>
+  <div id="error" class="error"></div>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import {
+  getAuth,
+  signInWithEmailAndPassword
+} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+
+const firebaseConfig = {
+  apiKey: "YOUR_KEY",
+  authDomain: "YOUR_DOMAIN",
+};
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+
+window.login = async function () {
+  const email = document.getElementById("email").value;
+  const pass = document.getElementById("password").value;
+
+  try {
+    await signInWithEmailAndPassword(auth, email, pass);
+
+    // ✅ redirect to dashboard
+    window.location.href = "index.html";
+
+  } catch (e) {
+    document.getElementById("error").innerText = e.message;
+  }
+};
+</script>
+</body>
+</html>
