@@ -81,7 +81,7 @@ select, input[type="date"] {
 
 <body>
 
-<h2>Manage Tasks V4.4.0-WIP</h2>
+<h2>Manage Tasks V4.4.0.1-WIP</h2>
 
 <button onclick="location.href='admin.html'" class="small-btn">⬅ Back</button>
 
@@ -296,7 +296,7 @@ async function loadTasks() {
   applyFilters();
 }
 
-
+window.loadTasks = loadTasks;
 
 function buildFilterLists() {
   const drivers = new Set();
