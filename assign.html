@@ -81,7 +81,7 @@ select, input[type="date"] {
 
 <body>
 
-<h2>Manage Tasks V4.4.0.21-WIP</h2>
+<h2>Manage Tasks V4.4.0.22-WIP</h2>
 
 <button onclick="location.href='admin.html'" class="small-btn">⬅ Back</button>
 
@@ -343,14 +343,7 @@ async function fetchSnapshotsInBatches(dateKeys, batchSize = 10) {
       }
     }
 
-    if (!hasRenderedOnce && TASKS.length)
-        hasRenderedOnce = true;
-        FILTERED_TASKS = TASKS;
-      
-        setTimeout(() => {
-          renderVirtual();
-        }, 0);
-      }
+    
 
     const loaded = Math.min(i + batch.length, dateKeys.length);
     const percent = Math.floor((loaded / dateKeys.length) * 100);
