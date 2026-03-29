@@ -81,7 +81,7 @@ select, input[type="date"] {
 
 <body>
 
-<h2>Manage Tasks V4.4.0.20-WIP</h2>
+<h2>Manage Tasks V4.4.0.21-WIP</h2>
 
 <button onclick="location.href='admin.html'" class="small-btn">⬅ Back</button>
 
@@ -310,11 +310,8 @@ async function fetchSnapshotsInBatches(dateKeys, batchSize = 10) {
   for (let i = 0; i < dateKeys.length; i += batchSize) {
     const batch = dateKeys.slice(i, i + batchSize);
 
-    const results = await Promise.all(
-      batch.map(key => loadSnapshotTasks(key))
-    );
-    
-    for (const result of results) {
+    for (const key of batch) {
+  const result = await loadSnapshotTasks(key);
 
       for (let j = 0; j < result.length; j += 200) {
         const chunk = result.slice(j, j + 200);
@@ -346,7 +343,7 @@ async function fetchSnapshotsInBatches(dateKeys, batchSize = 10) {
       }
     }
 
-    if (!hasRenderedOnce && TASKS.length >= 1000) {
+    if (!hasRenderedOnce && TASKS.length)
         hasRenderedOnce = true;
         FILTERED_TASKS = TASKS;
       
@@ -431,7 +428,12 @@ async function loadTasks() {
     });
   }, 0);
     
-    
+    // 3️⃣ FINAL RENDER (YOU REMOVED THIS — THIS IS THE BUG)
+  setTimeout(() => {
+    FILTERED_TASKS = TASKS;
+    lastStart = -1;
+    renderVirtual();
+  }, 0);
     
 
   } catch (e) {
