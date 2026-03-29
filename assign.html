@@ -81,7 +81,7 @@ select, input[type="date"] {
 
 <body>
 
-<h2>Manage Tasks V4.4.0.25.1-WIP</h2>
+<h2>Manage Tasks V4.4.0.25.2-WIP</h2>
 
 <button onclick="location.href='admin.html'" class="small-btn">⬅ Back</button>
 
@@ -101,6 +101,7 @@ select, input[type="date"] {
     <input type="date" id="filterDateFrom">
     <input type="date" id="filterDateTo">
     <button id="searchBtn" onclick="loadTasks()">🔍 Search</button>
+    <button onclick="clearFilters()" class="small-btn">🧹 Clear</button>
   </div>
 
   <!-- 🔹 ROW 2: DROPDOWNS -->
@@ -303,6 +304,10 @@ function normalizeDate(dateStr) {
   });
 }
 
+function clearFilters() {
+  location.reload();
+}
+  
 /* ===== PH TIME ===== */
 function toPHTime(ts) {
   return new Date(ts).toLocaleString("en-PH", {
@@ -396,6 +401,8 @@ async function fetchSnapshotsInBatches(dateKeys, batchSize = 10) {
 
   progressText.innerText = "Rendering...";
 }
+
+    
 
 /* ===== LOAD TASKS ===== */
 async function loadTasks() {
