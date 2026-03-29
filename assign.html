@@ -81,7 +81,7 @@ select, input[type="date"] {
 
 <body>
 
-<h2>Manage Tasks V4.4.0.7-WIP</h2>
+<h2>Manage Tasks V4.4.0.8-WIP</h2>
 
 <button onclick="location.href='admin.html'" class="small-btn">⬅ Back</button>
 
@@ -292,7 +292,6 @@ function sleep(ms) {
 }
 
 async function fetchSnapshotsInBatches(dateKeys, batchSize = 10) {
-  const results = [];
 
   progressContainer.style.display = "block";
   progressText.innerText = "Starting...";
@@ -329,13 +328,11 @@ async function fetchSnapshotsInBatches(dateKeys, batchSize = 10) {
   progressText.innerText = "Rendering complete";
   progressBar.style.width = "100%";
 
-  return results;
 }
 
 /* ===== LOAD TASKS ===== */
 async function loadTasks() {
 
-  // 🔄 UI loading state
   searchBtn.disabled = true;
   searchBtn.innerText = "Loading...";
   progressContainer.style.display = "block";
@@ -372,42 +369,24 @@ async function loadTasks() {
         d.toLocaleDateString("en-CA", { timeZone: "Asia/Manila" })
          .replace(/-/g, "")
       );
-      
-    }
-    
-    
-
-    const allTasks = await fetchSnapshotsInBatches(dateKeys, 10);
-
-    // 🔥 filter out completed
-    TASKS = allTasks.filter(t => t.status !== "COMPLETED");
-
-    if (!TASKS.length) {
-      table.innerHTML = `
-        <tr>
-          <td colspan="8" style="text-align:center;color:#777;">
-            No tasks found for selected date
-          </td>
-        </tr>
-      `;
-
-      searchBtn.disabled = false;
-      searchBtn.innerText = "🔍 Search";
-      progressContainer.style.display = "none";
-      return;
     }
 
+    // 🔥 LOAD SNAPSHOTS (STREAMING)
+    await fetchSnapshotsInBatches(dateKeys, 10);
+
+    // 🔥 FINALIZE (ONLY ONCE, AFTER LOAD)
     buildFilterLists();
     applyFilters();
-    progressContainer.style.display = "none";
-    progressBar.style.width = "0%";
 
   } catch (e) {
     console.error(e);
     alert("Failed to load snapshot");
   }
 
-  // ✅ restore button
+  // 🔥 ALWAYS RUN (SUCCESS OR FAIL)
+  progressContainer.style.display = "none";
+  progressBar.style.width = "0%";
+
   searchBtn.disabled = false;
   searchBtn.innerText = "🔍 Search";
 }
