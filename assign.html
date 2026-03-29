@@ -81,7 +81,7 @@ select, input[type="date"] {
 
 <body>
 
-<h2>Manage Tasks V4.4.0.16-WIP</h2>
+<h2>Manage Tasks V4.4.0.17-WIP</h2>
 
 <button onclick="location.href='admin.html'" class="small-btn">⬅ Back</button>
 
@@ -314,9 +314,6 @@ async function fetchSnapshotsInBatches(dateKeys, batchSize = 10) {
 
     TASKS.push(...newTasks);
     
-    // ✅ sync filtered data
-    FILTERED_TASKS = TASKS;
-    
     if (i === 0) {
       FILTERED_TASKS = TASKS;
       await renderCurrentPage(); // only first batch
@@ -383,9 +380,13 @@ async function loadTasks() {
 
     // 🔥 FINALIZE (ONLY ONCE, AFTER LOAD)
     buildFilterLists();
-    FILTERED_TASKS = TASKS;
-    await renderCurrentPage();   // ✅ FINAL FULL RENDER
-    // applyFilters();
+    // AFTER buildFilterLists()
+
+    FILTERED_TASKS = [...TASKS];
+    
+    if (CURRENT_PAGE === 0) {
+      await renderCurrentPage(); // only once
+    }
 
   } catch (e) {
     console.error(e);
@@ -542,7 +543,9 @@ async function renderCurrentPage() {
 /* ===== RENDER ===== */
 async function renderTable(data) {
 
-  table.innerHTML = "";
+  if (table.children.length > 0) {
+    table.innerHTML = "";
+  }
   checkAll.checked = false;
   bulkBtn.disabled = true;
 
@@ -577,7 +580,7 @@ async function renderTable(data) {
     frag.appendChild(tr);
 
     // 🔥 CRITICAL: yield every 50 rows
-    if (i % 50 === 0) {
+    if (i % 25 === 0) {
       await new Promise(r => setTimeout(r, 0));
     }
   }
