@@ -81,7 +81,7 @@ select, input[type="date"] {
 
 <body>
 
-<h2>Manage Tasks V4.4.0.22-WIP</h2>
+<h2>Manage Tasks V4.4.0.23-WIP</h2>
 
 <button onclick="location.href='admin.html'" class="small-btn">⬅ Back</button>
 
@@ -339,6 +339,15 @@ async function fetchSnapshotsInBatches(dateKeys, batchSize = 10) {
 
         TASKS.push(...processed);
 
+        if (!hasRenderedOnce && TASKS.length > 500) {
+          hasRenderedOnce = true;
+          FILTERED_TASKS = TASKS;
+        
+          setTimeout(() => {
+            renderVirtual();
+          }, 0);
+        }
+
         await new Promise(r => setTimeout(r, 0));
       }
     }
@@ -420,13 +429,12 @@ async function loadTasks() {
       buildFilterLists();
     });
   }, 0);
-    
-    // 3️⃣ FINAL RENDER (YOU REMOVED THIS — THIS IS THE BUG)
-  setTimeout(() => {
+
     FILTERED_TASKS = TASKS;
+    
+    // 🔥 render once
     lastStart = -1;
     renderVirtual();
-  }, 0);
     
 
   } catch (e) {
