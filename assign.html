@@ -81,7 +81,7 @@ select, input[type="date"] {
 
 <body>
 
-<h2>Manage Tasks V4.4.0.18-WIP</h2>
+<h2>Manage Tasks V4.4.0.19-WIP</h2>
 
 <button onclick="location.href='admin.html'" class="small-btn">⬅ Back</button>
 
@@ -136,7 +136,7 @@ select, input[type="date"] {
      style="margin-top:10px;text-align:center;"></div>
 <div class="panel">
   <b>📝Open Tasks</b>
-  <div style="overflow:auto;margin-top:6px;">
+  <div id="tableContainer" style="overflow:auto;height:70vh;margin-top:6px;">
     <table>
       <thead>
         <tr>
@@ -150,7 +150,7 @@ select, input[type="date"] {
           <th>Status</th>
         </tr>
       </thead>
-      <tbody id="taskTable">
+      <tbody id="taskTable" style="position:relative;">
   <tr>
     <td colspan="8" style="text-align:center;color:#777;">
       Click 🔍 Search to load tasks
@@ -205,6 +205,9 @@ const progressBar = document.getElementById("progressBar");
 const searchBox = document.getElementById("searchBox");
 let SEARCH_TERM = "";
 
+const ROW_HEIGHT = 38;
+const VISIBLE_COUNT = 30;
+
 let searchTimeout;
 
 searchBox.addEventListener("input", e => {
@@ -217,10 +220,9 @@ searchBox.addEventListener("input", e => {
 });
 
 let TASKS = [];
-const PAGE_SIZE = 250;   // ✅ adjust: 50 / 100 / 200
-let CURRENT_PAGE = 0;
 let FILTERED_TASKS = [];
-let LAST_RENDERED_PAGE = -1;
+const SELECTED_IDS = new Set();
+
 
 const today = getTodayPH();
 filterDateFrom.value = today;
@@ -320,7 +322,7 @@ async function fetchSnapshotsInBatches(dateKeys, batchSize = 10) {
     
       // 🔥 non-blocking render
       setTimeout(() => {
-        renderCurrentPage();
+        renderVirtual();
       }, 0);
     }
 
@@ -356,8 +358,10 @@ async function loadTasks() {
 
   TASKS = [];
   FILTERED_TASKS = [];
-  CURRENT_PAGE = 0;
-  LAST_RENDERED_PAGE = -1;   // ✅ ADD THIS
+  SELECTED_IDS.clear();
+  
+  bulkBtn.disabled = true;   // ✅ ADD THIS
+  checkAll.checked = false;  // ✅ ADD THIS
 
   const from = filterDateFrom.value;
   const to   = filterDateTo.value;
@@ -389,6 +393,8 @@ async function loadTasks() {
     // AFTER buildFilterLists()
 
     FILTERED_TASKS = [...TASKS];
+    lastStart = -1;   // ✅ ADD THIS
+    renderVirtual();
     
 
   } catch (e) {
@@ -528,55 +534,59 @@ function applyFilters() {
 
   FILTERED_TASKS = data;
 
-  CURRENT_PAGE = 0;             // ✅ reset page
-  LAST_RENDERED_PAGE = -1;      // ✅ force re-render
+  SELECTED_IDS.clear();
+  bulkBtn.disabled = true;   // ✅ ADD THIS
   
-  renderCurrentPage();
+  checkAll.checked = false;  // ✅ ADD THIS (important!)
+  
+  CURRENT_PAGE = 0;
+  LAST_RENDERED_PAGE = -1;
+  
+  document.getElementById("tableContainer").scrollTop = 0;
+  lastStart = -1;   // ✅ ADD THIS
+  renderVirtual();
 }
 
-async function renderCurrentPage() {
+let lastStart = -1;
 
-  // ✅ prevent re-render of same page
-  if (CURRENT_PAGE === LAST_RENDERED_PAGE) return;
+function renderVirtual() {
+  const container = document.getElementById("tableContainer");
+  const scrollTop = container.scrollTop;
 
-  LAST_RENDERED_PAGE = CURRENT_PAGE;
+  const start = Math.floor(scrollTop / ROW_HEIGHT);
 
-  const start = CURRENT_PAGE * PAGE_SIZE;
-  const end = start + PAGE_SIZE;
+  // 🚀 PREVENT SAME RENDER
+  if (start === lastStart) return;
+  lastStart = start;
 
-  const pageData = FILTERED_TASKS.slice(start, end);
+  const end = start + VISIBLE_COUNT;
 
-  await renderTable(pageData);
+  const visible = FILTERED_TASKS.slice(start, end);
 
-  renderPaginationControls();
+  renderTableVirtual(visible, start);
 }
-    
 
-/* ===== RENDER ===== */
-async function renderTable(data) {
+function renderTableVirtual(data, startIndex) {
 
-  if (table.children.length) table.innerHTML = "";
-  checkAll.checked = false;
-  bulkBtn.disabled = true;
+  table.innerHTML = "";
 
-  if (!data.length) {
-    table.innerHTML = `<tr><td colspan="7">No matching tasks</td></tr>`;
-    return;
-  }
+  const totalHeight = FILTERED_TASKS.length * ROW_HEIGHT;
 
-  const frag = document.createDocumentFragment();
+  // top spacer
+  const topSpacer = document.createElement("tr");
+  topSpacer.style.height = (startIndex * ROW_HEIGHT) + "px";
+  table.appendChild(topSpacer);
 
-  for (let i = 0; i < data.length; i++) {
-
-    const t = data[i];
-
+  // rows
+  data.forEach(t => {
     const tr = document.createElement("tr");
 
     tr.innerHTML = `
       <td>
         <input type="checkbox"
           data-id="${t._key}"
-          onchange="checkSelection()">
+          ${SELECTED_IDS.has(t._key) ? "checked" : ""}
+          onchange="toggleSelection(this)">
       </td>
       <td>${t.CUSTOMERNAME||""}</td>
       <td>${t.ADDRESS||""}</td>
@@ -587,34 +597,65 @@ async function renderTable(data) {
       <td><b>${t.status || "PENDING"}</b></td>
     `;
 
-    frag.appendChild(tr);
+    table.appendChild(tr);
+  });
 
-    // 🔥 CRITICAL: yield every 50 rows
-    if (i % 25 === 0) {
-      await new Promise(r => setTimeout(r, 0));
-    }
+  // bottom spacer
+  const bottomSpacer = document.createElement("tr");
+  const remaining = totalHeight - ((startIndex + data.length) * ROW_HEIGHT);
+  bottomSpacer.style.height = remaining + "px";
+  table.appendChild(bottomSpacer);
+}
+
+window.toggleSelection = function (cb) {
+  const id = cb.dataset.id;
+
+  if (cb.checked) {
+    SELECTED_IDS.add(id);
+  } else {
+    SELECTED_IDS.delete(id);
   }
 
-  table.appendChild(frag);
-}
+  bulkBtn.disabled = SELECTED_IDS.size === 0;
+};
+
+const container = document.getElementById("tableContainer");
+
+let ticking = false;
+
+container.addEventListener("scroll", () => {
+  if (!ticking) {
+    requestAnimationFrame(() => {
+      renderVirtual();
+      ticking = false;
+    });
+    ticking = true;
+  }
+});
+
+
 
 /* ===== SELECTION ===== */
 checkAll.onchange = () => {
-  document.querySelectorAll("#taskTable input[type=checkbox]")
-    .forEach(cb => cb.checked = checkAll.checked);
-  checkSelection();
+  if (checkAll.checked) {
+    for (let i = 0; i < FILTERED_TASKS.length; i++) {
+      SELECTED_IDS.add(FILTERED_TASKS[i]._key);
+    }
+  } else {
+    SELECTED_IDS.clear();
+  }
+
+  renderVirtual();
+  bulkBtn.disabled = SELECTED_IDS.size === 0;
 };
 
 window.checkSelection = function () {
-  const count =
-    document.querySelectorAll("#taskTable input:checked").length;
-  bulkBtn.disabled = count === 0;
+  bulkBtn.disabled = SELECTED_IDS.size === 0;
 };
 
 /* ===== BULK ACTION ===== */
 window.openBulkActions = function () {
-  const ids = [...document.querySelectorAll("#taskTable input:checked")]
-    .map(cb => cb.dataset.id);
+  const ids = [...SELECTED_IDS];
 
   if (!ids.length) return;
 
