@@ -81,7 +81,7 @@ select, input[type="date"] {
 
 <body>
 
-<h2>Manage Tasks V4.4.0.19-WIP</h2>
+<h2>Manage Tasks V4.4.0.20-WIP</h2>
 
 <button onclick="location.href='admin.html'" class="small-btn">⬅ Back</button>
 
@@ -204,6 +204,7 @@ const progressBar = document.getElementById("progressBar");
 
 const searchBox = document.getElementById("searchBox");
 let SEARCH_TERM = "";
+let hasRenderedOnce = false;
 
 const ROW_HEIGHT = 38;
 const VISIBLE_COUNT = 30;
@@ -309,22 +310,50 @@ async function fetchSnapshotsInBatches(dateKeys, batchSize = 10) {
   for (let i = 0; i < dateKeys.length; i += batchSize) {
     const batch = dateKeys.slice(i, i + batchSize);
 
-    const batchResults = await Promise.all(
+    const results = await Promise.all(
       batch.map(key => loadSnapshotTasks(key))
     );
-
-    const newTasks = batchResults.flat().filter(t => t.status !== "COMPLETED");
-
-    TASKS.push(...newTasks);
     
-    if (i === 0) {
-      FILTERED_TASKS = [...TASKS];
-    
-      // 🔥 non-blocking render
-      setTimeout(() => {
-        renderVirtual();
-      }, 0);
+    for (const result of results) {
+
+      for (let j = 0; j < result.length; j += 200) {
+        const chunk = result.slice(j, j + 200);
+
+        const processed = [];
+
+        for (const t of chunk) {
+          if (t.status === "COMPLETED") continue;
+
+          processed.push({
+            ...t,
+            _search: (
+              (t.CUSTOMERNAME || "") + " " +
+              (t.ADDRESS || "") + " " +
+              (t.ACCOUNTNUMBER || "") + " " +
+              (t.METERNUMBER || "") + " " +
+              (t.JOBTYPE || "") + " " +
+              (t.BA || "") + " " +
+              (t.DMZ || "") + " " +
+              (t.MRU || "") + " " +
+              (t.driverId || "")
+            ).toLowerCase()
+          });
+        }
+
+        TASKS.push(...processed);
+
+        await new Promise(r => setTimeout(r, 0));
+      }
     }
+
+    if (!hasRenderedOnce && TASKS.length >= 1000) {
+        hasRenderedOnce = true;
+        FILTERED_TASKS = TASKS;
+      
+        setTimeout(() => {
+          renderVirtual();
+        }, 0);
+      }
 
     const loaded = Math.min(i + batch.length, dateKeys.length);
     const percent = Math.floor((loaded / dateKeys.length) * 100);
@@ -337,6 +366,7 @@ async function fetchSnapshotsInBatches(dateKeys, batchSize = 10) {
   }
 
   progressText.innerText = "Rendering...";
+  await new Promise(r => setTimeout(r, 0));
 }
 
 /* ===== LOAD TASKS ===== */
@@ -359,6 +389,7 @@ async function loadTasks() {
   TASKS = [];
   FILTERED_TASKS = [];
   SELECTED_IDS.clear();
+  hasRenderedOnce = false;
   
   bulkBtn.disabled = true;   // ✅ ADD THIS
   checkAll.checked = false;  // ✅ ADD THIS
@@ -388,13 +419,19 @@ async function loadTasks() {
     // 🔥 LOAD SNAPSHOTS (STREAMING)
     await fetchSnapshotsInBatches(dateKeys, 10);
 
-    // 🔥 FINALIZE (ONLY ONCE, AFTER LOAD)
-    buildFilterLists();
-    // AFTER buildFilterLists()
+    // 🔥 FINALIZE (NON-BLOCKING)
 
-    FILTERED_TASKS = [...TASKS];
-    lastStart = -1;   // ✅ ADD THIS
-    renderVirtual();
+    // 1️⃣ Let UI breathe first
+    await new Promise(r => setTimeout(r, 0));
+    
+    // 2️⃣ Build filters async
+    setTimeout(() => {
+    requestAnimationFrame(() => {
+      buildFilterLists();
+    });
+  }, 0);
+    
+    
     
 
   } catch (e) {
@@ -513,22 +550,7 @@ function applyFilters() {
   /* ===== SEARCH FILTER ===== */
   if (SEARCH_TERM) {
     data = data.filter(t => {
-      const haystack = [
-        t.CUSTOMERNAME,
-        t.ADDRESS,
-        t.ACCOUNTNUMBER,
-        t.METERNUMBER,
-        t.JOBTYPE,
-        t.BA,
-        t.DMZ,
-        t.MRU,
-        t.driverId
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
-
-      return haystack.includes(SEARCH_TERM);
+      return (t._search || "").includes(SEARCH_TERM);
     });
   }
 
@@ -748,13 +770,20 @@ const REQUIRED_HEADERS = [
   "AGENTNAME"
 ];
 
-function appendTasksToLocalState(newTasks) {
+async function appendTasksToLocalState(newTasks) {
   const existing = new Set(TASKS.map(t => t._key));
   const unique = newTasks.filter(t => !existing.has(t._key));
 
-  TASKS.push(...unique);
-  buildFilterLists();
-  applyFilters();
+  for (let i = 0; i < unique.length; i += 500) {
+    TASKS.push(...unique.slice(i, i + 500));
+
+    // 🔥 LET UI BREATHE
+    await new Promise(r => setTimeout(r, 0));
+  }
+
+  // 🔥 ALSO NON-BLOCKING
+  setTimeout(() => buildFilterLists(), 0);
+  setTimeout(() => applyFilters(), 0);
 }
 
 window.uploadCSV = async function(btn){
@@ -811,20 +840,27 @@ window.uploadCSV = async function(btn){
 
         const dateKey = now.slice(0, 10).replace(/-/g, "")// example: "20260122"
 
-        rows.forEach((task, index) => {
-          const taskId = `TASK_${base}_${index}`;
-
-          updates[`tasks/${taskId}`] = {
-            ...task,
-            driverId: task.AGENTID || "",
-            status: "PENDING",
-            rowIndex: index + 1,
-            uploadBatch: base,
-            createdAt: now
-          };
-
-          updates[`tasksByDate/${dateKey}/${taskId}`] = true;
-        });
+        for (let i = 0; i < rows.length; i += 500) {
+          const chunk = rows.slice(i, i + 500);
+        
+          chunk.forEach((task, index) => {
+            const taskId = `TASK_${base}_${i + index}`;
+        
+            updates[`tasks/${taskId}`] = {
+              ...task,
+              driverId: task.AGENTID || "",
+              status: "PENDING",
+              rowIndex: i + index + 1,
+              uploadBatch: base,
+              createdAt: now
+            };
+        
+            updates[`tasksByDate/${dateKey}/${taskId}`] = true;
+          });
+        
+          // 🔥 LET UI BREATHE
+          await new Promise(r => setTimeout(r, 0));
+        }
 
         await update(ref(db), updates);
 
@@ -850,18 +886,28 @@ window.uploadCSV = async function(btn){
         });
 
         // ✅ Build local task objects (NO DB READ)
-        const newTasks = rows.map((task, index) => ({
-          _key: `TASK_${base}_${index}`,
-          ...task,
-          driverId: task.AGENTID || "",
-          status: "PENDING",
-          rowIndex: index + 1,
-          uploadBatch: base,
-          createdAt: now
-        }));
+        const newTasks = [];
+
+        for (let i = 0; i < rows.length; i += 500) {
+          const chunk = rows.slice(i, i + 500);
+        
+          chunk.forEach((task, index) => {
+            newTasks.push({
+              _key: `TASK_${base}_${i + index}`,
+              ...task,
+              driverId: task.AGENTID || "",
+              status: "PENDING",
+              rowIndex: i + index + 1,
+              uploadBatch: base,
+              createdAt: now
+            });
+          });
+        
+          await new Promise(r => setTimeout(r, 0));
+        }
         
         // ✅ Inject directly into UI state
-        appendTasksToLocalState(newTasks);
+        await appendTasksToLocalState(newTasks);
 
         // 🔁 Ensure filters include upload date
         filterDateFrom.value = now.slice(0, 10);
