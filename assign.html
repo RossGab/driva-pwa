@@ -81,7 +81,7 @@ select, input[type="date"] {
 
 <body>
 
-<h2>Manage Tasks V4.4.0.2-WIP</h2>
+<h2>Manage Tasks V4.4.0.3-WIP</h2>
 
 <button onclick="location.href='admin.html'" class="small-btn">⬅ Back</button>
 
@@ -240,12 +240,59 @@ function toPHTime(ts) {
   });
 }
 
+async function loadSnapshotTasks(dateKey) {
+  try {
+    const res = await fetch(
+      `https://raw.githubusercontent.com/RossGab/driva-task-snapshots/main/snapshots/${dateKey}.json`,
+      { cache: "no-store" }
+    );
+
+    if (!res.ok) return [];
+
+    const data = await res.json();
+
+    return Object.entries(data).map(([id, task]) => ({
+      _key: id,
+      ...task
+    }));
+
+  } catch (e) {
+    console.warn("Snapshot failed", e);
+    return [];
+  }
+}
+
+// 🔥 ADD THIS RIGHT BELOW loadSnapshotTasks()
+
+function sleep(ms) {
+  return new Promise(res => setTimeout(res, ms));
+}
+
+async function fetchSnapshotsInBatches(dateKeys, batchSize = 5) {
+  const results = [];
+
+  for (let i = 0; i < dateKeys.length; i += batchSize) {
+    const batch = dateKeys.slice(i, i + batchSize);
+
+    const batchResults = await Promise.all(
+      batch.map(key => loadSnapshotTasks(key))
+    );
+
+    results.push(...batchResults.flat());
+
+    // 🔥 small delay to prevent GitHub throttling
+    await sleep(150);
+  }
+
+  return results;
+}
+
 /* ===== LOAD TASKS ===== */
 async function loadTasks() {
 
-  // 🔄 UI loading state (ADD HERE)
+  // 🔄 UI loading state
   searchBtn.disabled = true;
-  searchBtn.innerText = "Loading...";
+  searchBtn.innerText = "Loading snapshots...";
 
   table.innerHTML = `
     <tr>
@@ -262,59 +309,61 @@ async function loadTasks() {
 
   if (!from || !to) {
     alert("Select date range");
-  
-    searchBtn.disabled = false;
-    searchBtn.innerText = "🔍 Search";
-  
-    return;
-  }
 
-  const start = from.replace(/-/g, "");
-  const end   = to.replace(/-/g, "");
-
-  const dateKeys = [];
-  for (let d = new Date(from); d <= new Date(to); d.setDate(d.getDate() + 1)) {
-    dateKeys.push(
-      d.toLocaleDateString("en-CA", { timeZone: "Asia/Manila" })
-       .replace(/-/g, "")
-    );
-  }
-
-  const taskIds = new Set();
-
-  // 1️⃣ Collect task IDs by date
-  for (const dk of dateKeys) {
-    const snap = await get(ref(db, `tasksByDate/${dk}`));
-    const ids = snap.val();
-    if (!ids) continue;
-    Object.keys(ids).forEach(id => taskIds.add(id));
-  }
-
-  if (taskIds.size === 0) {
-    // ✅ Restore button (ADD HERE)
     searchBtn.disabled = false;
     searchBtn.innerText = "🔍 Search";
     return;
   }
-  
-  const taskIdList = [...taskIds];
-  
-  // 2️⃣ Fetch ONLY needed tasks
-  const reads = [];
-  for (const id of taskIdList) {
-    reads.push(
-      get(ref(db, `tasks/${id}`)).then(s =>
-        s.exists() ? { _key: id, ...s.val() } : null
-      )
-    );
+
+  try {
+    const dateKeys = [];
+
+    for (let d = new Date(from); d <= new Date(to); d.setDate(d.getDate() + 1)) {
+      dateKeys.push(
+        d.toLocaleDateString("en-CA", { timeZone: "Asia/Manila" })
+         .replace(/-/g, "")
+      );
+      
+    }
+    
+    // 🔥 LIMIT DATE RANGE (prevents abuse / crashes)
+    if (dateKeys.length > 14) {
+      alert("⚠️ Max 14 days range only");
+      searchBtn.disabled = false;
+      searchBtn.innerText = "🔍 Search";
+      return;
+    }
+
+    const allTasks = await fetchSnapshotsInBatches(dateKeys, 5);
+
+    // 🔥 filter out completed
+    TASKS = allTasks.filter(t => t.status !== "COMPLETED");
+
+    if (!TASKS.length) {
+      table.innerHTML = `
+        <tr>
+          <td colspan="8" style="text-align:center;color:#777;">
+            No tasks found for selected date
+          </td>
+        </tr>
+      `;
+
+      searchBtn.disabled = false;
+      searchBtn.innerText = "🔍 Search";
+      return;
+    }
+
+    buildFilterLists();
+    applyFilters();
+
+  } catch (e) {
+    console.error(e);
+    alert("Failed to load snapshot");
   }
 
-  TASKS = (await Promise.all(reads))
-    .filter(Boolean)
-    .filter(t => t.status !== "COMPLETED");
-
-  buildFilterLists();
-  applyFilters();
+  // ✅ restore button
+  searchBtn.disabled = false;
+  searchBtn.innerText = "🔍 Search";
 }
 
 window.loadTasks = loadTasks;
