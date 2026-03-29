@@ -81,7 +81,7 @@ select, input[type="date"] {
 
 <body>
 
-<h2>Manage Tasks V4.4.0.4-WIP</h2>
+<h2>Manage Tasks V4.4.0.5-WIP</h2>
 
 <button onclick="location.href='admin.html'" class="small-btn">⬅ Back</button>
 
@@ -111,6 +111,20 @@ select, input[type="date"] {
   placeholder="Search customer, address, account, meter…"
   style="min-width:220px;"
 >
+  </div>
+</div>
+
+<div id="progressContainer" style="display:none;margin-bottom:10px;">
+  <div style="font-size:12px;margin-bottom:4px;">
+    <span id="progressText">Loading...</span>
+  </div>
+  <div style="width:100%;height:8px;background:#ddd;border-radius:6px;overflow:hidden;">
+    <div id="progressBar" style="
+      width:0%;
+      height:100%;
+      background:#007bff;
+      transition:width 0.2s;
+    "></div>
   </div>
 </div>
 
@@ -183,6 +197,10 @@ const filterMRU = document.getElementById("filterMRU");
 const checkAll = document.getElementById("checkAll");
 
 const searchBtn = document.getElementById("searchBtn");
+
+const progressContainer = document.getElementById("progressContainer");
+const progressText = document.getElementById("progressText");
+const progressBar = document.getElementById("progressBar");
 
 const searchBox = document.getElementById("searchBox");
 let SEARCH_TERM = "";
@@ -276,6 +294,10 @@ function sleep(ms) {
 async function fetchSnapshotsInBatches(dateKeys, batchSize = 10) {
   const results = [];
 
+  progressContainer.style.display = "block";
+  progressText.innerText = "Starting...";
+  progressBar.style.width = "0%";
+
   for (let i = 0; i < dateKeys.length; i += batchSize) {
     const batch = dateKeys.slice(i, i + batchSize);
 
@@ -285,9 +307,21 @@ async function fetchSnapshotsInBatches(dateKeys, batchSize = 10) {
 
     results.push(...batchResults.flat());
 
-    // 🔥 small delay to prevent GitHub throttling
+    // ✅ UPDATE PROGRESS
+    const loaded = Math.min(i + batch.length, dateKeys.length);
+    const percent = Math.floor((loaded / dateKeys.length) * 100);
+
+    progressText.innerText = `Loading ${loaded} / ${dateKeys.length} days...`;
+    progressBar.style.width = percent + "%";
+
+    // 🔥 allow UI to breathe (VERY IMPORTANT)
+    await new Promise(r => setTimeout(r, 0));
+
     await sleep(50);
   }
+
+  progressText.innerText = "Finalizing...";
+  progressBar.style.width = "100%";
 
   return results;
 }
@@ -297,7 +331,10 @@ async function loadTasks() {
 
   // 🔄 UI loading state
   searchBtn.disabled = true;
-  searchBtn.innerText = "Loading snapshots...";
+  searchBtn.innerText = "Loading...";
+  progressContainer.style.display = "block";
+  progressText.innerText = "Preparing...";
+  progressBar.style.width = "0%";
 
   table.innerHTML = `
     <tr>
@@ -313,6 +350,7 @@ async function loadTasks() {
   const to   = filterDateTo.value;
 
   if (!from || !to) {
+    progressContainer.style.display = "none";
     alert("Select date range");
 
     searchBtn.disabled = false;
@@ -331,13 +369,7 @@ async function loadTasks() {
       
     }
     
-    // 🔥 LIMIT DATE RANGE (prevents abuse / crashes)
-    if (dateKeys.length > 14) {
-      alert("⚠️ Max 14 days range only");
-      searchBtn.disabled = false;
-      searchBtn.innerText = "🔍 Search";
-      return;
-    }
+    
 
     const allTasks = await fetchSnapshotsInBatches(dateKeys, 10);
 
@@ -355,11 +387,14 @@ async function loadTasks() {
 
       searchBtn.disabled = false;
       searchBtn.innerText = "🔍 Search";
+      progressContainer.style.display = "none";
       return;
     }
 
     buildFilterLists();
     applyFilters();
+    progressContainer.style.display = "none";
+    progressBar.style.width = "0%";
 
   } catch (e) {
     console.error(e);
