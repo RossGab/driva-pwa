@@ -81,7 +81,7 @@ select, input[type="date"] {
 
 <body>
 
-<h2>Manage Tasks V4.3.1-WIP</h2>
+<h2>Manage Tasks V4.4.0-WIP</h2>
 
 <button onclick="location.href='admin.html'" class="small-btn">⬅ Back</button>
 
@@ -98,6 +98,7 @@ select, input[type="date"] {
   <div class="actions">
     <input type="date" id="filterDateFrom">
     <input type="date" id="filterDateTo">
+    <button onclick="loadTasks()">🔍 Search</button>
     <select id="filterDriver"><option value="">All Drivers</option></select>
     <select id="filterJob"><option value="">All Job Types</option></select>
     <select id="filterBA"><option value="">All BA</option></select>
@@ -135,7 +136,13 @@ select, input[type="date"] {
           <th>Status</th>
         </tr>
       </thead>
-      <tbody id="taskTable"></tbody>
+      <tbody id="taskTable">
+  <tr>
+    <td colspan="8" style="text-align:center;color:#777;">
+      Click 🔍 Search to load tasks
+    </td>
+  </tr>
+</tbody>
     </table>
   </div>
 </div>
@@ -191,10 +198,10 @@ let FILTERED_TASKS = [];
 const today = getTodayPH();
 filterDateFrom.value = today;
 filterDateTo.value = today;
-filterDateFrom.onchange =
-filterDateTo.onchange = () => {
-  loadTasks();   // 🔥 fetch by date
-};
+// filterDateFrom.onchange =
+// filterDateTo.onchange = () => {
+//   loadTasks();   // 🔥 fetch by date
+// };
 filterDriver.onchange =
 filterJob.onchange =
 filterBA.onchange =
@@ -704,7 +711,7 @@ window.uploadCSV = async function(btn){
     btn.innerText = "Upload CSV";
   }
 };
-loadTasks();
+// loadTasks();
 </script>
 </body>
 </html>
