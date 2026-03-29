@@ -81,7 +81,7 @@ select, input[type="date"] {
 
 <body>
 
-<h2>Manage Tasks V4.4.0.11-WIP</h2>
+<h2>Manage Tasks V4.4.0.12-WIP</h2>
 
 <button onclick="location.href='admin.html'" class="small-btn">⬅ Back</button>
 
@@ -308,9 +308,11 @@ async function fetchSnapshotsInBatches(dateKeys, batchSize = 10) {
 
     // 🔥 ADD TO GLOBAL STATE IMMEDIATELY
     TASKS.push(...newTasks);
+
+    if (i + batch.length >= dateKeys.length) {
+  applyFilters();
+}
     
-    // 🔥 RENDER LIVE (VERY IMPORTANT)
-    applyFilters();
 
     // ✅ UPDATE PROGRESS
     const loaded = Math.min(i + batch.length, dateKeys.length);
