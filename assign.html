@@ -81,7 +81,7 @@ select, input[type="date"] {
 
 <body>
 
-<h2>Manage Tasks V4.4.0.1-WIP</h2>
+<h2>Manage Tasks V4.4.0.2-WIP</h2>
 
 <button onclick="location.href='admin.html'" class="small-btn">⬅ Back</button>
 
@@ -98,7 +98,7 @@ select, input[type="date"] {
   <div class="actions">
     <input type="date" id="filterDateFrom">
     <input type="date" id="filterDateTo">
-    <button onclick="loadTasks()">🔍 Search</button>
+    <button id="searchBtn" onclick="loadTasks()">🔍 Search</button>
     <select id="filterDriver"><option value="">All Drivers</option></select>
     <select id="filterJob"><option value="">All Job Types</option></select>
     <select id="filterBA"><option value="">All BA</option></select>
@@ -182,6 +182,8 @@ const filterDMZ = document.getElementById("filterDMZ");
 const filterMRU = document.getElementById("filterMRU");
 const checkAll = document.getElementById("checkAll");
 
+const searchBtn = document.getElementById("searchBtn");
+
 const searchBox = document.getElementById("searchBox");
 let SEARCH_TERM = "";
 
@@ -240,6 +242,19 @@ function toPHTime(ts) {
 
 /* ===== LOAD TASKS ===== */
 async function loadTasks() {
+
+  // 🔄 UI loading state (ADD HERE)
+  searchBtn.disabled = true;
+  searchBtn.innerText = "Loading...";
+
+  table.innerHTML = `
+    <tr>
+      <td colspan="8" style="text-align:center;">
+        🔄 Loading tasks...
+      </td>
+    </tr>
+  `;
+
   TASKS = [];
 
   const from = filterDateFrom.value;
@@ -247,6 +262,10 @@ async function loadTasks() {
 
   if (!from || !to) {
     alert("Select date range");
+  
+    searchBtn.disabled = false;
+    searchBtn.innerText = "🔍 Search";
+  
     return;
   }
 
@@ -272,7 +291,9 @@ async function loadTasks() {
   }
 
   if (taskIds.size === 0) {
-    applyFilters();
+    // ✅ Restore button (ADD HERE)
+    searchBtn.disabled = false;
+    searchBtn.innerText = "🔍 Search";
     return;
   }
   
