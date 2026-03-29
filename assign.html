@@ -81,7 +81,7 @@ select, input[type="date"] {
 
 <body>
 
-<h2>Manage Tasks V4.4.0.6-WIP</h2>
+<h2>Manage Tasks V4.4.0.7-WIP</h2>
 
 <button onclick="location.href='admin.html'" class="small-btn">⬅ Back</button>
 
@@ -484,16 +484,16 @@ window.nextPage = function () {
 function applyFilters() {
   let data = [...TASKS];
 
-  /* ===== DATE FILTER ===== */
-  if (filterDateFrom.value || filterDateTo.value) {
-    const from = filterDateFrom.value || "0000-00-00";
-    const to   = filterDateTo.value   || "9999-99-99";
+  // /* ===== DATE FILTER ===== */
+  // if (filterDateFrom.value || filterDateTo.value) {
+  //   const from = filterDateFrom.value || "0000-00-00";
+  //   const to   = filterDateTo.value   || "9999-99-99";
 
-    data = data.filter(t => {
-      const d = normalizeDate(t.createdAt);
-      return d && d >= from && d <= to;
-    });
-  }
+  //   data = data.filter(t => {
+  //     const d = normalizeDate(t.createdAt);
+  //     return d && d >= from && d <= to;
+  //   });
+  // }
 
   /* ===== DROPDOWN FILTERS ===== */
   if (filterDriver.value)
