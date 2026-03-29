@@ -81,7 +81,7 @@ select, input[type="date"] {
 
 <body>
 
-<h2>Manage Tasks V4.4.0.23-WIP</h2>
+<h2>Manage Tasks V4.4.0.24-WIP</h2>
 
 <button onclick="location.href='admin.html'" class="small-btn">⬅ Back</button>
 
@@ -211,6 +211,34 @@ const VISIBLE_COUNT = 30;
 
 let searchTimeout;
 
+const worker = new Worker("./worker.js");
+
+worker.onmessage = function(e) {
+  if (e.data.type === "DONE") {
+
+    TASKS.push(...e.data.data);
+    PROCESSED_CHUNKS++;
+
+    
+
+    // ✅ FINAL RENDER ONLY WHEN ALL DONE
+    if (PROCESSED_CHUNKS === TOTAL_CHUNKS) {
+
+      FILTERED_TASKS = TASKS;
+      lastStart = -1;
+
+      buildFilterLists();
+
+      setTimeout(() => {
+        renderVirtual();
+        progressContainer.style.display = "none";
+        searchBtn.disabled = false;
+        searchBtn.innerText = "🔍 Search";
+      }, 0);
+    }
+  }
+};
+
 searchBox.addEventListener("input", e => {
   clearTimeout(searchTimeout);
 
@@ -222,6 +250,8 @@ searchBox.addEventListener("input", e => {
 
 let TASKS = [];
 let FILTERED_TASKS = [];
+let TOTAL_CHUNKS = 0;
+let PROCESSED_CHUNKS = 0;
 const SELECTED_IDS = new Set();
 
 
@@ -315,39 +345,11 @@ async function fetchSnapshotsInBatches(dateKeys, batchSize = 10) {
 
       for (let j = 0; j < result.length; j += 200) {
         const chunk = result.slice(j, j + 200);
-
-        const processed = [];
-
-        for (const t of chunk) {
-          if (t.status === "COMPLETED") continue;
-
-          processed.push({
-            ...t,
-            _search: (
-              (t.CUSTOMERNAME || "") + " " +
-              (t.ADDRESS || "") + " " +
-              (t.ACCOUNTNUMBER || "") + " " +
-              (t.METERNUMBER || "") + " " +
-              (t.JOBTYPE || "") + " " +
-              (t.BA || "") + " " +
-              (t.DMZ || "") + " " +
-              (t.MRU || "") + " " +
-              (t.driverId || "")
-            ).toLowerCase()
-          });
-        }
-
-        TASKS.push(...processed);
-
-        if (!hasRenderedOnce && TASKS.length > 500) {
-          hasRenderedOnce = true;
-          FILTERED_TASKS = TASKS;
-        
-          setTimeout(() => {
-            renderVirtual();
-          }, 0);
-        }
-
+        TOTAL_CHUNKS++;
+        worker.postMessage({
+          type: "PROCESS_TASKS",
+          data: chunk
+        });
         await new Promise(r => setTimeout(r, 0));
       }
     }
@@ -389,6 +391,9 @@ async function loadTasks() {
   FILTERED_TASKS = [];
   SELECTED_IDS.clear();
   hasRenderedOnce = false;
+
+  TOTAL_CHUNKS = 0;
+  PROCESSED_CHUNKS = 0;
   
   bulkBtn.disabled = true;   // ✅ ADD THIS
   checkAll.checked = false;  // ✅ ADD THIS
@@ -418,37 +423,21 @@ async function loadTasks() {
     // 🔥 LOAD SNAPSHOTS (STREAMING)
     await fetchSnapshotsInBatches(dateKeys, 10);
 
-    // 🔥 FINALIZE (NON-BLOCKING)
+    if (TOTAL_CHUNKS === 0) {
+  FILTERED_TASKS = [];
 
-    // 1️⃣ Let UI breathe first
-    await new Promise(r => setTimeout(r, 0));
-    
-    // 2️⃣ Build filters async
-    setTimeout(() => {
-    requestAnimationFrame(() => {
-      buildFilterLists();
-    });
-  }, 0);
+  buildFilterLists();   // ✅ ADD THIS
 
-    FILTERED_TASKS = TASKS;
-    
-    // 🔥 render once
-    lastStart = -1;
-    renderVirtual();
-    
+  renderVirtual();
 
+  progressContainer.style.display = "none";
+  searchBtn.disabled = false;
+  searchBtn.innerText = "🔍 Search";
+}
   } catch (e) {
     console.error(e);
     alert("Failed to load snapshot");
-  } finally {
-    // 🔥 ALWAYS RUN (NO MATTER WHAT)
-    progressText.innerText = "";            // ✅ ADD THIS
-    progressContainer.style.display = "none";
-    progressBar.style.width = "0%";
-  
-    searchBtn.disabled = false;
-    searchBtn.innerText = "🔍 Search";
-  }
+  } 
 }
 
 window.loadTasks = loadTasks;
