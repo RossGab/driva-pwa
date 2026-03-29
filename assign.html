@@ -81,7 +81,7 @@ select, input[type="date"] {
 
 <body>
 
-<h2>Manage Tasks V4.4.0.5-WIP</h2>
+<h2>Manage Tasks V4.4.0.6-WIP</h2>
 
 <button onclick="location.href='admin.html'" class="small-btn">⬅ Back</button>
 
@@ -305,7 +305,13 @@ async function fetchSnapshotsInBatches(dateKeys, batchSize = 10) {
       batch.map(key => loadSnapshotTasks(key))
     );
 
-    results.push(...batchResults.flat());
+    const newTasks = batchResults.flat().filter(t => t.status !== "COMPLETED");
+
+    // 🔥 ADD TO GLOBAL STATE IMMEDIATELY
+    TASKS.push(...newTasks);
+    
+    // 🔥 RENDER LIVE (VERY IMPORTANT)
+    applyFilters();
 
     // ✅ UPDATE PROGRESS
     const loaded = Math.min(i + batch.length, dateKeys.length);
@@ -320,7 +326,7 @@ async function fetchSnapshotsInBatches(dateKeys, batchSize = 10) {
     await sleep(50);
   }
 
-  progressText.innerText = "Finalizing...";
+  progressText.innerText = "Rendering complete";
   progressBar.style.width = "100%";
 
   return results;
