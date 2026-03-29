@@ -81,7 +81,7 @@ select, input[type="date"] {
 
 <body>
 
-<h2>Manage Tasks V4.4.0.8-WIP</h2>
+<h2>Manage Tasks V4.4.0.9-WIP</h2>
 
 <button onclick="location.href='admin.html'" class="small-btn">⬅ Back</button>
 
@@ -381,15 +381,14 @@ async function loadTasks() {
   } catch (e) {
     console.error(e);
     alert("Failed to load snapshot");
+  } finally {
+    // 🔥 ALWAYS RUN (NO MATTER WHAT)
+    progressContainer.style.display = "none";
+    progressBar.style.width = "0%";
+  
+    searchBtn.disabled = false;
+    searchBtn.innerText = "🔍 Search";
   }
-
-  // 🔥 ALWAYS RUN (SUCCESS OR FAIL)
-  progressContainer.style.display = "none";
-  progressBar.style.width = "0%";
-
-  searchBtn.disabled = false;
-  searchBtn.innerText = "🔍 Search";
-}
 
 window.loadTasks = loadTasks;
 
