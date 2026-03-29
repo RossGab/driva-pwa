@@ -81,7 +81,7 @@ select, input[type="date"] {
 
 <body>
 
-<h2>Manage Tasks V4.4.0.14-WIP</h2>
+<h2>Manage Tasks V4.4.0.15-WIP</h2>
 
 <button onclick="location.href='admin.html'" class="small-btn">⬅ Back</button>
 
@@ -211,7 +211,7 @@ searchBox.addEventListener("input", e => {
 }); 
 
 let TASKS = [];
-const PAGE_SIZE = 500;   // ✅ adjust: 50 / 100 / 200
+const PAGE_SIZE = 250;   // ✅ adjust: 50 / 100 / 200
 let CURRENT_PAGE = 0;
 let FILTERED_TASKS = [];
 
@@ -437,18 +437,18 @@ function renderPaginationControls() {
   `;
 }
 
-window.prevPage = function () {
+window.prevPage = async function () {
   if (CURRENT_PAGE > 0) {
     CURRENT_PAGE--;
-    renderCurrentPage();
+    await renderCurrentPage();
   }
 };
 
-window.nextPage = function () {
+window.nextPage = async function () {
   const totalPages = Math.ceil(FILTERED_TASKS.length / PAGE_SIZE);
   if (CURRENT_PAGE < totalPages - 1) {
     CURRENT_PAGE++;
-    renderCurrentPage();
+    await renderCurrentPage();
   }
 };
 
@@ -509,31 +509,39 @@ function applyFilters() {
   renderCurrentPage();
 }
 
-function renderCurrentPage() {
+async function renderCurrentPage() {
+
   const start = CURRENT_PAGE * PAGE_SIZE;
   const end = start + PAGE_SIZE;
 
   const pageData = FILTERED_TASKS.slice(start, end);
-  renderTable(pageData);
+
+  await renderTable(pageData);   // 🔥 IMPORTANT
+
   renderPaginationControls();
 }
     
 
 /* ===== RENDER ===== */
-function renderTable(data) {
+async function renderTable(data) {
+
   table.innerHTML = "";
   checkAll.checked = false;
   bulkBtn.disabled = true;
 
-  if(!data.length){
+  if (!data.length) {
     table.innerHTML = `<tr><td colspan="7">No matching tasks</td></tr>`;
     return;
   }
 
   const frag = document.createDocumentFragment();
 
-  data.forEach(t=>{
+  for (let i = 0; i < data.length; i++) {
+
+    const t = data[i];
+
     const tr = document.createElement("tr");
+
     tr.innerHTML = `
       <td>
         <input type="checkbox"
@@ -546,16 +554,18 @@ function renderTable(data) {
       <td>${t.JOBTYPE||""}</td>
       <td>${t.BA||""}</td>
       <td>${toPHTime(t.createdAt)}</td>
-      <td>
-        <b style="color:#333">
-          ${t.status || "PENDING"}
-        </b>
-      </td>
+      <td><b>${t.status || "PENDING"}</b></td>
     `;
-    frag.appendChild(tr);
-});
 
-table.appendChild(frag);
+    frag.appendChild(tr);
+
+    // 🔥 CRITICAL: yield every 50 rows
+    if (i % 50 === 0) {
+      await new Promise(r => setTimeout(r, 0));
+    }
+  }
+
+  table.appendChild(frag);
 }
 
 /* ===== SELECTION ===== */
