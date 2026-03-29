@@ -81,7 +81,7 @@ select, input[type="date"] {
 
 <body>
 
-<h2>Manage Tasks V4.4.0.17-WIP</h2>
+<h2>Manage Tasks V4.4.0.18-WIP</h2>
 
 <button onclick="location.href='admin.html'" class="small-btn">⬅ Back</button>
 
@@ -220,6 +220,7 @@ let TASKS = [];
 const PAGE_SIZE = 250;   // ✅ adjust: 50 / 100 / 200
 let CURRENT_PAGE = 0;
 let FILTERED_TASKS = [];
+let LAST_RENDERED_PAGE = -1;
 
 const today = getTodayPH();
 filterDateFrom.value = today;
@@ -315,8 +316,12 @@ async function fetchSnapshotsInBatches(dateKeys, batchSize = 10) {
     TASKS.push(...newTasks);
     
     if (i === 0) {
-      FILTERED_TASKS = TASKS;
-      await renderCurrentPage(); // only first batch
+      FILTERED_TASKS = [...TASKS];
+    
+      // 🔥 non-blocking render
+      setTimeout(() => {
+        renderCurrentPage();
+      }, 0);
     }
 
     const loaded = Math.min(i + batch.length, dateKeys.length);
@@ -352,6 +357,7 @@ async function loadTasks() {
   TASKS = [];
   FILTERED_TASKS = [];
   CURRENT_PAGE = 0;
+  LAST_RENDERED_PAGE = -1;   // ✅ ADD THIS
 
   const from = filterDateFrom.value;
   const to   = filterDateTo.value;
@@ -384,9 +390,6 @@ async function loadTasks() {
 
     FILTERED_TASKS = [...TASKS];
     
-    if (CURRENT_PAGE === 0) {
-      await renderCurrentPage(); // only once
-    }
 
   } catch (e) {
     console.error(e);
@@ -524,17 +527,26 @@ function applyFilters() {
   }
 
   FILTERED_TASKS = data;
+
+  CURRENT_PAGE = 0;             // ✅ reset page
+  LAST_RENDERED_PAGE = -1;      // ✅ force re-render
+  
   renderCurrentPage();
 }
 
 async function renderCurrentPage() {
+
+  // ✅ prevent re-render of same page
+  if (CURRENT_PAGE === LAST_RENDERED_PAGE) return;
+
+  LAST_RENDERED_PAGE = CURRENT_PAGE;
 
   const start = CURRENT_PAGE * PAGE_SIZE;
   const end = start + PAGE_SIZE;
 
   const pageData = FILTERED_TASKS.slice(start, end);
 
-  await renderTable(pageData);   // 🔥 IMPORTANT
+  await renderTable(pageData);
 
   renderPaginationControls();
 }
@@ -543,9 +555,7 @@ async function renderCurrentPage() {
 /* ===== RENDER ===== */
 async function renderTable(data) {
 
-  if (table.children.length > 0) {
-    table.innerHTML = "";
-  }
+  if (table.children.length) table.innerHTML = "";
   checkAll.checked = false;
   bulkBtn.disabled = true;
 
