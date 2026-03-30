@@ -81,7 +81,7 @@ select, input[type="date"] {
 
 <body>
 
-<h2>Manage Tasks V4.5.0-WIP</h2>
+<h2>Manage Tasks V4.5.1-WIP</h2>
 
 <button onclick="location.href='admin.html'" class="small-btn">⬅ Back</button>
 
@@ -98,7 +98,6 @@ select, input[type="date"] {
   <div class="actions">
     <input type="date" id="filterDateFrom">
     <input type="date" id="filterDateTo">
-    <button onclick="loadTasks()">🔍 Search</button>
     <select id="filterDriver"><option value="">All Drivers</option></select>
     <select id="filterJob"><option value="">All Job Types</option></select>
     <select id="filterBA"><option value="">All BA</option></select>
@@ -136,13 +135,7 @@ select, input[type="date"] {
           <th>Status</th>
         </tr>
       </thead>
-      <tbody id="taskTable">
-  <tr>
-    <td colspan="8" style="text-align:center;color:#777;">
-      Click 🔍 Search to load tasks
-    </td>
-  </tr>
-</tbody>
+      <tbody id="taskTable"></tbody>
     </table>
   </div>
 </div>
@@ -185,15 +178,9 @@ const checkAll = document.getElementById("checkAll");
 const searchBox = document.getElementById("searchBox");
 let SEARCH_TERM = "";
 
-let searchTimeout;
-
 searchBox.addEventListener("input", e => {
-  clearTimeout(searchTimeout);
-
-  searchTimeout = setTimeout(() => {
-    SEARCH_TERM = e.target.value.toLowerCase().trim();
-    applyFilters();
-  }, 300);
+  SEARCH_TERM = e.target.value.toLowerCase().trim();
+  applyFilters();
 }); 
 
 let TASKS = [];
@@ -204,10 +191,10 @@ let FILTERED_TASKS = [];
 const today = getTodayPH();
 filterDateFrom.value = today;
 filterDateTo.value = today;
-// filterDateFrom.onchange =
-// filterDateTo.onchange = () => {
-//   loadTasks();   // 🔥 fetch by date
-// };
+filterDateFrom.onchange =
+filterDateTo.onchange = () => {
+  loadTasks();   // 🔥 fetch by date
+};
 filterDriver.onchange =
 filterJob.onchange =
 filterBA.onchange =
@@ -270,6 +257,7 @@ async function loadSnapshotTasks(dateKey, retries = 2) {
   }
 }
 
+/* ===== LOAD TASKS ===== */
 async function loadTasks() {
   TASKS = [];
 
@@ -295,7 +283,6 @@ async function loadTasks() {
   for (const key of dateKeys) {
     const result = await loadSnapshotTasks(key);
 
-    // 🔥 Optional: filter out completed
     result.forEach(t => {
       if (t.status !== "COMPLETED") {
         allTasks.push(t);
@@ -308,6 +295,8 @@ async function loadTasks() {
   buildFilterLists();
   applyFilters();
 }
+
+
 
 function buildFilterLists() {
   const drivers = new Set();
@@ -450,7 +439,7 @@ function renderTable(data) {
   bulkBtn.disabled = true;
 
   if(!data.length){
-    table.innerHTML = `<tr><td colspan="8">No matching tasks</td></tr>`;
+    table.innerHTML = `<tr><td colspan="7">No matching tasks</td></tr>`;
     return;
   }
 
@@ -484,7 +473,7 @@ table.appendChild(frag);
 
 /* ===== SELECTION ===== */
 checkAll.onchange = () => {
-  table.querySelectorAll("input[type=checkbox]")
+  document.querySelectorAll("#taskTable input[type=checkbox]")
     .forEach(cb => cb.checked = checkAll.checked);
   checkSelection();
 };
@@ -722,7 +711,7 @@ window.uploadCSV = async function(btn){
     btn.innerText = "Upload CSV";
   }
 };
-// loadTasks();
+loadTasks();
 </script>
 </body>
 </html>
