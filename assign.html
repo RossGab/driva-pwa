@@ -81,7 +81,7 @@ select, input[type="date"] {
 
 <body>
 
-<h2>Manage Tasks V4.5.6-WIP</h2>
+<h2>Manage Tasks V4.5.6.log-WIP</h2>
 
 <button onclick="location.href='admin.html'" class="small-btn">⬅ Back</button>
 
@@ -537,6 +537,7 @@ window.checkSelection = function () {
 
 /* ===== BULK ACTION ===== */
 window.openBulkActions = function () {
+  console.log("Selected IDs:", ids);
   const ids = [...SELECTED_IDS];
 
   if (!ids.length) return;
