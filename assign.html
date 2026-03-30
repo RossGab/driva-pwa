@@ -33,10 +33,6 @@ h2 { text-align:center; }
   font-size:13px;
 }
 
-.selected-row {
-  background: #e7f1ff !important;
-}
-
 table {
   width:100%;
   border-collapse:collapse;
@@ -85,7 +81,7 @@ select, input[type="date"] {
 
 <body>
 
-<h2>Manage Tasks V4.4.0.25.4-WIP</h2>
+<h2>Manage Tasks V4.4.0-WIP</h2>
 
 <button onclick="location.href='admin.html'" class="small-btn">⬅ Back</button>
 
@@ -99,52 +95,22 @@ select, input[type="date"] {
 
 <!-- FILTERS + BULK ACTION -->
 <div class="panel blue">
-
-  <!-- 🔹 ROW 1: DATE + SEARCH -->
-  <div class="actions" style="margin-bottom:8px;">
+  <div class="actions">
     <input type="date" id="filterDateFrom">
     <input type="date" id="filterDateTo">
-    <button id="searchBtn" onclick="loadTasks()">🔍 Search</button>
-    <button onclick="clearFilters()" class="small-btn">🧹 Clear</button>
-  </div>
-
-  <!-- 🔹 ROW 2: DROPDOWNS -->
-  <div class="actions" style="margin-bottom:8px;">
+    <button onclick="loadTasks()">🔍 Search</button>
     <select id="filterDriver"><option value="">All Drivers</option></select>
     <select id="filterJob"><option value="">All Job Types</option></select>
     <select id="filterBA"><option value="">All BA</option></select>
     <select id="filterDMZ"><option value="">All DMZ</option></select>
     <select id="filterMRU"><option value="">All MRU</option></select>
-  </div>
-
-  <!-- 🔹 ROW 3: TEXT SEARCH -->
-  <div class="actions" style="margin-bottom:8px;">
-    <input
-      type="text"
-      id="searchBox"
-      placeholder="Search customer, address, account, meter…"
-      style="width:100%;"
-    >
-  </div>
-
-  <!-- 🔹 ROW 4: BULK ACTION -->
-  <div class="actions">
     <button id="bulkBtn" disabled onclick="openBulkActions()">Bulk Action</button>
-  </div>
-
-</div>
-
-<div id="progressContainer" style="display:none;margin-bottom:10px;">
-  <div style="font-size:12px;margin-bottom:4px;">
-    <span id="progressText">Loading...</span>
-  </div>
-  <div style="width:100%;height:8px;background:#ddd;border-radius:6px;overflow:hidden;">
-    <div id="progressBar" style="
-      width:0%;
-      height:100%;
-      background:#007bff;
-      transition:width 0.2s;
-    "></div>
+    <input
+  type="text"
+  id="searchBox"
+  placeholder="Search customer, address, account, meter…"
+  style="min-width:220px;"
+>
   </div>
 </div>
 
@@ -156,7 +122,7 @@ select, input[type="date"] {
      style="margin-top:10px;text-align:center;"></div>
 <div class="panel">
   <b>📝Open Tasks</b>
-  <div id="tableContainer" style="overflow:auto;height:70vh;margin-top:6px;">
+  <div style="overflow:auto;margin-top:6px;">
     <table>
       <thead>
         <tr>
@@ -170,7 +136,7 @@ select, input[type="date"] {
           <th>Status</th>
         </tr>
       </thead>
-      <tbody id="taskTable" style="position:relative;">
+      <tbody id="taskTable">
   <tr>
     <td colspan="8" style="text-align:center;color:#777;">
       Click 🔍 Search to load tasks
@@ -216,34 +182,18 @@ const filterDMZ = document.getElementById("filterDMZ");
 const filterMRU = document.getElementById("filterMRU");
 const checkAll = document.getElementById("checkAll");
 
-const searchBtn = document.getElementById("searchBtn");
-
-const progressContainer = document.getElementById("progressContainer");
-const progressText = document.getElementById("progressText");
-const progressBar = document.getElementById("progressBar");
-
 const searchBox = document.getElementById("searchBox");
 let SEARCH_TERM = "";
-let hasRenderedOnce = false;
-
-const ROW_HEIGHT = 38;
-const VISIBLE_COUNT = 30;
-
-let searchTimeout;
 
 searchBox.addEventListener("input", e => {
-  clearTimeout(searchTimeout);
-
-  searchTimeout = setTimeout(() => {
-    SEARCH_TERM = e.target.value.toLowerCase().trim();
-    applyFilters();
-  }, 300);
-});
+  SEARCH_TERM = e.target.value.toLowerCase().trim();
+  applyFilters();
+}); 
 
 let TASKS = [];
+const PAGE_SIZE = 1000;   // ✅ adjust: 50 / 100 / 200
+let CURRENT_PAGE = 0;
 let FILTERED_TASKS = [];
-const SELECTED_IDS = new Set();
-
 
 const today = getTodayPH();
 filterDateFrom.value = today;
@@ -275,22 +225,6 @@ function normalizeDate(dateStr) {
   });
 }
 
-function clearFilters() {
-  filterDateFrom.value = getTodayPH();
-  filterDateTo.value = getTodayPH();
-
-  filterDriver.value = "";
-  filterJob.value = "";
-  filterBA.value = "";
-  filterDMZ.value = "";
-  filterMRU.value = "";
-
-  searchBox.value = "";
-  SEARCH_TERM = "";
-
-  loadTasks();
-}
-  
 /* ===== PH TIME ===== */
 function toPHTime(ts) {
   return new Date(ts).toLocaleString("en-PH", {
@@ -304,135 +238,65 @@ function toPHTime(ts) {
   });
 }
 
-async function loadSnapshotTasks(dateKey, retries = 2) {
-  try {
-    const res = await fetch(
-      `https://raw.githubusercontent.com/RossGab/driva-task-snapshots/main/snapshots/${dateKey}.json`,
-      { cache: "no-store" }
-    );
-
-    if (!res.ok) throw new Error("Fetch failed");
-
-    const data = await res.json();
-
-    return Object.entries(data).map(([id, task]) => ({
-      _key: id,
-      ...task
-    }));
-
-  } catch (e) {
-    if (retries > 0) {
-      // 🔥 retry quickly (no long delay)
-      return await loadSnapshotTasks(dateKey, retries - 1);
-    }
-
-    console.warn("Snapshot failed:", dateKey);
-    return [];
-  }
-}
-
-// 🔥 ADD THIS RIGHT BELOW loadSnapshotTasks()
-
-function sleep(ms) {
-  return new Promise(res => setTimeout(res, ms));
-}
-  
-
 /* ===== LOAD TASKS ===== */
 async function loadTasks() {
-
-  searchBtn.disabled = true;
-  searchBtn.innerText = "Loading...";
-
-  progressContainer.style.display = "block";
-  progressText.innerText = "Loading...";
-  progressBar.style.width = "0%";
-
-  table.innerHTML = `
-    <tr>
-      <td colspan="8" style="text-align:center;">
-        🔄 Loading tasks...
-      </td>
-    </tr>
-  `;
-
   TASKS = [];
-  FILTERED_TASKS = [];
-  SELECTED_IDS.clear();
-
-  updateBulkButton();
-  checkAll.checked = false;
 
   const from = filterDateFrom.value;
   const to   = filterDateTo.value;
 
   if (!from || !to) {
-    progressContainer.style.display = "none";
     alert("Select date range");
-
-    searchBtn.disabled = false;
-    searchBtn.innerText = "🔍 Search";
     return;
   }
 
-  try {
+  const start = from.replace(/-/g, "");
+  const end   = to.replace(/-/g, "");
 
-    const dateKeys = [];
-
-    for (let d = new Date(from); d <= new Date(to); d.setDate(d.getDate() + 1)) {
-      dateKeys.push(
-        d.toLocaleDateString("en-CA", { timeZone: "Asia/Manila" })
-         .replace(/-/g, "")
-      );
-    }
-
-    let allTasks = [];
-
-    for (let i = 0; i < dateKeys.length; i++) {
-
-      const key = dateKeys[i];
-
-      progressText.innerText = `Loading ${i+1} / ${dateKeys.length} days...`;
-      progressBar.style.width =
-        Math.floor(((i+1) / dateKeys.length) * 100) + "%";
-
-      const result = await loadSnapshotTasks(key);
-
-      // 🔥 IMPORTANT: add searchable string (you rely on _search)
-      result.forEach(t => {
-        t._search = Object.values(t)
-          .map(v => String(v || ""))
-          .join(" ")
-          .toLowerCase();
-      });
-
-      allTasks.push(...result);
-
-      // allow UI to breathe
-      await new Promise(r => setTimeout(r, 0));
-    }
-
-    // ✅ FINALIZE (same as admin)
-    TASKS = allTasks;
-    FILTERED_TASKS = TASKS;
-
-    buildFilterLists();
-
-    lastStart = -1;
-    renderVirtual();
-
-    progressContainer.style.display = "none";
-
-  } catch (e) {
-    console.error(e);
-    alert("Failed to load snapshot");
-  } finally {
-    searchBtn.disabled = false;
-    searchBtn.innerText = "🔍 Search";
+  const dateKeys = [];
+  for (let d = new Date(from); d <= new Date(to); d.setDate(d.getDate() + 1)) {
+    dateKeys.push(
+      d.toLocaleDateString("en-CA", { timeZone: "Asia/Manila" })
+       .replace(/-/g, "")
+    );
   }
+
+  const taskIds = new Set();
+
+  // 1️⃣ Collect task IDs by date
+  for (const dk of dateKeys) {
+    const snap = await get(ref(db, `tasksByDate/${dk}`));
+    const ids = snap.val();
+    if (!ids) continue;
+    Object.keys(ids).forEach(id => taskIds.add(id));
+  }
+
+  if (taskIds.size === 0) {
+    applyFilters();
+    return;
+  }
+  
+  const taskIdList = [...taskIds];
+  
+  // 2️⃣ Fetch ONLY needed tasks
+  const reads = [];
+  for (const id of taskIdList) {
+    reads.push(
+      get(ref(db, `tasks/${id}`)).then(s =>
+        s.exists() ? { _key: id, ...s.val() } : null
+      )
+    );
+  }
+
+  TASKS = (await Promise.all(reads))
+    .filter(Boolean)
+    .filter(t => t.status !== "COMPLETED");
+
+  buildFilterLists();
+  applyFilters();
 }
 
-window.loadTasks = loadTasks;
+
 
 function buildFilterLists() {
   const drivers = new Set();
@@ -486,47 +350,34 @@ function renderPaginationControls() {
   `;
 }
 
-window.prevPage = async function () {
+window.prevPage = function () {
   if (CURRENT_PAGE > 0) {
     CURRENT_PAGE--;
-    await renderCurrentPage();
+    renderCurrentPage();
   }
 };
 
-window.nextPage = async function () {
+window.nextPage = function () {
   const totalPages = Math.ceil(FILTERED_TASKS.length / PAGE_SIZE);
   if (CURRENT_PAGE < totalPages - 1) {
     CURRENT_PAGE++;
-    await renderCurrentPage();
+    renderCurrentPage();
   }
 };
-
-function updateHeaderCheckbox() {
-  const container = document.getElementById("tableContainer");
-  const start = Math.floor(container.scrollTop / ROW_HEIGHT);
-  const end = start + VISIBLE_COUNT;
-
-  const visible = FILTERED_TASKS.slice(start, end);
-
-  const allChecked = visible.length &&
-    visible.every(t => SELECTED_IDS.has(t._key));
-
-  checkAll.checked = allChecked;
-}
 
 function applyFilters() {
   let data = [...TASKS];
 
-  // /* ===== DATE FILTER ===== */
-  // if (filterDateFrom.value || filterDateTo.value) {
-  //   const from = filterDateFrom.value || "0000-00-00";
-  //   const to   = filterDateTo.value   || "9999-99-99";
+  /* ===== DATE FILTER ===== */
+  if (filterDateFrom.value || filterDateTo.value) {
+    const from = filterDateFrom.value || "0000-00-00";
+    const to   = filterDateTo.value   || "9999-99-99";
 
-  //   data = data.filter(t => {
-  //     const d = normalizeDate(t.createdAt);
-  //     return d && d >= from && d <= to;
-  //   });
-  // }
+    data = data.filter(t => {
+      const d = normalizeDate(t.createdAt);
+      return d && d >= from && d <= to;
+    });
+  }
 
   /* ===== DROPDOWN FILTERS ===== */
   if (filterDriver.value)
@@ -547,91 +398,60 @@ function applyFilters() {
   /* ===== SEARCH FILTER ===== */
   if (SEARCH_TERM) {
     data = data.filter(t => {
-      return (t._search || "").includes(SEARCH_TERM);
+      const haystack = [
+        t.CUSTOMERNAME,
+        t.ADDRESS,
+        t.ACCOUNTNUMBER,
+        t.METERNUMBER,
+        t.JOBTYPE,
+        t.BA,
+        t.DMZ,
+        t.MRU,
+        t.driverId
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+
+      return haystack.includes(SEARCH_TERM);
     });
   }
 
   FILTERED_TASKS = data;
-
-  if (!FILTERED_TASKS.length) {
-  SELECTED_IDS.clear();           // 🔥 important
-  updateBulkButton();
-  checkAll.checked = false;       // ✅ direct reset (correct here)
-
-  document.getElementById("tableContainer").scrollTop = 0;
-  lastStart = -1;
-
-  table.innerHTML = `
-    <tr>
-      <td colspan="8" style="text-align:center;color:#777;">
-        No tasks found
-      </td>
-    </tr>
-  `;
-  return;
+  CURRENT_PAGE = 0;      // reset to first page
+  renderCurrentPage();
 }
 
-  // ✅ Keep only valid selections
-  SELECTED_IDS.forEach(id => {
-    if (!data.find(t => t._key === id)) {
-      SELECTED_IDS.delete(id);
-    }
-  });
-  
-  updateBulkButton();
-  
-  updateHeaderCheckbox();
-  
-  document.getElementById("tableContainer").scrollTop = 0;
+function renderCurrentPage() {
+  const start = CURRENT_PAGE * PAGE_SIZE;
+  const end = start + PAGE_SIZE;
+
+  const pageData = FILTERED_TASKS.slice(start, end);
+  renderTable(pageData);
+  renderPaginationControls();
+}
+    
+
+/* ===== RENDER ===== */
+function renderTable(data) {
   table.innerHTML = "";
-  lastStart = -1;   // ✅ ADD THIS
-  renderVirtual();
-}
+  checkAll.checked = false;
+  bulkBtn.disabled = true;
 
-let lastStart = -1;
+  if(!data.length){
+    table.innerHTML = `<tr><td colspan="7">No matching tasks</td></tr>`;
+    return;
+  }
 
-function renderVirtual() {
-  const container = document.getElementById("tableContainer");
-  const scrollTop = container.scrollTop;
+  const frag = document.createDocumentFragment();
 
-  const start = Math.floor(scrollTop / ROW_HEIGHT);
-
-  // 🚀 PREVENT SAME RENDER
-  // 🔥 ALWAYS re-render if data changed
-  if (start === lastStart && FILTERED_TASKS.length > 0) return;
-  
-  lastStart = start;
-
-  const end = start + VISIBLE_COUNT;
-
-  const visible = FILTERED_TASKS.slice(start, end);
-
-  renderTableVirtual(visible, start);
-}
-
-function renderTableVirtual(data, startIndex) {
-
-  table.innerHTML = "";
-
-  const totalHeight = FILTERED_TASKS.length * ROW_HEIGHT;
-
-  const topSpacer = document.createElement("tr");
-  topSpacer.style.height = (startIndex * ROW_HEIGHT) + "px";
-  table.appendChild(topSpacer);
-
-  data.forEach(t => {
+  data.forEach(t=>{
     const tr = document.createElement("tr");
-
-    if (SELECTED_IDS.has(t._key)) {
-      tr.classList.add("selected-row");
-    }
-
     tr.innerHTML = `
       <td>
         <input type="checkbox"
           data-id="${t._key}"
-          ${SELECTED_IDS.has(t._key) ? "checked" : ""}
-          onchange="toggleSelection(this)">
+          onchange="checkSelection()">
       </td>
       <td>${t.CUSTOMERNAME||""}</td>
       <td>${t.ADDRESS||""}</td>
@@ -639,92 +459,35 @@ function renderTableVirtual(data, startIndex) {
       <td>${t.JOBTYPE||""}</td>
       <td>${t.BA||""}</td>
       <td>${toPHTime(t.createdAt)}</td>
-      <td><b>${t.status || "PENDING"}</b></td>
+      <td>
+        <b style="color:#333">
+          ${t.status || "PENDING"}
+        </b>
+      </td>
     `;
-
-    table.appendChild(tr);
-  });
-
-  const bottomSpacer = document.createElement("tr");
-  const remaining = totalHeight - ((startIndex + data.length) * ROW_HEIGHT);
-  bottomSpacer.style.height = remaining + "px";
-  table.appendChild(bottomSpacer);
-}
-
-window.toggleSelection = function (cb) {    
-  const id = cb.dataset.id;
-
-  if (cb.checked) {
-    SELECTED_IDS.add(id);
-  } else {
-    SELECTED_IDS.delete(id);
-  }
-
-  updateBulkButton();
-
-  // 🔥 FORCE UI UPDATE
-  
-  lastStart = -1;
-  renderVirtual();
-  updateHeaderCheckbox();
-};
-
-const container = document.getElementById("tableContainer");
-
-let ticking = false;
-
-container.addEventListener("scroll", () => {
-  if (!ticking) {
-    requestAnimationFrame(() => {
-      renderVirtual();
-      updateHeaderCheckbox(); // ✅ ADD THIS
-      ticking = false;
-    });
-    ticking = true;
-  }
+    frag.appendChild(tr);
 });
 
-function updateBulkButton() {
-  const count = SELECTED_IDS.size;
-
-  bulkBtn.disabled = count === 0;
-  bulkBtn.innerText = count
-    ? `Bulk Action (${count})`
-    : "Bulk Action";
+table.appendChild(frag);
 }
-
 
 /* ===== SELECTION ===== */
 checkAll.onchange = () => {
-  const container = document.getElementById("tableContainer");
-  const scrollTop = container.scrollTop;
-
-  const start = Math.floor(scrollTop / ROW_HEIGHT);
-  const end = start + VISIBLE_COUNT;
-
-  const visible = FILTERED_TASKS.slice(start, end);
-
-  if (checkAll.checked) {
-    visible.forEach(t => SELECTED_IDS.add(t._key));
-  } else {
-    visible.forEach(t => SELECTED_IDS.delete(t._key));
-  }
-
-  lastStart = -1;
-  renderVirtual();
-
-  updateBulkButton();
-
-  updateHeaderCheckbox(); // ✅ ADD THIS
+  document.querySelectorAll("#taskTable input[type=checkbox]")
+    .forEach(cb => cb.checked = checkAll.checked);
+  checkSelection();
 };
 
 window.checkSelection = function () {
-  updateBulkButton();
+  const count =
+    document.querySelectorAll("#taskTable input:checked").length;
+  bulkBtn.disabled = count === 0;
 };
 
 /* ===== BULK ACTION ===== */
 window.openBulkActions = function () {
-  const ids = [...SELECTED_IDS];
+  const ids = [...document.querySelectorAll("#taskTable input:checked")]
+    .map(cb => cb.dataset.id);
 
   if (!ids.length) return;
 
@@ -817,20 +580,13 @@ const REQUIRED_HEADERS = [
   "AGENTNAME"
 ];
 
-async function appendTasksToLocalState(newTasks) {
+function appendTasksToLocalState(newTasks) {
   const existing = new Set(TASKS.map(t => t._key));
   const unique = newTasks.filter(t => !existing.has(t._key));
 
-  for (let i = 0; i < unique.length; i += 500) {
-    TASKS.push(...unique.slice(i, i + 500));
-
-    // 🔥 LET UI BREATHE
-    await new Promise(r => setTimeout(r, 0));
-  }
-
-  // 🔥 ALSO NON-BLOCKING
-  setTimeout(() => buildFilterLists(), 0);
-  setTimeout(() => applyFilters(), 0);
+  TASKS.push(...unique);
+  buildFilterLists();
+  applyFilters();
 }
 
 window.uploadCSV = async function(btn){
@@ -887,27 +643,20 @@ window.uploadCSV = async function(btn){
 
         const dateKey = now.slice(0, 10).replace(/-/g, "")// example: "20260122"
 
-        for (let i = 0; i < rows.length; i += 500) {
-          const chunk = rows.slice(i, i + 500);
-        
-          chunk.forEach((task, index) => {
-            const taskId = `TASK_${base}_${i + index}`;
-        
-            updates[`tasks/${taskId}`] = {
-              ...task,
-              driverId: task.AGENTID || "",
-              status: "PENDING",
-              rowIndex: i + index + 1,
-              uploadBatch: base,
-              createdAt: now
-            };
-        
-            updates[`tasksByDate/${dateKey}/${taskId}`] = true;
-          });
-        
-          // 🔥 LET UI BREATHE
-          await new Promise(r => setTimeout(r, 0));
-        }
+        rows.forEach((task, index) => {
+          const taskId = `TASK_${base}_${index}`;
+
+          updates[`tasks/${taskId}`] = {
+            ...task,
+            driverId: task.AGENTID || "",
+            status: "PENDING",
+            rowIndex: index + 1,
+            uploadBatch: base,
+            createdAt: now
+          };
+
+          updates[`tasksByDate/${dateKey}/${taskId}`] = true;
+        });
 
         await update(ref(db), updates);
 
@@ -933,32 +682,18 @@ window.uploadCSV = async function(btn){
         });
 
         // ✅ Build local task objects (NO DB READ)
-        const newTasks = [];
-
-        for (let i = 0; i < rows.length; i += 500) {
-          const chunk = rows.slice(i, i + 500);
-        
-          chunk.forEach((task, index) => {
-            newTasks.push({
-              _key: `TASK_${base}_${i + index}`,
-              ...task,
-              driverId: task.AGENTID || "",
-              status: "PENDING",
-              rowIndex: i + index + 1,
-              uploadBatch: base,
-              createdAt: now,
-              _search: Object.values(task)
-                .map(v => String(v || ""))
-                .join(" ")
-                .toLowerCase()
-            });
-          });
-        
-          await new Promise(r => setTimeout(r, 0));
-        }
+        const newTasks = rows.map((task, index) => ({
+          _key: `TASK_${base}_${index}`,
+          ...task,
+          driverId: task.AGENTID || "",
+          status: "PENDING",
+          rowIndex: index + 1,
+          uploadBatch: base,
+          createdAt: now
+        }));
         
         // ✅ Inject directly into UI state
-        await appendTasksToLocalState(newTasks);
+        appendTasksToLocalState(newTasks);
 
         // 🔁 Ensure filters include upload date
         filterDateFrom.value = now.slice(0, 10);
