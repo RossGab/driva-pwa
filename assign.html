@@ -81,7 +81,7 @@ select, input[type="date"] {
 
 <body>
 
-<h2>Manage Tasks V4.5.5-WIP</h2>
+<h2>Manage Tasks V4.5.6-WIP</h2>
 
 <button onclick="location.href='admin.html'" class="small-btn">⬅ Back</button>
 
@@ -123,33 +123,8 @@ select, input[type="date"] {
 <div class="panel">
   <b>📝Open Tasks</b>
 
-  <div id="virtualContainer" style="
-    height: 600px;
-    overflow-y: auto;
-    position: relative;
-    margin-top:6px;
-  ">
+<div id="taskList" style="margin-top:6px;"></div>
 
-    <div id="spacer"></div>
-
-    <table style="position:absolute; top:0; left:0; width:100%;">
-      <thead>
-        <tr>
-          <th><input type="checkbox" id="checkAll"></th>
-          <th>Customer</th>
-          <th>Address</th>
-          <th>Driver</th>
-          <th>JobType</th>
-          <th>BA</th>
-          <th>Created Date Time</th>
-          <th>Status</th>
-        </tr>
-      </thead>
-      <tbody id="taskTable"></tbody>
-    </table>
-
-  </div>
-</div>
 
 <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
 
@@ -174,7 +149,6 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 
-const table = document.getElementById("taskTable");
 const bulkBtn = document.getElementById("bulkBtn");
 
 const filterDateFrom = document.getElementById("filterDateFrom");
@@ -184,7 +158,6 @@ const filterJob = document.getElementById("filterJob");
 const filterBA = document.getElementById("filterBA");
 const filterDMZ = document.getElementById("filterDMZ");
 const filterMRU = document.getElementById("filterMRU");
-const checkAll = document.getElementById("checkAll");
 
 const searchBox = document.getElementById("searchBox");
 let SEARCH_TERM = "";
@@ -192,10 +165,11 @@ let SEARCH_TERM = "";
 const ROW_HEIGHT = 42;   // adjust if row height changes
 const BUFFER = 10;
 
+let TASK_MAP = {};
+let LAST_FILTER_HASH = "";
 let VISIBLE_START = 0;
 let VISIBLE_END = 0;
 
-const virtualTable = document.querySelector("#virtualContainer table");
   
 let SELECTED_IDS = new Set();
 
@@ -212,7 +186,7 @@ searchBox.addEventListener("input", e => {
 
 let TASKS = []; // (optional cache for uploads)
 window.__SNAPSHOT_TASKS__ = [];
-const PAGE_SIZE = 200;   // ✅ adjust: 50 / 100 / 200
+const PAGE_SIZE = 100;   // ✅ adjust: 50 / 100 / 200
 let CURRENT_PAGE = 0;
 let FILTERED_TASKS = [];
 
@@ -287,6 +261,7 @@ async function loadSnapshotTasks(dateKey, retries = 2) {
 
 /* ===== LOAD TASKS ===== */
 async function loadTasks() {
+  
   const from = filterDateFrom.value;
   const to   = filterDateTo.value;
 
@@ -318,8 +293,15 @@ async function loadTasks() {
 
   // 🔥 STORE IN MEMORY (IMPORTANT)
   window.__SNAPSHOT_TASKS__ = snapshotTasks;
+  
+  TASK_MAP = {};
+  snapshotTasks.forEach(t => {
+    TASK_MAP[t._key] = t;
+  });
 
-  buildFilterLists();
+  LAST_FILTER_HASH = "";
+
+  if (!window.__FILTER_BUILT__) {   buildFilterLists();   window.__FILTER_BUILT__ = true; }
   applyFilters();
 }
 
@@ -392,51 +374,23 @@ window.nextPage = function () {
   }
 };
 
-function initVirtualScroll() {
-  container.scrollTop = 0;
-  const container = document.getElementById("virtualContainer");
-  const spacer = document.getElementById("spacer");
-
-  spacer.style.height = (FILTERED_TASKS.length * ROW_HEIGHT) + "px";
-
-  let ticking = false;
-
-container.onscroll = () => {
-  if (!ticking) {
-    requestAnimationFrame(() => {
-      renderVisibleRows();
-      ticking = false;
-    });
-    ticking = true;
-  }
-};
-
-  renderVisibleRows();
-}
-
-function renderVisibleRows() {
-  const container = document.getElementById("virtualContainer");
-  const scrollTop = container.scrollTop;
-  const height = container.clientHeight;
-
-  const start = Math.floor(scrollTop / ROW_HEIGHT);
-  const visibleCount = Math.ceil(height / ROW_HEIGHT);
-
-  VISIBLE_START = Math.max(0, start - BUFFER);
-  VISIBLE_END = Math.min(
-    FILTERED_TASKS.length,
-    start + visibleCount + BUFFER
-  );
-
-  const offsetY = VISIBLE_START * ROW_HEIGHT;
-
-
-  renderTable(FILTERED_TASKS.slice(VISIBLE_START, VISIBLE_END));
-}
-
 function applyFilters() {
-  SELECTED_IDS.clear();
-  let data = [...(window.__SNAPSHOT_TASKS__ || [])];
+
+  const hash = JSON.stringify({
+  d1: filterDateFrom.value,
+  d2: filterDateTo.value,
+  dr: filterDriver.value,
+  j: filterJob.value,
+  ba: filterBA.value,
+  dmz: filterDMZ.value,
+  mru: filterMRU.value,
+  s: SEARCH_TERM
+});
+
+if (hash === LAST_FILTER_HASH) return;
+LAST_FILTER_HASH = hash;
+  
+  let data = window.__SNAPSHOT_TASKS__ || [];
 
   /* ===== DATE FILTER ===== */
   if (filterDateFrom.value || filterDateTo.value) {
@@ -499,7 +453,7 @@ function renderCurrentPage() {
 
   const pageData = FILTERED_TASKS.slice(start, end);
 
-  renderTable(pageData);
+  renderTasks(pageData);
   renderPaginationControls();
 }
 
@@ -516,58 +470,59 @@ window.toggleSelect = function (el) {
 };
 
 /* ===== RENDER ===== */
-function renderTable(data) {
-  table.innerHTML = "";
-  checkAll.checked =
-  FILTERED_TASKS.length > 0 &&
-  SELECTED_IDS.size === FILTERED_TASKS.length;
-  bulkBtn.disabled = true;
+function renderTasks(data) {
+  const container = document.getElementById("taskList");
+  container.textContent = "";
 
-  if(!data.length){
-    table.innerHTML = `<tr><td colspan="7">No matching tasks</td></tr>`;
+  if (!data.length) {
+    container.innerHTML = `<div>No matching tasks</div>`;
     return;
   }
 
   const frag = document.createDocumentFragment();
 
-  data.forEach(t=>{
-    const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td>
+  data.forEach(t => {
+    const div = document.createElement("div");
+
+    div.style.cssText = `
+      background:#fff;
+      padding:10px;
+      margin-bottom:8px;
+      border-radius:8px;
+      box-shadow:0 0 4px rgba(0,0,0,.1);
+      border-left:4px solid orange;
+    `;
+
+    div.innerHTML = `
+      <div style="display:flex;justify-content:space-between;">
         <input type="checkbox"
           data-id="${t._key}"
           ${SELECTED_IDS.has(t._key) ? "checked" : ""}
           onchange="toggleSelect(this)">
-      </td>
-      <td>${t.CUSTOMERNAME||""}</td>
-      <td>${t.ADDRESS||""}</td>
-      <td>${t.driverId||"—"}</td>
-      <td>${t.JOBTYPE||""}</td>
-      <td>${t.BA||""}</td>
-      <td>${toPHTime(t.createdAt)}</td>
-      <td>
-        <b style="color:#333">
+        
+        <div style="font-size:11px;color:#777;">
           ${t.status || "PENDING"}
-        </b>
-      </td>
-    `;
-    frag.appendChild(tr);
-});
+        </div>
+      </div>
 
-table.appendChild(frag);
+      <div><b>${t.CUSTOMERNAME || ""}</b></div>
+      <div style="font-size:12px;color:#555;">${t.ADDRESS || ""}</div>
+      <div style="font-size:12px;">
+        🚗 ${t.driverId || "—"} | ${t.JOBTYPE || ""}
+      </div>
+      <div style="font-size:11px;color:#777;">
+        ${toPHTime(t.createdAt)}
+      </div>
+    `;
+
+    frag.appendChild(div);
+  });
+
+  container.appendChild(frag);
+  checkSelection();
 }
 
 /* ===== SELECTION ===== */
-checkAll.onchange = () => {
-  if (checkAll.checked) {
-    FILTERED_TASKS.forEach(t => SELECTED_IDS.add(t._key));
-  } else {
-    SELECTED_IDS.clear();
-  }
-
-  renderVisibleRows();
-  checkSelection();
-};
 
 const selectedCountEl = document.getElementById("selectedCount");
 
@@ -604,7 +559,7 @@ async function bulkDelete(ids) {
   const statsDelta = {}; // per dateKey
 
   ids.forEach(id => {
-    const task = (window.__SNAPSHOT_TASKS__ || []).find(t => t._key === id);
+    const task = TASK_MAP[id];
     if (!task || !task.createdAt) return;
 
     const dateKey = normalizeDate(task.createdAt)?.replace(/-/g, "");
@@ -680,7 +635,7 @@ function appendTasksToLocalState(newTasks) {
   const unique = newTasks.filter(t => !existing.has(t._key));
 
   TASKS.push(...unique);
-  buildFilterLists();
+  if (!window.__FILTER_BUILT__) {   buildFilterLists();   window.__FILTER_BUILT__ = true; }
   applyFilters();
 }
 
