@@ -81,7 +81,7 @@ select, input[type="date"] {
 
 <body>
 
-<h2>Manage Tasks V4.5.6.log-WIP</h2>
+<h2>Manage Tasks V4.5.7-WIP</h2>
 
 <button onclick="location.href='admin.html'" class="small-btn">⬅ Back</button>
 
@@ -121,7 +121,10 @@ select, input[type="date"] {
   <div id="paginationControls"
      style="margin-top:10px;text-align:center;"></div>
 <div class="panel">
+  <div style="display:flex;align-items:center;gap:10px;">
+  <input type="checkbox" id="checkAll">
   <b>📝Open Tasks</b>
+</div>
 
 <div id="taskList" style="margin-top:6px;"></div>
 
@@ -158,6 +161,8 @@ const filterJob = document.getElementById("filterJob");
 const filterBA = document.getElementById("filterBA");
 const filterDMZ = document.getElementById("filterDMZ");
 const filterMRU = document.getElementById("filterMRU");
+
+const checkAll = document.getElementById("checkAll");
 
 const searchBox = document.getElementById("searchBox");
 let SEARCH_TERM = "";
@@ -305,6 +310,15 @@ async function loadTasks() {
   applyFilters();
 }
 
+checkAll.onchange = () => {
+  if (checkAll.checked) {
+    SELECTED_IDS = new Set(FILTERED_TASKS.map(t => t._key));
+  } else {
+    SELECTED_IDS.clear();
+  }
+
+  renderCurrentPage();
+};
 
 
 function buildFilterLists() {
@@ -519,6 +533,10 @@ function renderTasks(data) {
   });
 
   container.appendChild(frag);
+  // sync header checkbox
+  checkAll.checked =
+    FILTERED_TASKS.length > 0 &&
+    SELECTED_IDS.size === FILTERED_TASKS.length;
   checkSelection();
 }
 
@@ -532,14 +550,16 @@ window.checkSelection = function () {
   bulkBtn.disabled = count === 0;
 
   selectedCountEl.innerText =
-    count > 0 ? `${count} selected` : "";
+  count > 0 ? `${count} selected (ALL FILTERED)` : "";
 };
 
 /* ===== BULK ACTION ===== */
 window.openBulkActions = function () {
-  console.log("Selected IDs:", ids);
+  
   const ids = [...SELECTED_IDS];
 
+  console.log("Selected IDs:", ids);
+  
   if (!ids.length) return;
 
   const action = prompt("Type: TRANSFER or DELETE");
