@@ -81,7 +81,7 @@ select, input[type="date"] {
 
 <body>
 
-<h2>Manage Tasks V4.5.1-WIP</h2>
+<h2>Manage Tasks V4.5.2-WIP</h2>
 
 <button onclick="location.href='admin.html'" class="small-btn">⬅ Back</button>
 
@@ -178,13 +178,20 @@ const checkAll = document.getElementById("checkAll");
 const searchBox = document.getElementById("searchBox");
 let SEARCH_TERM = "";
 
-searchBox.addEventListener("input", e => {
-  SEARCH_TERM = e.target.value.toLowerCase().trim();
-  applyFilters();
-}); 
+let SEARCH_TIMER;
 
-let TASKS = [];
-const PAGE_SIZE = 1000;   // ✅ adjust: 50 / 100 / 200
+searchBox.addEventListener("input", e => {
+  clearTimeout(SEARCH_TIMER);
+
+  SEARCH_TIMER = setTimeout(() => {
+    SEARCH_TERM = e.target.value.toLowerCase().trim();
+    applyFilters();
+  }, 300);
+});
+
+let TASKS = []; // (optional cache for uploads)
+window.__SNAPSHOT_TASKS__ = [];
+const PAGE_SIZE = 200;   // ✅ adjust: 50 / 100 / 200
 let CURRENT_PAGE = 0;
 let FILTERED_TASKS = [];
 
@@ -259,8 +266,6 @@ async function loadSnapshotTasks(dateKey, retries = 2) {
 
 /* ===== LOAD TASKS ===== */
 async function loadTasks() {
-  TASKS = [];
-
   const from = filterDateFrom.value;
   const to   = filterDateTo.value;
 
@@ -278,19 +283,20 @@ async function loadTasks() {
     );
   }
 
-  let allTasks = [];
+  let snapshotTasks = [];
 
   for (const key of dateKeys) {
     const result = await loadSnapshotTasks(key);
 
     result.forEach(t => {
       if (t.status !== "COMPLETED") {
-        allTasks.push(t);
+        snapshotTasks.push(t);
       }
     });
   }
 
-  TASKS = allTasks;
+  // 🔥 STORE IN MEMORY (IMPORTANT)
+  window.__SNAPSHOT_TASKS__ = snapshotTasks;
 
   buildFilterLists();
   applyFilters();
@@ -305,7 +311,7 @@ function buildFilterLists() {
   const dmzs = new Set();
   const mrus = new Set();
 
-  TASKS.forEach(t=>{
+  (window.__SNAPSHOT_TASKS__ || []).forEach(t=>{
     if(t.driverId) drivers.add(t.driverId);
     if(t.JOBTYPE) jobs.add(t.JOBTYPE);
     if(t.BA) bas.add(t.BA);
@@ -366,7 +372,7 @@ window.nextPage = function () {
 };
 
 function applyFilters() {
-  let data = [...TASKS];
+  let data = [...(window.__SNAPSHOT_TASKS__ || [])];
 
   /* ===== DATE FILTER ===== */
   if (filterDateFrom.value || filterDateTo.value) {
