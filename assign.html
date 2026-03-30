@@ -81,7 +81,7 @@ select, input[type="date"] {
 
 <body>
 
-<h2>Manage Tasks V4.5.4-WIP</h2>
+<h2>Manage Tasks V4.5.5-WIP</h2>
 
 <button onclick="location.href='admin.html'" class="small-btn">⬅ Back</button>
 
@@ -430,7 +430,6 @@ function renderVisibleRows() {
 
   const offsetY = VISIBLE_START * ROW_HEIGHT;
 
-  virtualTable.style.transform = `translateY(${offsetY}px)`;
 
   renderTable(FILTERED_TASKS.slice(VISIBLE_START, VISIBLE_END));
 }
@@ -489,7 +488,9 @@ function applyFilters() {
   }
 
   FILTERED_TASKS = data;
-  initVirtualScroll();
+  CURRENT_PAGE = 0;
+  renderCurrentPage();
+  renderPaginationControls();
 }
 
 function renderCurrentPage() {
@@ -497,6 +498,7 @@ function renderCurrentPage() {
   const end = start + PAGE_SIZE;
 
   const pageData = FILTERED_TASKS.slice(start, end);
+
   renderTable(pageData);
   renderPaginationControls();
 }
