@@ -81,7 +81,7 @@ select, input[type="date"] {
 
 <body>
 
-<h2>Manage Tasks V4.5.3-WIP</h2>
+<h2>Manage Tasks V4.5.4-WIP</h2>
 
 <button onclick="location.href='admin.html'" class="small-btn">⬅ Back</button>
 
@@ -104,6 +104,7 @@ select, input[type="date"] {
     <select id="filterDMZ"><option value="">All DMZ</option></select>
     <select id="filterMRU"><option value="">All MRU</option></select>
     <button id="bulkBtn" disabled onclick="openBulkActions()">Bulk Action</button>
+    <span id="selectedCount" style="font-size:12px;color:#555;"></span>
     <input
   type="text"
   id="searchBox"
@@ -115,7 +116,7 @@ select, input[type="date"] {
 
 <!-- TASK TABLE -->
   <div style="font-size:12px;color:#777;text-align:center;">
-  Bulk actions apply to selected rows on the current page only
+  Bulk actions apply to ALL selected rows
 </div>
   <div id="paginationControls"
      style="margin-top:10px;text-align:center;"></div>
@@ -194,6 +195,8 @@ const BUFFER = 10;
 let VISIBLE_START = 0;
 let VISIBLE_END = 0;
 
+const virtualTable = document.querySelector("#virtualContainer table");
+  
 let SELECTED_IDS = new Set();
 
 let SEARCH_TIMER;
@@ -390,6 +393,7 @@ window.nextPage = function () {
 };
 
 function initVirtualScroll() {
+  container.scrollTop = 0;
   const container = document.getElementById("virtualContainer");
   const spacer = document.getElementById("spacer");
 
@@ -426,8 +430,7 @@ function renderVisibleRows() {
 
   const offsetY = VISIBLE_START * ROW_HEIGHT;
 
-  const table = document.querySelector("#virtualContainer table");
-  table.style.transform = `translateY(${offsetY}px)`;
+  virtualTable.style.transform = `translateY(${offsetY}px)`;
 
   renderTable(FILTERED_TASKS.slice(VISIBLE_START, VISIBLE_END));
 }
@@ -513,7 +516,9 @@ window.toggleSelect = function (el) {
 /* ===== RENDER ===== */
 function renderTable(data) {
   table.innerHTML = "";
-  checkAll.checked = false;
+  checkAll.checked =
+  FILTERED_TASKS.length > 0 &&
+  SELECTED_IDS.size === FILTERED_TASKS.length;
   bulkBtn.disabled = true;
 
   if(!data.length){
@@ -562,8 +567,15 @@ checkAll.onchange = () => {
   checkSelection();
 };
 
+const selectedCountEl = document.getElementById("selectedCount");
+
 window.checkSelection = function () {
-  bulkBtn.disabled = SELECTED_IDS.size === 0;
+  const count = SELECTED_IDS.size;
+
+  bulkBtn.disabled = count === 0;
+
+  selectedCountEl.innerText =
+    count > 0 ? `${count} selected` : "";
 };
 
 /* ===== BULK ACTION ===== */
@@ -590,7 +602,7 @@ async function bulkDelete(ids) {
   const statsDelta = {}; // per dateKey
 
   ids.forEach(id => {
-    const task = TASKS.find(t => t._key === id);
+    const task = (window.__SNAPSHOT_TASKS__ || []).find(t => t._key === id);
     if (!task || !task.createdAt) return;
 
     const dateKey = normalizeDate(task.createdAt)?.replace(/-/g, "");
