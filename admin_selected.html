@@ -308,7 +308,7 @@ button {
   
   <div style="display:flex;align-items:center;gap:14px;">
     <img src="./logo.jpg" class="admin-logo" alt="Company Logo">
-    <h1>Admin Dashboard <span class="version">V4.0-WIP</span></h1>
+    <h1>Admin Dashboard <span class="version">V4.0.1-WIP</span></h1>
   </div>
 
   <!-- 📅 DATE FILTER -->
@@ -950,11 +950,24 @@ async function updateSnapshotFreshness() {
   try {
     const res = await fetch(metaUrl, { cache: "no-store" });
     if (!res.ok) throw new Error("No meta");
-
+    
     const meta = await res.json();
+    const status = meta.status || "idle";
     const updatedAt = new Date(meta.updatedAt);
 
     const now = new Date();
+    // 🟣 RUNNING STATE (HIGHEST PRIORITY)
+    if (status === "running") {
+      btn.className = "snapshot-btn";
+      btn.classList.add("snapshot-warn");
+    
+      btn.textContent = "⏳ Snapshot in progress...";
+      btn.disabled = true;
+      btn.style.cursor = "default";
+      btn.onclick = null;
+    
+      return; // ⛔ stop here
+    }
     const diffMin = Math.floor((now - updatedAt) / 60000);
 
     // Format time in PH locale
@@ -1007,8 +1020,10 @@ async function triggerSnapshotWorkflow() {
 
   const btn = document.getElementById("snapshotStatusBtn");
 
-  btn.textContent = "🚀 Triggering snapshot...";
+  btn.textContent = "⏳ Snapshot in progress...";
+  btn.className = "snapshot-btn snapshot-warn";
   btn.disabled = true;
+  btn.style.cursor = "default";
 
   try {
 
@@ -1021,7 +1036,7 @@ async function triggerSnapshotWorkflow() {
 
     if (!data.ok) throw new Error();
 
-    btn.textContent = "⚙ Snapshot requested";
+    setTimeout(updateSnapshotFreshness, 2000);
 
   } catch (e) {
 
@@ -2185,6 +2200,10 @@ function setLoaderText(txt) {
         }
       });
     }
+
+    await updateSnapshotFreshness(); // 🔥 run immediately
+    setInterval(updateSnapshotFreshness, 10000);
+    
     hideLoader();
   }
 })();
