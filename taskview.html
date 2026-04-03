@@ -308,7 +308,7 @@ button {
   
   <div style="display:flex;align-items:center;gap:14px;">
     <img src="./logo.jpg" class="admin-logo" alt="Company Logo">
-    <h1>Admin Dashboard <span class="version">V4.0.1-WIP</span></h1>
+    <h1>Tasks Dashboard <span class="version">V1.0</span></h1>
   </div>
 
   <!-- 📅 DATE FILTER -->
@@ -331,15 +331,6 @@ button {
 
 <!-- ===== DASHBOARD ===== -->
 <div class="dashboard">
-  <div class="card open">
-    <div class="big" id="openCount">0</div>
-    <div class="small">
-      🔴 <span id="slaBreach">0</span> |
-      🟡 <span id="slaWarn">0</span> |
-      🟢 <span id="slaOk">0</span>
-    </div>
-    Open Tasks
-  </div>
   <div class="card done">
     <div class="big" id="doneCount">0</div>
     Completed Tasks
@@ -348,9 +339,9 @@ button {
 
 <!-- ===== ACTIONS ===== -->
 <div class="actions">
-  <button class="assign" onclick="toggleLiveMap()">🗺 Live Map</button>
+  
   <button class="assign" onclick="location.href='assign.html'">➕ Manage Task</button>
-  <button class="openBtn" onclick="showAllOpenTasks()">📂 Open</button>
+  
   <button class="doneBtn" onclick="showCompletedTasks()">✅ Completed</button>
   <button class="assign" onclick="location.href='add-driver.html'">👤 Add Driver</button>
   <button class="assign" onclick="location.href=''">⚙ Driver Configuration</button>
@@ -1076,14 +1067,20 @@ window.refreshDashboard = function () {
     return;
   }
 
-  let open = 0, done = 0;
-  let ok = 0, warn = 0, breach = 0;
+  let done = 0;
 
-  window.__SNAPSHOT_TASKS__.forEach(t => {
-    if (t.status === "COMPLETED") {
-      done++;
-    } else {
-      open++;
+window.__SNAPSHOT_TASKS__.forEach(t => {
+  if (t.status === "COMPLETED") {
+    done++;
+  }
+});
+
+openCount.innerText = 0;
+doneCount.innerText = done;
+
+slaOk.innerText = 0;
+slaWarn.innerText = 0;
+slaBreach.innerText = 0;
 
       if (!t.createdAt) return;
       const hrs = (Date.now() - new Date(t.createdAt)) / 36e5;
@@ -1406,19 +1403,6 @@ window.showCompletedTasks = function () {
   loadTasks("COMPLETED");
 };
 
-window.showAllOpenTasks = function () {
-  // ✅ STEP 4
-  searchWrapper.style.display = "block";
-  baFilters.style.display = "block";
-
-  FILTER_DRIVER = null;
-  MAP_VISIBLE = false;
-
-  mapContainer.style.display = "none";
-  taskList.style.display = "block";
-
-  loadTasks("PENDING");
-};
   
 window.forceRefresh = async function () {
   clearTaskCache();
@@ -1528,10 +1512,8 @@ async function loadAdminPageFromSnapshot(status) {
   if (!window.__SNAPSHOT_TASKS__) return;
 
   let tasks = window.__SNAPSHOT_TASKS__.filter(t =>
-    status === "COMPLETED"
-      ? t.status === "COMPLETED"
-      : t.status !== "COMPLETED"
-  );
+  t.status === "COMPLETED"
+);
 
   // 🔍 Search filter
   if (SEARCH_TERM) {
@@ -1612,7 +1594,7 @@ function renderAdminTasks(tasks) {
         <b>${t.CUSTOMERNAME || ""}</b>
         <div class="small">${t.ADDRESS || ""}</div>
         <div class="small">Driver: ${t.driverId || "—"}</div>
-        ${sla ? `<div class="small ${sla.cls}">⏱ ${sla.text}</div>` : ""}
+        
       </div>
 
       <div class="task-details" data-task-id="${t._key}" style="display:none">
@@ -2184,7 +2166,7 @@ function setLoaderText(txt) {
     // await refreshDashboard();
 
     showLoader("Loading tasks…");
-    await loadTasks("PENDING");
+    await loadTasks("COMPLETED");
   } catch (e) {
     alert("Dashboard failed to load. Please refresh.");
   } finally {
