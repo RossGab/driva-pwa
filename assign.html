@@ -81,7 +81,7 @@ select, input[type="date"] {
 
 <body>
 
-<h2>Manage Tasks V4.6.1.5-WIP</h2>
+<h2>Manage Tasks V4.6.1.6-WIP</h2>
 
 <button onclick="location.href='admin.html'" class="small-btn">⬅ Back</button>
 
@@ -370,28 +370,30 @@ function isTodayKey(dateKey) {
   return dateKey === getTodayPH().replace(/-/g, "");
 }
 
-/* ===== LOAD TASKS ===== */
-async function loadTasks() {
+/* ===== LOAD TASKS ===== */async function loadTasks() {
   if (loadBtn.disabled) return;
+
   loadBtn.disabled = true;
-loadBtn.innerText = "Loading...";
-  document.getElementById("taskList").innerHTML = "";
-  loadingBar.style.display = "block";
-  if (loadingProgress) loadingProgress.style.width = "0%";
+  loadBtn.innerText = "Loading...";
 
-  const from = filterDateFrom.value;
-  const to   = filterDateTo.value;
+  try {
 
-  if (!from || !to) {
-    alert("Select date range");
-  
-    // 🔥 FIX: restore button state
-    loadBtn.disabled = false;
-    loadBtn.innerText = "🔄 Load Tasks";
-  
-    return;
-  }
+const from = filterDateFrom.value;
+const to   = filterDateTo.value;
 
+if (!from || !to) {
+  alert("Select date range");
+
+  loadBtn.disabled = false;
+  loadBtn.innerText = "🔄 Load Tasks";
+
+  return;
+}
+    
+document.getElementById("taskList").innerHTML = "";
+loadingBar.style.display = "block";
+loadingProgress.style.width = "0%";
+loadingText.innerText = "Starting...";
   const dateKeys = [];
   
 
@@ -406,70 +408,50 @@ loadBtn.innerText = "Loading...";
 
   let allTasks = [];
 
-  for (let i = 0; i < dateKeys.length; i++) {
-    const key = dateKeys[i];
+ const snapshotKeys = dateKeys.filter(k => !isTodayKey(k));
+const liveKeys = dateKeys.filter(k => isTodayKey(k));
 
-    let result = [];
+// 🚀 LOAD SNAPSHOTS IN PARALLEL
+const snapshotResults = [];
 
-    if (isTodayKey(key)) {
+for (let i = 0; i < snapshotKeys.length; i++) {
+  loadingText.innerText =
+    `Loading snapshot ${i + 1} / ${snapshotKeys.length}`;
 
-  console.log("🔥 LIVE:", key);
+  const res = await loadSnapshotTasks(snapshotKeys[i]);
+  snapshotResults.push(res);
 
-  loadingText.innerText = "Loading live tasks...";
+  const progress = (i + 1) / snapshotKeys.length * 50;
+  loadingProgress.style.width = progress + "%";
+}
 
-  result = await loadLiveTasksFromFirebase(
+snapshotResults.forEach(result => {
+  result.forEach(t => {
+    if (t.status !== "COMPLETED") {
+      allTasks.push(t);
+    }
+  });
+});
+
+// 🔥 LOAD LIVE (still sequential for progress)
+for (const key of liveKeys) {
+  const result = await loadLiveTasksFromFirebase(
     key,
     (p, loaded, total) => {
-      let mapped;
-      
-      if (hasLive) {
-        mapped = 50 + (p * 0.5);
-      } else {
-        mapped = p;
-      }
-      
+      const mapped = 50 + (p * 0.5);
       loadingProgress.style.width = mapped + "%";
 
       loadingText.innerText =
-  `Loading live tasks... (${loaded} / ${total}) | Total: ${allTasks.length + loaded}`;
+        `Loading live tasks... (${loaded}/${total})`;
     }
   );
 
-} else {
-
-  console.log("📦 SNAPSHOT:", key);
-
-  loadingText.innerText =
-    `Loading snapshot... (${i + 1} / ${dateKeys.length})`;
-
-  result = await loadSnapshotTasks(key);
-
-  loadingText.innerText =
-    `Loading snapshot... (${allTasks.length + result.length} tasks)`;
-}
-
-    if (!isTodayKey(key)) {
-    let progress;
-  
-    if (hasLive) {
-      progress = ((i + 1) / dateKeys.length) * 50;
-    } else {
-      progress = ((i + 1) / dateKeys.length) * 100;
+  result.forEach(t => {
+    if (t.status !== "COMPLETED") {
+      allTasks.push(t);
     }
-  
-    loadingProgress.style.width = progress + "%";
-  }
-
-    result.forEach(t => {
-      if (t.status !== "COMPLETED") {
-        allTasks.push(t);
-      }
-    });
-    window.__SNAPSHOT_TASKS__ = allTasks;
-    applyFilters();
-  }
-
-  // ✅ STORE DATA
+  });
+}
   window.__SNAPSHOT_TASKS__ = allTasks;
 
   TASK_MAP = {};
@@ -496,11 +478,16 @@ loadBtn.innerText = "Loading...";
   // optional: small delay so user can SEE it
   setTimeout(() => {
   loadingBar.style.display = "none";
-
-  loadBtn.disabled = false;
-  loadBtn.innerText = "🔄 Load Tasks";
-
 }, 500);
+
+  } catch (err) {
+    console.error("❌ loadTasks failed:", err);
+    alert("Something went wrong while loading tasks");
+
+  } finally {
+    loadBtn.disabled = false;
+    loadBtn.innerText = "🔄 Load Tasks";
+  }
 }
 
 
