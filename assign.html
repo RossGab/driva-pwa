@@ -81,7 +81,7 @@ select, input[type="date"] {
 
 <body>
 
-<h2>Manage Tasks V4.6.1.9-WIP</h2>
+<h2>Manage Tasks V4.6.1.10-WIP</h2>
 
 <button onclick="location.href='admin.html'" class="small-btn">⬅ Back</button>
 
@@ -569,7 +569,7 @@ function renderPaginationControls() {
   const el = document.getElementById("paginationControls");
   if (!el) return;
 
-  const totalPages = Math.ceil(FILTERED_TASKS.length / PAGE_SIZE);
+  const totalPages = Math.ceil((window.__TOTAL_MATCHES__ || 0) / PAGE_SIZE);
 
   if (totalPages <= 1) {
     el.innerHTML = "";
@@ -598,7 +598,7 @@ window.prevPage = function () {
 };
 
 window.nextPage = function () {
-  const totalPages = Math.ceil(FILTERED_TASKS.length / PAGE_SIZE);
+  const totalPages = Math.ceil((window.__TOTAL_MATCHES__ || 0) / PAGE_SIZE);
   if (CURRENT_PAGE < totalPages - 1) {
     CURRENT_PAGE++;
     renderCurrentPage();
@@ -607,62 +607,64 @@ window.nextPage = function () {
 
 function applyFilters() {
 
+  CURRENT_PAGE = 0;
+
   const source = window.__SNAPSHOT_TASKS__ || [];
+
   const result = [];
 
-  let i = 0;
-  const CHUNK = 1000;
+  let count = 0;
+  let startIndex = CURRENT_PAGE * PAGE_SIZE;
+  let endIndex = startIndex + PAGE_SIZE;
 
-  function processChunk() {
+  for (let i = 0; i < source.length; i++) {
+    const t = source[i];
 
-    const end = Math.min(i + CHUNK, source.length);
+    // ===== DATE FILTER =====
+    if (filterDateFrom.value || filterDateTo.value) {
+      const from = filterDateFrom.value || "0000-00-00";
+      const to   = filterDateTo.value   || "9999-99-99";
 
-    for (; i < end; i++) {
-      const t = source[i];
-
-      // ===== DATE FILTER =====
-      if (filterDateFrom.value || filterDateTo.value) {
-        const from = filterDateFrom.value || "0000-00-00";
-        const to   = filterDateTo.value   || "9999-99-99";
-
-        const d = normalizeDate(t.createdAt);
-        if (!d || d < from || d > to) continue;
-      }
-
-      // ===== DROPDOWNS =====
-      if (filterDriver.value && t.driverId !== filterDriver.value) continue;
-      if (filterJob.value && t.JOBTYPE !== filterJob.value) continue;
-      if (filterBA.value && t.BA !== filterBA.value) continue;
-      if (filterDMZ.value && t.DMZ !== filterDMZ.value) continue;
-      if (filterMRU.value && t.MRU !== filterMRU.value) continue;
-
-      // ===== SEARCH (optimized) =====
-      if (SEARCH_TERM) {
-        const haystack = (
-          (t.CUSTOMERNAME || "") +
-          (t.ADDRESS || "") +
-          (t.ACCOUNTNUMBER || "") +
-          (t.METERNUMBER || "") +
-          (t.driverId || "")
-        ).toLowerCase();
-
-        if (!haystack.includes(SEARCH_TERM)) continue;
-      }
-
-      result.push(t);
+      const d = normalizeDate(t.createdAt);
+      if (!d || d < from || d > to) continue;
     }
 
-    if (i < source.length) {
-      setTimeout(processChunk, 0); // 🔥 prevent freeze
-    } else {
-      FILTERED_TASKS = result;
-      CURRENT_PAGE = 0;
-      renderCurrentPage();
-      renderPaginationControls();
+    // ===== DROPDOWNS =====
+    if (filterDriver.value && t.driverId !== filterDriver.value) continue;
+    if (filterJob.value && t.JOBTYPE !== filterJob.value) continue;
+    if (filterBA.value && t.BA !== filterBA.value) continue;
+    if (filterDMZ.value && t.DMZ !== filterDMZ.value) continue;
+    if (filterMRU.value && t.MRU !== filterMRU.value) continue;
+
+    // ===== SEARCH =====
+    if (SEARCH_TERM) {
+      const haystack = (
+        (t.CUSTOMERNAME || "") +
+        (t.ADDRESS || "") +
+        (t.ACCOUNTNUMBER || "") +
+        (t.METERNUMBER || "") +
+        (t.driverId || "")
+      ).toLowerCase();
+
+      if (!haystack.includes(SEARCH_TERM)) continue;
+    }
+
+    // count ALL matches
+    count++;
+
+    // only push items for CURRENT PAGE
+    if (count > startIndex && result.length < PAGE_SIZE) {
+      result.push(t);
     }
   }
 
-  processChunk();
+  FILTERED_TASKS = result;
+
+  // fake total for pagination
+  window.__TOTAL_MATCHES__ = count;
+
+  renderCurrentPage();
+  renderPaginationControls();
 }
 
 function renderCurrentPage() {
