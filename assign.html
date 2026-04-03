@@ -81,7 +81,7 @@ select, input[type="date"] {
 
 <body>
 
-<h2>Manage Tasks V4.6.1.13-WIP</h2>
+<h2>Manage Tasks V4.6.1.14-WIP</h2>
 
 <button onclick="location.href='admin.html'" class="small-btn">⬅ Back</button>
 
@@ -479,6 +479,20 @@ for (const key of liveKeys) {
 }
   window.__SNAPSHOT_TASKS__ = allTasks;
 
+  // 🔥 ADD THIS (DATE INDEX)
+window.__TASKS_BY_DATE__ = {};
+
+allTasks.forEach(t => {
+  const d = normalizeDate(t.createdAt);
+  if (!d) return;
+
+  if (!window.__TASKS_BY_DATE__[d]) {
+    window.__TASKS_BY_DATE__[d] = [];
+  }
+
+  window.__TASKS_BY_DATE__[d].push(t);
+});
+
   TASK_MAP = {};
 allTasks.forEach(t => {
   TASK_MAP[t._key] = t;
@@ -646,7 +660,26 @@ function applyFilters() {
     LAST_FILTER_HASH = filterHash;
   }
 
-  const source = window.__SNAPSHOT_TASKS__ || [];
+  // 🔥 USE DATE INDEX INSTEAD OF FULL DATASET
+let source = [];
+
+const from = filterDateFrom.value;
+const to   = filterDateTo.value;
+
+if (from || to) {
+  const start = from || "0000-00-00";
+  const end   = to   || "9999-99-99";
+
+  const map = window.__TASKS_BY_DATE__ || {};
+
+  for (const d in map) {
+    if (d >= start && d <= end) {
+      source.push(...map[d]);
+    }
+  }
+} else {
+  source = window.__SNAPSHOT_TASKS__ || [];
+}
   const hasSearch = !!SEARCH_TERM;
 
   let result = [];
