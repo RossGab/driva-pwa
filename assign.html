@@ -81,7 +81,7 @@ select, input[type="date"] {
 
 <body>
 
-<h2>Manage Tasks V4.6.1.23-WIP</h2>
+<h2>Manage Tasks V4.6.1.24-WIP</h2>
 
 <button onclick="location.href='admin.html'" class="small-btn">⬅ Back</button>
 
@@ -532,6 +532,8 @@ t._search = Object.values(t)
     window.__TASKS_BY_JOB__[t.JOBTYPE].push(t);
   }
 });
+
+  applyFilters(); // ✅ AFTER indexes are ready
 
   // 🔥 RESET SELECTION STATE
   SELECTED_IDS.clear();
