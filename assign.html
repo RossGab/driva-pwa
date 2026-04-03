@@ -81,7 +81,7 @@ select, input[type="date"] {
 
 <body>
 
-<h2>Manage Tasks V4.6.1.6.1-WIP</h2>
+<h2>Manage Tasks V4.6.1.7-WIP</h2>
 
 <button onclick="location.href='admin.html'" class="small-btn">⬅ Back</button>
 
@@ -328,7 +328,7 @@ async function loadLiveTasksFromFirebase(dateKey, onProgress) {
     const total = ids.length;
     let loaded = 0;
 
-    const BATCH_SIZE = 20;
+    const BATCH_SIZE = 50;
     let results = [];
 
     for (let i = 0; i < ids.length; i += BATCH_SIZE) {
