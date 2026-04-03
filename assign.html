@@ -81,7 +81,7 @@ select, input[type="date"] {
 
 <body>
 
-<h2>Manage Tasks V4.6.0-WIP</h2>
+<h2>Manage Tasks V4.6.1.1-WIP</h2>
 
 <button onclick="location.href='admin.html'" class="small-btn">⬅ Back</button>
 
@@ -191,6 +191,7 @@ const BUFFER = 10;
 
 const loadingBar = document.getElementById("loadingBar");
 const loadingProgress = document.getElementById("loadingProgress");
+const loadingText = loadingBar.querySelector("div:last-child");
 
 let TASK_MAP = {};
 let LAST_FILTER_HASH = "";
@@ -286,14 +287,17 @@ async function loadSnapshotTasks(dateKey, retries = 2) {
   }
 }
 
-async function loadLiveTasksFromFirebase(dateKey) {
+async function loadLiveTasksFromFirebase(dateKey, onProgress) {
   try {
     const idsSnap = await get(ref(db, `tasksByDate/${dateKey}`));
     if (!idsSnap.exists()) return [];
 
     const ids = Object.keys(idsSnap.val());
 
-    const BATCH_SIZE = 20; // 🔥 tweak: 10–30 depending on speed
+    const total = ids.length;
+    let loaded = 0;
+
+    const BATCH_SIZE = 20;
     let results = [];
 
     for (let i = 0; i < ids.length; i += BATCH_SIZE) {
@@ -314,6 +318,13 @@ async function loadLiveTasksFromFirebase(dateKey) {
         .filter(Boolean);
 
       results.push(...parsed);
+
+      loaded += parsed.length;
+
+      if (onProgress) {
+        const percent = (loaded / total) * 100;
+        onProgress(percent, loaded, total);
+      }
     }
 
     return results;
@@ -359,15 +370,37 @@ async function loadTasks() {
     let result = [];
 
     if (isTodayKey(key)) {
-      console.log("🔥 LIVE:", key);
-      result = await loadLiveTasksFromFirebase(key);
-    } else {
-      console.log("📦 SNAPSHOT:", key);
-      result = await loadSnapshotTasks(key);
-    }
 
-    const progress = ((i + 1) / dateKeys.length) * 100;
-    if (loadingProgress) {
+  console.log("🔥 LIVE:", key);
+
+  loadingText.innerText = "Loading live tasks...";
+
+  result = await loadLiveTasksFromFirebase(
+    key,
+    (p, loaded, total) => {
+      const mapped = 50 + (p * 0.5);
+      loadingProgress.style.width = mapped + "%";
+
+      loadingText.innerText =
+  `Loading live tasks... (${loaded} / ${total}) | Total: ${allTasks.length + loaded}`;
+    }
+  );
+
+} else {
+
+  console.log("📦 SNAPSHOT:", key);
+
+  loadingText.innerText =
+    `Loading snapshot... (${i + 1} / ${dateKeys.length})`;
+
+  result = await loadSnapshotTasks(key);
+
+  loadingText.innerText =
+    `Loading snapshot... (${allTasks.length + result.length} tasks)`;
+}
+
+    if (!isTodayKey(key)) {
+      const progress = ((i + 1) / dateKeys.length) * 50; // snapshot = 80%
       loadingProgress.style.width = progress + "%";
     }
 
@@ -396,7 +429,14 @@ async function loadTasks() {
 
   applyFilters();
 
-  loadingBar.style.display = "none";
+  // ✅ ADD THIS HERE
+  loadingText.innerText =
+    `Done (${allTasks.length} tasks loaded)`;
+  
+  // optional: small delay so user can SEE it
+  setTimeout(() => {
+    loadingBar.style.display = "none";
+  }, 500);
 }
 
 
