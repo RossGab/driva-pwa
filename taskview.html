@@ -23,11 +23,6 @@ body {
   height:72px;
 }
 
-.version {
-  font-size:14px;
-  color:#777;
-}
-
 .dashboard {
   display:flex;
   gap:10px;
@@ -40,7 +35,6 @@ body {
   padding:16px;
   border-radius:10px;
   text-align:center;
-  box-shadow:0 0 4px rgba(0,0,0,.1);
 }
 
 .done { border-top:5px solid green; }
@@ -50,26 +44,15 @@ body {
   font-weight:bold;
 }
 
-#searchBox {
-  width:100%;
-  padding:10px;
-  margin-bottom:10px;
-  border-radius:6px;
-  border:1px solid #ccc;
-}
-
 .task {
   background:#fff;
   padding:12px;
   margin-bottom:10px;
   border-radius:8px;
-  box-shadow:0 0 4px rgba(0,0,0,.1);
   border-left:5px solid green;
 }
 
-.task-header {
-  cursor:pointer;
-}
+.task-header { cursor:pointer; }
 
 .small {
   font-size:13px;
@@ -80,46 +63,63 @@ body {
   display:grid;
   grid-template-columns:1fr 1fr;
   gap:10px;
-  margin-top:10px;
 }
 
-.task-form label {
-  font-size:12px;
-  font-weight:bold;
-}
+.full { grid-column: span 2; }
 
-.task-form input,
-.task-form textarea {
+input, textarea {
+  width:100%;
   padding:6px;
   border-radius:4px;
   border:1px solid #ccc;
 }
 
-.full { grid-column: span 2; }
-
-.photo-grid {
-  display:grid;
-  grid-template-columns:repeat(3,1fr);
-  gap:6px;
+button {
   margin-top:10px;
+  padding:8px;
+  background:#007bff;
+  color:#fff;
+  border:none;
+  border-radius:5px;
+  cursor:pointer;
 }
 
-.photo-grid img {
-  width:100%;
-  height:90px;
-  object-fit:cover;
-  border-radius:6px;
-  border:2px solid #28a745;
+/* LOADER */
+#loadingScreen {
+  position:fixed;
+  inset:0;
+  background:rgba(255,255,255,0.95);
+  display:flex;
+  justify-content:center;
+  align-items:center;
+  z-index:9999;
+}
+
+.spinner {
+  width:40px;
+  height:40px;
+  border:4px solid #ddd;
+  border-top:4px solid #007bff;
+  border-radius:50%;
+  animation:spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
 </style>
 </head>
 
 <body>
 
+<div id="loadingScreen">
+  <div class="spinner"></div>
+</div>
+
 <div class="admin-header">
-  <div style="display:flex;align-items:center;gap:12px;">
+  <div style="display:flex;gap:10px;align-items:center;">
     <img src="./logo.jpg" class="admin-logo">
-    <h2>Task Viewer <span class="version">View Only</span></h2>
+    <h2>Task Viewer</h2>
   </div>
 
   <div>
@@ -136,9 +136,9 @@ body {
   </div>
 </div>
 
-<input id="searchBox" placeholder="Search...">
+<input id="searchBox" placeholder="Search..." style="width:100%;padding:10px;margin-bottom:10px;">
 
-<div id="taskList">Loading...</div>
+<div id="taskList"></div>
 
 <script>
 const SNAPSHOT_BASE =
@@ -149,7 +149,6 @@ let FILTERED = [];
 
 const fromInput = document.getElementById("from");
 const toInput = document.getElementById("to");
-const searchBox = document.getElementById("searchBox");
 
 function todayPH(){
   return new Date().toLocaleDateString("en-CA",{timeZone:"Asia/Manila"});
@@ -157,6 +156,9 @@ function todayPH(){
 
 fromInput.value = todayPH();
 toInput.value = todayPH();
+
+function showLoader(){ document.getElementById("loadingScreen").style.display="flex"; }
+function hideLoader(){ document.getElementById("loadingScreen").style.display="none"; }
 
 function getKeys(from,to){
   let arr=[];
@@ -169,8 +171,9 @@ function getKeys(from,to){
 }
 
 async function loadTasks(){
-  let keys=getKeys(fromInput.value,toInput.value);
+  showLoader();
 
+  let keys=getKeys(fromInput.value,toInput.value);
   let all=[];
 
   for(let k of keys){
@@ -188,26 +191,22 @@ async function loadTasks(){
     }catch{}
   }
 
-  // ✅ ONLY COMPLETED
-  TASKS=all.filter(t=>t.status==="COMPLETED");
+  TASKS = all.filter(t => t.status === "COMPLETED");
 
-  document.getElementById("doneCount").innerText=TASKS.length;
+  document.getElementById("doneCount").innerText = TASKS.length;
 
-  FILTERED=TASKS;
+  FILTERED = TASKS;
   renderTasks();
+
+  hideLoader();
 }
 
 function renderTasks(){
-  let box=document.getElementById("taskList");
+  const box=document.getElementById("taskList");
   box.innerHTML="";
 
-  if(!FILTERED.length){
-    box.innerHTML="<div>No completed tasks</div>";
-    return;
-  }
-
   FILTERED.forEach(t=>{
-    let div=document.createElement("div");
+    const div=document.createElement("div");
     div.className="task";
 
     div.innerHTML=`
@@ -218,49 +217,85 @@ function renderTasks(){
       </div>
 
       <div class="task-details" style="display:none">
+        ${renderDetails(t)}
 
-        <div class="task-form">
-          <label>JOB TYPE</label>
-          <input value="${t.JOBTYPE||""}" disabled>
-
-          <label>BA</label>
-          <input value="${t.BA||""}" disabled>
-
-          <label class="full">ADDRESS</label>
-          <textarea class="full" disabled>${t.ADDRESS||""}</textarea>
-        </div>
-
-        ${renderPhotos(t)}
-
+        <button onclick="loadTaskPhotos('${t._key}', this)">
+          📸 Load Photos
+        </button>
       </div>
     `;
 
-    let header=div.querySelector(".task-header");
-    let details=div.querySelector(".task-details");
+    const header=div.querySelector(".task-header");
+    const details=div.querySelector(".task-details");
 
     header.onclick=()=>{
-      details.style.display=
-        details.style.display==="none"?"block":"none";
+      details.style.display =
+        details.style.display==="none" ? "block" : "none";
     };
 
     box.appendChild(div);
   });
 }
 
-function renderPhotos(t){
-  let photos=[t.photo1Url,t.photo2Url,t.photo3Url].filter(Boolean);
-
-  if(!photos.length) return "";
-
+function renderDetails(t){
   return `
-    <div class="photo-grid">
-      ${photos.map(p=>`<img src="${p}">`).join("")}
+    <div class="task-form">
+      <label>JOB TYPE</label>
+      <input value="${t.JOBTYPE||""}" disabled>
+
+      <label>BA</label>
+      <input value="${t.BA||""}" disabled>
+
+      <label class="full">ADDRESS</label>
+      <textarea class="full" disabled>${t.ADDRESS||""}</textarea>
     </div>
   `;
 }
 
-searchBox.oninput=()=>{
-  let s=searchBox.value.toLowerCase();
+async function loadTaskPhotos(taskId, btn){
+  if(btn.dataset.loaded==="1") return;
+
+  btn.innerText="Loading...";
+  btn.dataset.loaded="1";
+
+  let keys=getKeys(fromInput.value,toInput.value);
+
+  for(let k of keys){
+    try{
+      let res=await fetch(`${SNAPSHOT_BASE}/${k}.json`);
+      if(!res.ok) continue;
+
+      let data=await res.json();
+      if(!data[taskId]) continue;
+
+      let t=data[taskId];
+
+      let photos=[t.photo1Url,t.photo2Url,t.photo3Url].filter(Boolean);
+
+      if(!photos.length){
+        btn.innerText="No photos";
+        return;
+      }
+
+      const container=document.createElement("div");
+
+      container.innerHTML = photos.map(p=>
+        `<img src="${p}" style="width:100px;margin:5px;">`
+      ).join("");
+
+      btn.after(container);
+      btn.innerText="Photos Loaded";
+
+      return;
+
+    }catch{}
+  }
+
+  btn.innerText="No photos";
+}
+
+document.getElementById("searchBox").oninput=e=>{
+  let s=e.target.value.toLowerCase();
 
   FILTERED=TASKS.filter(t=>
     Object.values(t).some(v=>
