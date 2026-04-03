@@ -81,7 +81,7 @@ select, input[type="date"] {
 
 <body>
 
-<h2>Manage Tasks V4.6.1.18-WIP</h2>
+<h2>Manage Tasks V4.6.1.19-WIP</h2>
 
 <button onclick="location.href='admin.html'" class="small-btn">⬅ Back</button>
 
@@ -269,14 +269,20 @@ function getTodayPH() {
 }
 
 function normalizeDate(dateStr) {
-  if (!dateStr) return null;
+  if (!dateStr || typeof dateStr !== "string") return null;
 
-  const d = new Date(dateStr);
-  if (isNaN(d.getTime())) return null;
+  // 🔥 FAST PATH: already YYYY-MM-DD or ISO
+  if (dateStr.length >= 10) {
+    const part = dateStr.slice(0, 10);
 
-  return d.toLocaleDateString("en-CA", {
-    timeZone: "Asia/Manila"
-  });
+    // quick validation: YYYY-MM-DD
+    if (/^\d{4}-\d{2}-\d{2}$/.test(part)) {
+      return part;
+    }
+  }
+
+  // ❌ skip expensive parsing for bad data
+  return null;
 }
 
 /* ===== PH TIME ===== */
@@ -490,24 +496,27 @@ allTasks.forEach(t => {
   TASK_MAP[t._key] = t;
 
   // ===== CACHE =====
-  const d = normalizeDate(t.createdAt);
-  t._date = d;
+  let d = normalizeDate(t.createdAt);
 
-  t._search = (
+// 🔥 fallback to filter date if missing
+if (!d) {
+  d = filterDateFrom.value;
+}
+
+t._date = d;
+
+if (!window.__TASKS_BY_DATE__[d]) {
+  window.__TASKS_BY_DATE__[d] = [];
+}
+window.__TASKS_BY_DATE__[d].push(t);
+
+t._search = (
     (t.CUSTOMERNAME || "") +
     (t.ADDRESS || "") +
     (t.ACCOUNTNUMBER || "") +
     (t.METERNUMBER || "") +
     (t.driverId || "")
-  ).toLowerCase();
-
-  // ===== DATE INDEX =====
-  if (d) {
-    if (!window.__TASKS_BY_DATE__[d]) {
-      window.__TASKS_BY_DATE__[d] = [];
-    }
-    window.__TASKS_BY_DATE__[d].push(t);
-  }
+  ).toLowerCase()
 
   // ===== DRIVER INDEX =====
   if (t.driverId) {
@@ -677,10 +686,13 @@ function applyFilters() {
 
   const prevPage = CURRENT_PAGE;
 
-  if (filterHash !== LAST_FILTER_HASH) {
-    CURRENT_PAGE = 0;
+  const isSame = filterHash === LAST_FILTER_HASH;
+
     LAST_FILTER_HASH = filterHash;
-  }
+    
+    if (!isSame) {
+      CURRENT_PAGE = 0;
+    }
 
   let base = [];
 
@@ -727,7 +739,7 @@ for (let i = 0; i < base.length; i++) {
     const to   = filterDateTo.value   || "9999-99-99";
 
     const d = t._date;
-    if (!d || d < from || d > to) continue;
+    if (d && (d < from || d > to)) continue;
   }
 
   // OTHER FILTERS
@@ -738,7 +750,7 @@ for (let i = 0; i < base.length; i++) {
   if (filterMRU.value && t.MRU !== filterMRU.value) continue;
 
   // SEARCH
-  if (hasSearch && !t._search.includes(SEARCH_TERM)) continue;
+ if (hasSearch && (!t._search || !t._search.includes(SEARCH_TERM))) continue;
 
   result.push(t);
 }
