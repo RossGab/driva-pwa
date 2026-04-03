@@ -81,7 +81,7 @@ select, input[type="date"] {
 
 <body>
 
-<h2>Manage Tasks V4.6.1-WIP</h2>
+<h2>Manage Tasks V4.6.0-WIP</h2>
 
 <button onclick="location.href='admin.html'" class="small-btn">⬅ Back</button>
 
@@ -353,10 +353,11 @@ async function loadTasks() {
 
   let allTasks = [];
 
-  const promises = dateKeys.map(async (key, i) => {
-  let result = [];
+  for (let i = 0; i < dateKeys.length; i++) {
+    const key = dateKeys[i];
 
-  try {
+    let result = [];
+
     if (isTodayKey(key)) {
       console.log("🔥 LIVE:", key);
       result = await loadLiveTasksFromFirebase(key);
@@ -364,21 +365,18 @@ async function loadTasks() {
       console.log("📦 SNAPSHOT:", key);
       result = await loadSnapshotTasks(key);
     }
-  } catch (e) {
-    console.error("Load failed:", key, e);
-    return [];
+
+    const progress = ((i + 1) / dateKeys.length) * 100;
+    if (loadingProgress) {
+      loadingProgress.style.width = progress + "%";
+    }
+
+    result.forEach(t => {
+      if (t.status !== "COMPLETED") {
+        allTasks.push(t);
+      }
+    });
   }
-
-  const progress = ((i + 1) / dateKeys.length) * 100;
-  if (loadingProgress) {
-    loadingProgress.style.width = progress + "%";
-  }
-
-  return result.filter(t => t.status !== "COMPLETED");
-});
-
-const results = await Promise.all(promises);
-const allTasks = results.flat();
 
   // ✅ STORE DATA
   window.__SNAPSHOT_TASKS__ = allTasks;
