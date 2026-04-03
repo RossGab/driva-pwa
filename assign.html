@@ -81,7 +81,7 @@ select, input[type="date"] {
 
 <body>
 
-<h2>Manage Tasks V4.6.1.4-WIP</h2>
+<h2>Manage Tasks V4.6.1.5-WIP</h2>
 
 <button onclick="location.href='admin.html'" class="small-btn">⬅ Back</button>
 
@@ -98,6 +98,16 @@ select, input[type="date"] {
   <div class="actions">
     <input type="date" id="filterDateFrom">
     <input type="date" id="filterDateTo">
+    <button id="loadBtn" onclick="loadTasks()" style="
+  background:#28a745;
+  color:#fff;
+  border:none;
+  border-radius:6px;
+  padding:8px 12px;
+  font-weight:bold;
+">
+  🔄 Load Tasks
+</button>
     <select id="filterDriver"><option value="">All Drivers</option></select>
     <select id="filterJob"><option value="">All Job Types</option></select>
     <select id="filterBA"><option value="">All BA</option></select>
@@ -213,6 +223,7 @@ const BUFFER = 10;
 const loadingBar = document.getElementById("loadingBar");
 const loadingProgress = document.getElementById("loadingProgress");
 const loadingText = document.getElementById("loadingText");
+const loadBtn = document.getElementById("loadBtn");
   
 let TASK_MAP = {};
 let LAST_FILTER_HASH = "";
@@ -242,10 +253,9 @@ let FILTERED_TASKS = [];
 const today = getTodayPH();
 filterDateFrom.value = today;
 filterDateTo.value = today;
-filterDateFrom.onchange =
-filterDateTo.onchange = () => {
-  loadTasks();   // 🔥 fetch by date
-};
+// Manual load only (via button)
+filterDateFrom.onchange = null;
+filterDateTo.onchange = null;
 filterDriver.onchange =
 filterJob.onchange =
 filterBA.onchange =
@@ -362,6 +372,9 @@ function isTodayKey(dateKey) {
 
 /* ===== LOAD TASKS ===== */
 async function loadTasks() {
+  if (loadBtn.disabled) return;
+  loadBtn.disabled = true;
+loadBtn.innerText = "Loading...";
   document.getElementById("taskList").innerHTML = "";
   loadingBar.style.display = "block";
   if (loadingProgress) loadingProgress.style.width = "0%";
@@ -371,6 +384,11 @@ async function loadTasks() {
 
   if (!from || !to) {
     alert("Select date range");
+  
+    // 🔥 FIX: restore button state
+    loadBtn.disabled = false;
+    loadBtn.innerText = "🔄 Load Tasks";
+  
     return;
   }
 
@@ -469,14 +487,20 @@ async function loadTasks() {
 
   applyFilters();
 
+  
+
   // ✅ ADD THIS HERE
   loadingText.innerText =
     `Done (${allTasks.length} tasks loaded)`;
   
   // optional: small delay so user can SEE it
   setTimeout(() => {
-    loadingBar.style.display = "none";
-  }, 500);
+  loadingBar.style.display = "none";
+
+  loadBtn.disabled = false;
+  loadBtn.innerText = "🔄 Load Tasks";
+
+}, 500);
 }
 
 
@@ -989,7 +1013,7 @@ window.uploadCSV = async function(btn){
     btn.innerText = "Upload CSV";
   }
 };
-loadTasks();
+
 </script>
 </body>
 </html>
