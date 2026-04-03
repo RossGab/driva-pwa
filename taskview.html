@@ -7,43 +7,31 @@
 <title>Completed Tasks Viewer</title>
 
 <style>
-body {
-  font-family: Arial, sans-serif;
-  background:#f3f3f3;
-  padding:10px;
-}
+body { font-family: Arial; background:#f3f3f3; padding:10px; }
 
 .admin-header {
-  display:flex;
-  justify-content:space-between;
-  align-items:center;
+  display:flex; justify-content:space-between; align-items:center;
   margin-bottom:12px;
 }
 
-.admin-logo {
-  height:72px;
-}
+.admin-logo { height:72px; }
 
 #loadingScreen {
-  position: fixed;
-  inset: 0;
-  background: rgba(255,255,255,0.95);
-  z-index: 9999;
-  display:flex;
-  align-items:center;
-  justify-content:center;
+  position:fixed; inset:0;
+  background:rgba(255,255,255,0.95);
+  display:flex; align-items:center; justify-content:center;
+  z-index:9999;
 }
 
 .spinner {
-  width:42px;
-  height:42px;
+  width:42px; height:42px;
   border:4px solid #ddd;
   border-top:4px solid #007bff;
   border-radius:50%;
-  animation: spin 1s linear infinite;
+  animation:spin 1s linear infinite;
 }
 
-@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes spin { to { transform:rotate(360deg);} }
 
 .task {
   background:#fff;
@@ -55,10 +43,7 @@ body {
 
 .task-header { cursor:pointer; }
 
-.small {
-  font-size:13px;
-  color:#555;
-}
+.small { font-size:13px; color:#555; }
 
 .task-form {
   display:grid;
@@ -67,9 +52,7 @@ body {
   margin-top:10px;
 }
 
-.task-form .full {
-  grid-column: span 2;
-}
+.task-form .full { grid-column:span 2; }
 
 .task-form input,
 .task-form textarea {
@@ -94,17 +77,16 @@ body {
   </div>
 </div>
 
-<!-- SEARCH -->
 <input id="searchBox" placeholder="Search..." style="width:100%;padding:10px;margin-bottom:10px">
 
-<!-- BA FILTER -->
-<div id="baFilters"></div>
+<div id="baFilters" style="margin-bottom:10px;"></div>
 
 <div id="loadingScreen">
   <div class="spinner"></div>
 </div>
 
 <div id="taskList"></div>
+<div id="pagination" style="text-align:center;margin:12px 0;"></div>
 
 <script type="module">
 import { initializeApp } from
@@ -115,7 +97,7 @@ import {
 } from
 "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
-/* FIREBASE (UNCHANGED) */
+/* FIREBASE */
 const firebaseConfig = {
   apiKey: "AIzaSyDFW61pnwLvh6HGKWt10zLYNr860fI8vkg",
   authDomain: "driva-pwa.firebaseapp.com",
@@ -129,16 +111,19 @@ const db = getDatabase(app);
 const BASE =
 "https://raw.githubusercontent.com/RossGab/driva-task-snapshots/main/snapshots";
 
+/* GLOBAL */
 let TASKS = [];
 let DRIVER_UI_CONFIG = {};
 let FILTER_BA = new Set();
 let SEARCH_TERM = "";
 
+const ADMIN_PAGE_SIZE = 200;
+let ADMIN_CURRENT_PAGE = 0;
+let FILTERED_TASK_IDS = [];
+
 /* DATE */
-function getTodayPH() {
-  return new Date().toLocaleDateString("en-CA", {
-    timeZone:"Asia/Manila"
-  });
+function getTodayPH(){
+  return new Date().toLocaleDateString("en-CA",{timeZone:"Asia/Manila"});
 }
 
 const from = document.getElementById("from");
@@ -169,7 +154,7 @@ async function loadConfig(){
   DRIVER_UI_CONFIG = snap.val() || {};
 }
 
-/* LOAD TASKS (SAME BEHAVIOR — NO FREEZE) */
+/* LOAD TASKS */
 async function loadTasks(){
   showLoader();
 
@@ -197,14 +182,16 @@ async function loadTasks(){
   TASKS = all;
 
   buildBAFilters();
+  ADMIN_CURRENT_PAGE = 0;
   render();
 
   hideLoader();
 }
 
 /* SEARCH */
-document.getElementById("searchBox").oninput = e=>{
+searchBox.oninput = e=>{
   SEARCH_TERM = e.target.value.toLowerCase();
+  ADMIN_CURRENT_PAGE = 0;
   render();
 };
 
@@ -217,6 +204,8 @@ function buildBAFilters(){
 
   bas.forEach(ba=>{
     const label=document.createElement("label");
+    label.style.marginRight="10px";
+
     label.innerHTML=`
       <input type="checkbox" value="${ba}">
       ${ba}
@@ -226,6 +215,7 @@ function buildBAFilters(){
       if(e.target.checked) FILTER_BA.add(ba);
       else FILTER_BA.delete(ba);
 
+      ADMIN_CURRENT_PAGE = 0;
       render();
     };
 
@@ -233,10 +223,8 @@ function buildBAFilters(){
   });
 }
 
-/* RENDER */
+/* MAIN RENDER */
 function render(){
-  const list=document.getElementById("taskList");
-  list.innerHTML="";
 
   let tasks = TASKS;
 
@@ -250,6 +238,25 @@ function render(){
 
   if(FILTER_BA.size){
     tasks = tasks.filter(t => FILTER_BA.has(t.BA));
+  }
+
+  FILTERED_TASK_IDS = tasks.map(t => t._key);
+
+  const start = ADMIN_CURRENT_PAGE * ADMIN_PAGE_SIZE;
+  const pageTasks = tasks.slice(start, start + ADMIN_PAGE_SIZE);
+
+  renderPage(pageTasks);
+  renderPagination();
+}
+
+/* PAGE RENDER */
+function renderPage(tasks){
+  const list = document.getElementById("taskList");
+  list.innerHTML="";
+
+  if(!tasks.length){
+    list.innerHTML = `<div style="padding:12px;background:#fff;border-radius:8px;text-align:center;">No tasks found</div>`;
+    return;
   }
 
   tasks.forEach(t=>{
@@ -266,10 +273,7 @@ function render(){
       <div class="details" style="display:none">
         ${renderDetails(t)}
         ${renderDynamic(t)}
-
-        <button onclick="loadPhotos('${t._key}',this)">
-          📸 Load Photos
-        </button>
+        <button onclick="loadPhotos('${t._key}',this)">📸 Load Photos</button>
       </div>
     `;
 
@@ -282,58 +286,66 @@ function render(){
   });
 }
 
-/* DETAILS (IDENTICAL) */
+/* PAGINATION */
+function renderPagination(){
+  const el = document.getElementById("pagination");
+
+  const totalPages = Math.max(1,
+    Math.ceil(FILTERED_TASK_IDS.length / ADMIN_PAGE_SIZE)
+  );
+
+  el.innerHTML = `
+    <button ${ADMIN_CURRENT_PAGE === 0 ? "disabled" : ""}
+      onclick="prevPage()">⬅ Prev</button>
+
+    <span style="margin:0 10px;">
+      Page ${ADMIN_CURRENT_PAGE + 1} of ${totalPages}
+      (${FILTERED_TASK_IDS.length} tasks)
+    </span>
+
+    <button ${ADMIN_CURRENT_PAGE >= totalPages - 1 ? "disabled" : ""}
+      onclick="nextPage()">Next ➡</button>
+  `;
+}
+
+window.prevPage = function(){
+  if(ADMIN_CURRENT_PAGE > 0){
+    ADMIN_CURRENT_PAGE--;
+    render();
+  }
+};
+
+window.nextPage = function(){
+  const totalPages = Math.ceil(FILTERED_TASK_IDS.length / ADMIN_PAGE_SIZE);
+  if(ADMIN_CURRENT_PAGE < totalPages - 1){
+    ADMIN_CURRENT_PAGE++;
+    render();
+  }
+};
+
+/* DETAILS */
 function renderDetails(t){
 return `
 <div class="task-form">
-
-<label>ASSIGNED DRIVER</label>
-<input value="${t.driverId||""}" disabled>
-
-<label>JOB TYPE</label>
-<input value="${t.JOBTYPE||""}" disabled>
-
-<label>BA</label>
-<input value="${t.BA||""}" disabled>
-
-<label>DMZ</label>
-<input value="${t.DMZ||""}" disabled>
-
-<label>MRU</label>
-<input value="${t.MRU||""}" disabled>
-
-<label>SEQUENCE</label>
-<input value="${t.SEQUENCE||""}" disabled>
-
-<label>METER NUMBER</label>
-<input value="${t.METERNUMBER||""}" disabled>
-
-<label>ACCOUNT NUMBER</label>
-<input value="${t.ACCOUNTNUMBER||""}" disabled>
-
-<label>CUSTOMER NAME</label>
-<input value="${t.CUSTOMERNAME||""}" disabled>
-
+<label>ASSIGNED DRIVER</label><input value="${t.driverId||""}" disabled>
+<label>JOB TYPE</label><input value="${t.JOBTYPE||""}" disabled>
+<label>BA</label><input value="${t.BA||""}" disabled>
+<label>DMZ</label><input value="${t.DMZ||""}" disabled>
+<label>MRU</label><input value="${t.MRU||""}" disabled>
+<label>SEQUENCE</label><input value="${t.SEQUENCE||""}" disabled>
+<label>METER NUMBER</label><input value="${t.METERNUMBER||""}" disabled>
+<label>ACCOUNT NUMBER</label><input value="${t.ACCOUNTNUMBER||""}" disabled>
+<label>CUSTOMER NAME</label><input value="${t.CUSTOMERNAME||""}" disabled>
 <label class="full">ADDRESS</label>
 <textarea class="full" disabled>${t.ADDRESS||""}</textarea>
-
-<label>ZIP CODE</label>
-<input value="${t.ZIPCODE||""}" disabled>
-
-<label>DELIVERY TYPE</label>
-<input value="${t.deliveryType||""}" disabled>
-
-<label>LATITUDE</label>
-<input value="${t.LATITUDE||""}" disabled>
-
-<label>LONGITUDE</label>
-<input value="${t.LONGITUDE||""}" disabled>
-
-</div>
-`;
+<label>ZIP CODE</label><input value="${t.ZIPCODE||""}" disabled>
+<label>DELIVERY TYPE</label><input value="${t.deliveryType||""}" disabled>
+<label>LATITUDE</label><input value="${t.LATITUDE||""}" disabled>
+<label>LONGITUDE</label><input value="${t.LONGITUDE||""}" disabled>
+</div>`;
 }
 
-/* DYNAMIC (UNCHANGED) */
+/* DYNAMIC */
 function renderDynamic(t){
   const cfg =
     DRIVER_UI_CONFIG?.[t.JOBTYPE]
@@ -357,7 +369,7 @@ function renderDynamic(t){
   return html;
 }
 
-/* PHOTOS (LAZY — SAME BEHAVIOR) */
+/* PHOTOS */
 window.loadPhotos = async function(id,btn){
   if(btn.dataset.loaded) return;
 
@@ -399,10 +411,10 @@ window.loadPhotos = async function(id,btn){
 
 /* LOADER */
 function showLoader(){
-  document.getElementById("loadingScreen").style.display="flex";
+  loadingScreen.style.display="flex";
 }
 function hideLoader(){
-  document.getElementById("loadingScreen").style.display="none";
+  loadingScreen.style.display="none";
 }
 
 /* INIT */
