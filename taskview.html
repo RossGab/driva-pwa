@@ -6,19 +6,44 @@
 
 <title>Completed Tasks Viewer</title>
 
-<link rel="stylesheet"
-href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-
 <style>
-body { font-family: Arial; background:#f3f3f3; padding:10px; }
+body {
+  font-family: Arial, sans-serif;
+  background:#f3f3f3;
+  padding:10px;
+}
 
 .admin-header {
-  display:flex; justify-content:space-between; align-items:center;
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
   margin-bottom:12px;
 }
 
-.admin-logo { height:72px; }
+.admin-logo {
+  height:72px;
+}
+
+#loadingScreen {
+  position: fixed;
+  inset: 0;
+  background: rgba(255,255,255,0.95);
+  z-index: 9999;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
+
+.spinner {
+  width:42px;
+  height:42px;
+  border:4px solid #ddd;
+  border-top:4px solid #007bff;
+  border-radius:50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
 
 .task {
   background:#fff;
@@ -30,15 +55,21 @@ body { font-family: Arial; background:#f3f3f3; padding:10px; }
 
 .task-header { cursor:pointer; }
 
-.small { font-size:13px; color:#555; }
+.small {
+  font-size:13px;
+  color:#555;
+}
 
 .task-form {
   display:grid;
   grid-template-columns:1fr 1fr;
   gap:10px;
+  margin-top:10px;
 }
 
-.task-form .full { grid-column:span 2; }
+.task-form .full {
+  grid-column: span 2;
+}
 
 .task-form input,
 .task-form textarea {
@@ -47,24 +78,6 @@ body { font-family: Arial; background:#f3f3f3; padding:10px; }
   border:1px solid #ccc;
   border-radius:4px;
 }
-
-/* LOADER */
-#loadingScreen {
-  position:fixed; inset:0;
-  background:rgba(255,255,255,.95);
-  display:flex; align-items:center; justify-content:center;
-  z-index:9999;
-}
-
-.spinner {
-  width:42px; height:42px;
-  border:4px solid #ddd;
-  border-top:4px solid #007bff;
-  border-radius:50%;
-  animation:spin 1s linear infinite;
-}
-
-@keyframes spin { to { transform:rotate(360deg);} }
 </style>
 </head>
 
@@ -80,6 +93,12 @@ body { font-family: Arial; background:#f3f3f3; padding:10px; }
     <input type="date" id="to">
   </div>
 </div>
+
+<!-- SEARCH -->
+<input id="searchBox" placeholder="Search..." style="width:100%;padding:10px;margin-bottom:10px">
+
+<!-- BA FILTER -->
+<div id="baFilters"></div>
 
 <div id="loadingScreen">
   <div class="spinner"></div>
@@ -107,16 +126,19 @@ const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 
 /* SNAPSHOT */
-const SNAPSHOT_BASE_URL =
+const BASE =
 "https://raw.githubusercontent.com/RossGab/driva-task-snapshots/main/snapshots";
 
-/* GLOBAL */
-let DRIVER_UI_CONFIG = {};
 let TASKS = [];
+let DRIVER_UI_CONFIG = {};
+let FILTER_BA = new Set();
+let SEARCH_TERM = "";
 
 /* DATE */
-function getTodayPH(){
-  return new Date().toLocaleDateString("en-CA",{timeZone:"Asia/Manila"});
+function getTodayPH() {
+  return new Date().toLocaleDateString("en-CA", {
+    timeZone:"Asia/Manila"
+  });
 }
 
 const from = document.getElementById("from");
@@ -125,71 +147,112 @@ const to = document.getElementById("to");
 from.value = getTodayPH();
 to.value = getTodayPH();
 
-/* DATE KEYS (SAME LOGIC) */
-function getDateRangeKeys(from,to){
+/* DATE KEYS */
+function getKeys(from,to){
   const keys=[];
-  const d1=new Date(from);
-  const d2=new Date(to);
+  let d=new Date(from);
+  const end=new Date(to);
 
-  for(let d=new Date(d1); d<=d2; d.setDate(d.getDate()+1)){
+  while(d<=end){
     keys.push(
       d.toLocaleDateString("en-CA",{timeZone:"Asia/Manila"})
        .replace(/-/g,"")
     );
+    d.setDate(d.getDate()+1);
   }
   return keys;
 }
 
-/* LOAD CONFIG (IMPORTANT) */
-async function loadDriverUIConfig(){
+/* LOAD CONFIG */
+async function loadConfig(){
   const snap = await get(ref(db,"config/driverUI/jobTypes"));
   DRIVER_UI_CONFIG = snap.val() || {};
 }
 
-/* LOAD TASKS (OPTIMIZED) */
+/* LOAD TASKS (SAME BEHAVIOR — NO FREEZE) */
 async function loadTasks(){
   showLoader();
 
-  const keys = getDateRangeKeys(from.value,to.value);
+  const keys = getKeys(from.value,to.value);
 
-  let all = [];
-  const BATCH = 10;
+  let all=[];
 
-  for(let i=0;i<keys.length;i+=BATCH){
-    const batch = keys.slice(i,i+BATCH);
+  const res = await Promise.allSettled(
+    keys.map(k =>
+      fetch(`${BASE}/${k}.json`,{cache:"no-store"})
+        .then(r=>r.ok?r.json():null)
+    )
+  );
 
-    const res = await Promise.allSettled(
-      batch.map(k =>
-        fetch(`${SNAPSHOT_BASE_URL}/${k}.json`,{cache:"no-store"})
-          .then(r=>r.ok?r.json():null)
-      )
-    );
-
-    res.forEach(r=>{
-      if(r.status==="fulfilled" && r.value){
-        Object.entries(r.value).forEach(([id,t])=>{
-          if(t.status==="COMPLETED"){
-            all.push({_key:id,...t});
-          }
-        });
-      }
-    });
-
-    TASKS = all;
-    render();
-  }
+  res.forEach(r=>{
+    if(r.status==="fulfilled" && r.value){
+      Object.entries(r.value).forEach(([id,t])=>{
+        if(t.status==="COMPLETED"){
+          all.push({_key:id,...t});
+        }
+      });
+    }
+  });
 
   TASKS = all;
+
+  buildBAFilters();
   render();
+
   hideLoader();
 }
 
-/* RENDER (ADMIN TILE — VIEW ONLY) */
+/* SEARCH */
+document.getElementById("searchBox").oninput = e=>{
+  SEARCH_TERM = e.target.value.toLowerCase();
+  render();
+};
+
+/* BA FILTER */
+function buildBAFilters(){
+  const container = document.getElementById("baFilters");
+  container.innerHTML="";
+
+  const bas = new Set(TASKS.map(t=>t.BA).filter(Boolean));
+
+  bas.forEach(ba=>{
+    const label=document.createElement("label");
+    label.innerHTML=`
+      <input type="checkbox" value="${ba}">
+      ${ba}
+    `;
+
+    label.querySelector("input").onchange = e=>{
+      if(e.target.checked) FILTER_BA.add(ba);
+      else FILTER_BA.delete(ba);
+
+      render();
+    };
+
+    container.appendChild(label);
+  });
+}
+
+/* RENDER */
 function render(){
   const list=document.getElementById("taskList");
   list.innerHTML="";
 
-  TASKS.forEach(t=>{
+  let tasks = TASKS;
+
+  if(SEARCH_TERM){
+    tasks = tasks.filter(t =>
+      Object.values(t).some(v =>
+        String(v||"").toLowerCase().includes(SEARCH_TERM)
+      )
+    );
+  }
+
+  if(FILTER_BA.size){
+    tasks = tasks.filter(t => FILTER_BA.has(t.BA));
+  }
+
+  tasks.forEach(t=>{
     const div=document.createElement("div");
     div.className="task";
 
@@ -201,17 +264,17 @@ function render(){
       </div>
 
       <div class="details" style="display:none">
-        ${renderTaskDetails(t)}
-        ${renderDynamicCompletedFields(t)}
+        ${renderDetails(t)}
+        ${renderDynamic(t)}
 
-        <button onclick="loadTaskPhotos('${t._key}',this)">
+        <button onclick="loadPhotos('${t._key}',this)">
           📸 Load Photos
         </button>
       </div>
     `;
 
     div.querySelector(".task-header").onclick=()=>{
-      const d=div.querySelector(".details");
+      const d = div.querySelector(".details");
       d.style.display = d.style.display==="none"?"block":"none";
     };
 
@@ -219,8 +282,8 @@ function render(){
   });
 }
 
-/* FULL DETAILS (UNCHANGED FROM ADMIN) */
-function renderTaskDetails(t){
+/* DETAILS (IDENTICAL) */
+function renderDetails(t){
 return `
 <div class="task-form">
 
@@ -270,8 +333,8 @@ return `
 `;
 }
 
-/* DYNAMIC DELIVERY (UNCHANGED) */
-function renderDynamicCompletedFields(t){
+/* DYNAMIC (UNCHANGED) */
+function renderDynamic(t){
   const cfg =
     DRIVER_UI_CONFIG?.[t.JOBTYPE]
     ?.deliveryMethods?.[t.deliveryType];
@@ -294,14 +357,15 @@ function renderDynamicCompletedFields(t){
   return html;
 }
 
-/* PHOTOS (UNCHANGED BEHAVIOR) */
-window.loadTaskPhotos = async function(id,btn){
+/* PHOTOS (LAZY — SAME BEHAVIOR) */
+window.loadPhotos = async function(id,btn){
   if(btn.dataset.loaded) return;
 
   btn.dataset.loaded=1;
   btn.innerText="Loading photos...";
 
   const snap = await get(ref(db,`tasks/${id}`));
+
   if(!snap.exists()){
     btn.innerText="No photos";
     return;
@@ -324,7 +388,6 @@ window.loadTaskPhotos = async function(id,btn){
     img.style.width="100%";
     img.style.height="90px";
     img.style.objectFit="cover";
-    img.style.borderRadius="6px";
     img.onclick=()=>window.open(url);
 
     box.appendChild(img);
@@ -344,7 +407,7 @@ function hideLoader(){
 
 /* INIT */
 (async()=>{
-  await loadDriverUIConfig();
+  await loadConfig();
   await loadTasks();
 })();
 
