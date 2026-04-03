@@ -81,7 +81,7 @@ select, input[type="date"] {
 
 <body>
 
-<h2>Manage Tasks V4.6.1.12-WIP</h2>
+<h2>Manage Tasks V4.6.1.13-WIP</h2>
 
 <button onclick="location.href='admin.html'" class="small-btn">⬅ Back</button>
 
@@ -480,9 +480,20 @@ for (const key of liveKeys) {
   window.__SNAPSHOT_TASKS__ = allTasks;
 
   TASK_MAP = {};
-  allTasks.forEach(t => {
-    TASK_MAP[t._key] = t;
-  });
+allTasks.forEach(t => {
+  TASK_MAP[t._key] = t;
+
+  // 🔥 ADD THESE 2 LINES (CACHE)
+  t._date = normalizeDate(t.createdAt);
+
+  t._search = (
+    (t.CUSTOMERNAME || "") +
+    (t.ADDRESS || "") +
+    (t.ACCOUNTNUMBER || "") +
+    (t.METERNUMBER || "") +
+    (t.driverId || "")
+  ).toLowerCase();
+});
 
   // 🔥 RESET SELECTION STATE
   SELECTED_IDS.clear();
@@ -648,7 +659,7 @@ function applyFilters() {
       const from = filterDateFrom.value || "0000-00-00";
       const to   = filterDateTo.value   || "9999-99-99";
 
-      const d = normalizeDate(t.createdAt);
+      const d = t._date;
       if (!d || d < from || d > to) continue;
     }
 
@@ -661,15 +672,7 @@ function applyFilters() {
 
     // ===== SEARCH =====
     if (hasSearch) {
-      const haystack = (
-        (t.CUSTOMERNAME || "") +
-        (t.ADDRESS || "") +
-        (t.ACCOUNTNUMBER || "") +
-        (t.METERNUMBER || "") +
-        (t.driverId || "")
-      ).toLowerCase();
-
-      if (!haystack.includes(SEARCH_TERM)) continue;
+      if (!t._search.includes(SEARCH_TERM)) continue;
     }
 
     result.push(t);
