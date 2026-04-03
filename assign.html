@@ -81,7 +81,7 @@ select, input[type="date"] {
 
 <body>
 
-<h2>Manage Tasks V4.6.1.11-WIP</h2>
+<h2>Manage Tasks V4.6.1.12-WIP</h2>
 
 <button onclick="location.href='admin.html'" class="small-btn">⬅ Back</button>
 
@@ -532,6 +532,15 @@ checkAll.onchange = () => {
   renderCurrentPage();
 };
 
+function renderCurrentPage() {
+  const start = CURRENT_PAGE * PAGE_SIZE;
+  const end = start + PAGE_SIZE;
+
+  const pageData = FILTERED_TASKS.slice(start, end);
+
+  renderTasks(pageData);
+  renderPaginationControls();
+}
 
 function buildFilterLists() {
   const drivers = new Set();
@@ -565,11 +574,12 @@ function buildFilterLists() {
   dmzs.forEach(v => filterDMZ.innerHTML += `<option>${v}</option>`);
   mrus.forEach(v => filterMRU.innerHTML += `<option>${v}</option>`);
 }
+
 function renderPaginationControls() {
   const el = document.getElementById("paginationControls");
   if (!el) return;
 
-  const totalPages = Math.ceil((window.__TOTAL_MATCHES__ || 0) / PAGE_SIZE);
+  const totalPages = Math.ceil(FILTERED_TASKS.length / PAGE_SIZE);
 
   if (totalPages <= 1) {
     el.innerHTML = "";
@@ -582,7 +592,7 @@ function renderPaginationControls() {
 
     <span style="margin:0 12px;">
       Page ${CURRENT_PAGE + 1} of ${totalPages}
-      (${window.__TOTAL_MATCHES__ || 0} tasks)
+      (${FILTERED_TASKS.length} tasks)
     </span>
 
     <button ${CURRENT_PAGE >= totalPages - 1 ? "disabled" : ""}
@@ -593,29 +603,42 @@ function renderPaginationControls() {
 window.prevPage = function () {
   if (CURRENT_PAGE > 0) {
     CURRENT_PAGE--;
-    applyFilters(); // 🔥 IMPORTANT
+    renderCurrentPage();
   }
 };
 
 window.nextPage = function () {
-  const totalPages = Math.ceil((window.__TOTAL_MATCHES__ || 0) / PAGE_SIZE);
+  const totalPages = Math.ceil(FILTERED_TASKS.length / PAGE_SIZE);
   if (CURRENT_PAGE < totalPages - 1) {
     CURRENT_PAGE++;
-    applyFilters(); // 🔥 IMPORTANT
+    renderCurrentPage();
   }
 };
-
+  
 function applyFilters() {
 
-  CURRENT_PAGE = 0;
+  const filterHash = JSON.stringify({
+    from: filterDateFrom.value,
+    to: filterDateTo.value,
+    driver: filterDriver.value,
+    job: filterJob.value,
+    ba: filterBA.value,
+    dmz: filterDMZ.value,
+    mru: filterMRU.value,
+    search: SEARCH_TERM
+  });
+
+  const prevPage = CURRENT_PAGE;
+
+  if (filterHash !== LAST_FILTER_HASH) {
+    CURRENT_PAGE = 0; // reset ONLY when filters change
+    LAST_FILTER_HASH = filterHash;
+  }
 
   const source = window.__SNAPSHOT_TASKS__ || [];
+  const hasSearch = !!SEARCH_TERM;
 
-  const result = [];
-
-  let count = 0;
-  let startIndex = CURRENT_PAGE * PAGE_SIZE;
-  let endIndex = startIndex + PAGE_SIZE;
+  let result = [];
 
   for (let i = 0; i < source.length; i++) {
     const t = source[i];
@@ -637,7 +660,7 @@ function applyFilters() {
     if (filterMRU.value && t.MRU !== filterMRU.value) continue;
 
     // ===== SEARCH =====
-    if (SEARCH_TERM) {
+    if (hasSearch) {
       const haystack = (
         (t.CUSTOMERNAME || "") +
         (t.ADDRESS || "") +
@@ -649,26 +672,21 @@ function applyFilters() {
       if (!haystack.includes(SEARCH_TERM)) continue;
     }
 
-    // count ALL matches
-    count++;
-
-    // only push items for CURRENT PAGE
-    if (count > startIndex && result.length < PAGE_SIZE) {
-      result.push(t);
-    }
+    result.push(t);
   }
 
   FILTERED_TASKS = result;
 
-  // fake total for pagination
-  window.__TOTAL_MATCHES__ = count;
+  const totalPages = Math.ceil(FILTERED_TASKS.length / PAGE_SIZE);
+
+  // 🔥 KEEP PAGE IF STILL VALID
+  if (prevPage < totalPages) {
+    CURRENT_PAGE = prevPage;
+  } else {
+    CURRENT_PAGE = Math.max(0, totalPages - 1);
+  }
 
   renderCurrentPage();
-  renderPaginationControls();
-}
-
-function renderCurrentPage() {
-  renderTasks(FILTERED_TASKS); // already paginated
 }
 
 window.toggleSelect = function (el) {
