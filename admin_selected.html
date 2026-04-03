@@ -308,7 +308,7 @@ button {
   
   <div style="display:flex;align-items:center;gap:14px;">
     <img src="./logo.jpg" class="admin-logo" alt="Company Logo">
-    <h1>Admin Dashboard <span class="version">V4.0.1-WIP</span></h1>
+    <h1>Admin Dashboard <span class="version">V4.0.2-WIP</span></h1>
   </div>
 
   <!-- 📅 DATE FILTER -->
@@ -533,8 +533,8 @@ async function onDateRangeChange() {
   const keys = getDateRangeKeys(newFrom, newTo);
 
   // ✅ VALIDATE EARLY (THIS IS THE FIX)
-  if (keys.length > 7) {
-    alert("Max 7 days range only");
+  if (keys.length > 180) {
+    alert("Max 180 days range only");
 
     // 🔥 revert UI (DO NOT CHANGE STATE)
     dateFromInput.value = DATE_FROM;
