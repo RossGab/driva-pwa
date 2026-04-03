@@ -81,7 +81,7 @@ select, input[type="date"] {
 
 <body>
 
-<h2>Manage Tasks V4.6.1.14-WIP</h2>
+<h2>Manage Tasks V4.6.1.15-WIP</h2>
 
 <button onclick="location.href='admin.html'" class="small-btn">⬅ Back</button>
 
@@ -479,26 +479,19 @@ for (const key of liveKeys) {
 }
   window.__SNAPSHOT_TASKS__ = allTasks;
 
-  // 🔥 ADD THIS (DATE INDEX)
+  // 🔥 INIT INDEXES
 window.__TASKS_BY_DATE__ = {};
+window.__TASKS_BY_DRIVER__ = {};
+window.__TASKS_BY_JOB__ = {};
 
-allTasks.forEach(t => {
-  const d = normalizeDate(t.createdAt);
-  if (!d) return;
+TASK_MAP = {};
 
-  if (!window.__TASKS_BY_DATE__[d]) {
-    window.__TASKS_BY_DATE__[d] = [];
-  }
-
-  window.__TASKS_BY_DATE__[d].push(t);
-});
-
-  TASK_MAP = {};
 allTasks.forEach(t => {
   TASK_MAP[t._key] = t;
 
-  // 🔥 ADD THESE 2 LINES (CACHE)
-  t._date = normalizeDate(t.createdAt);
+  // ===== CACHE =====
+  const d = normalizeDate(t.createdAt);
+  t._date = d;
 
   t._search = (
     (t.CUSTOMERNAME || "") +
@@ -507,6 +500,30 @@ allTasks.forEach(t => {
     (t.METERNUMBER || "") +
     (t.driverId || "")
   ).toLowerCase();
+
+  // ===== DATE INDEX =====
+  if (d) {
+    if (!window.__TASKS_BY_DATE__[d]) {
+      window.__TASKS_BY_DATE__[d] = [];
+    }
+    window.__TASKS_BY_DATE__[d].push(t);
+  }
+
+  // ===== DRIVER INDEX =====
+  if (t.driverId) {
+    if (!window.__TASKS_BY_DRIVER__[t.driverId]) {
+      window.__TASKS_BY_DRIVER__[t.driverId] = [];
+    }
+    window.__TASKS_BY_DRIVER__[t.driverId].push(t);
+  }
+
+  // ===== JOB INDEX =====
+  if (t.JOBTYPE) {
+    if (!window.__TASKS_BY_JOB__[t.JOBTYPE]) {
+      window.__TASKS_BY_JOB__[t.JOBTYPE] = [];
+    }
+    window.__TASKS_BY_JOB__[t.JOBTYPE].push(t);
+  }
 });
 
   // 🔥 RESET SELECTION STATE
@@ -660,56 +677,66 @@ function applyFilters() {
     LAST_FILTER_HASH = filterHash;
   }
 
-  // 🔥 USE DATE INDEX INSTEAD OF FULL DATASET
-let source = [];
+  let base = [];
 
-const from = filterDateFrom.value;
-const to   = filterDateTo.value;
+// 🔥 PRIORITY: DRIVER → JOB → DATE → ALL
 
-if (from || to) {
-  const start = from || "0000-00-00";
-  const end   = to   || "9999-99-99";
-
-  const map = window.__TASKS_BY_DATE__ || {};
-
-  for (const d in map) {
-    if (d >= start && d <= end) {
-      source.push(...map[d]);
-    }
-  }
-} else {
-  source = window.__SNAPSHOT_TASKS__ || [];
+if (filterDriver.value && window.__TASKS_BY_DRIVER__[filterDriver.value]) {
+  base = window.__TASKS_BY_DRIVER__[filterDriver.value];
 }
-  const hasSearch = !!SEARCH_TERM;
+else if (filterJob.value && window.__TASKS_BY_JOB__[filterJob.value]) {
+  base = window.__TASKS_BY_JOB__[filterJob.value];
+}
+else {
+  // fallback to date filter
+  const from = filterDateFrom.value;
+  const to   = filterDateTo.value;
 
-  let result = [];
+  if (from || to) {
+    const start = from || "0000-00-00";
+    const end   = to   || "9999-99-99";
 
-  for (let i = 0; i < source.length; i++) {
-    const t = source[i];
+    const map = window.__TASKS_BY_DATE__ || {};
 
-    // ===== DATE FILTER =====
-    if (filterDateFrom.value || filterDateTo.value) {
-      const from = filterDateFrom.value || "0000-00-00";
-      const to   = filterDateTo.value   || "9999-99-99";
-
-      const d = t._date;
-      if (!d || d < from || d > to) continue;
+    for (const d in map) {
+      if (d >= start && d <= end) {
+        base.push(...map[d]);
+      }
     }
-
-    // ===== DROPDOWNS =====
-    if (filterDriver.value && t.driverId !== filterDriver.value) continue;
-    if (filterJob.value && t.JOBTYPE !== filterJob.value) continue;
-    if (filterBA.value && t.BA !== filterBA.value) continue;
-    if (filterDMZ.value && t.DMZ !== filterDMZ.value) continue;
-    if (filterMRU.value && t.MRU !== filterMRU.value) continue;
-
-    // ===== SEARCH =====
-    if (hasSearch) {
-      if (!t._search.includes(SEARCH_TERM)) continue;
-    }
-
-    result.push(t);
+  } else {
+    base = window.__SNAPSHOT_TASKS__ || [];
   }
+}
+
+
+
+const hasSearch = !!SEARCH_TERM;
+let result = [];
+
+for (let i = 0; i < base.length; i++) {
+  const t = base[i];
+
+  // DATE
+  if (filterDateFrom.value || filterDateTo.value) {
+    const from = filterDateFrom.value || "0000-00-00";
+    const to   = filterDateTo.value   || "9999-99-99";
+
+    const d = t._date;
+    if (!d || d < from || d > to) continue;
+  }
+
+  // OTHER FILTERS
+  if (filterDriver.value && t.driverId !== filterDriver.value) continue;
+  if (filterJob.value && t.JOBTYPE !== filterJob.value) continue;
+  if (filterBA.value && t.BA !== filterBA.value) continue;
+  if (filterDMZ.value && t.DMZ !== filterDMZ.value) continue;
+  if (filterMRU.value && t.MRU !== filterMRU.value) continue;
+
+  // SEARCH
+  if (hasSearch && !t._search.includes(SEARCH_TERM)) continue;
+
+  result.push(t);
+}
 
   FILTERED_TASKS = result;
 
