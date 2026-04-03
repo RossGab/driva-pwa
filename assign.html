@@ -81,7 +81,7 @@ select, input[type="date"] {
 
 <body>
 
-<h2>Manage Tasks V4.6.1.20-WIP</h2>
+<h2>Manage Tasks V4.6.1.21-WIP</h2>
 
 <button onclick="location.href='admin.html'" class="small-btn">⬅ Back</button>
 
@@ -510,15 +510,9 @@ if (!window.__TASKS_BY_DATE__[d]) {
 }
 window.__TASKS_BY_DATE__[d].push(t);
 
-t._search = [
-  t.CUSTOMERNAME,
-  t.ADDRESS,
-  t.ACCOUNTNUMBER,
-  t.METERNUMBER,
-  t.driverId
-]
-.map(v => (v || "").toString().toLowerCase())
-.join(" ");
+t._search = Object.values(t)
+  .map(v => (v || "").toString().toLowerCase())
+  .join(" ");
 
   // ===== DRIVER INDEX =====
   if (t.driverId) {
