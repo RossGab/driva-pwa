@@ -81,7 +81,7 @@ select, input[type="date"] {
 
 <body>
 
-<h2>Manage Tasks V4.6.1.21-WIP</h2>
+<h2>Manage Tasks V4.6.1.22-WIP</h2>
 
 <button onclick="location.href='admin.html'" class="small-btn">⬅ Back</button>
 
@@ -484,6 +484,7 @@ for (const key of liveKeys) {
   });
 }
   window.__SNAPSHOT_TASKS__ = allTasks;
+  buildFilterLists(); // 🔥 move it here (immediate)
 
   // 🔥 INIT INDEXES
 window.__TASKS_BY_DATE__ = {};
@@ -536,16 +537,6 @@ t._search = Object.values(t)
   checkAll.checked = false;
 
   LAST_FILTER_HASH = "";
-
-  // 🔥 PREVENT UI FREEZE
-  setTimeout(() => {
-    buildFilterLists();
-  
-    setTimeout(() => {
-      applyFilters();
-    }, 0);
-  
-  }, 0);
 
   
 
@@ -602,9 +593,9 @@ function buildFilterLists() {
   const mrus = new Set();
 
   const data = window.__SNAPSHOT_TASKS__ || [];
-  const MAX = 3000; // 🔥 limit ONLY for dropdown scan
 
-  for (let i = 0; i < data.length && i < MAX; i++) {
+  // ✅ FIX: LOOP WITH BODY
+  for (let i = 0; i < data.length; i++) {
     const t = data[i];
 
     if (t.driverId) drivers.add(t.driverId);
@@ -614,6 +605,7 @@ function buildFilterLists() {
     if (t.MRU) mrus.add(t.MRU);
   }
 
+  // ✅ populate dropdowns
   filterDriver.innerHTML = `<option value="">All Drivers</option>`;
   filterJob.innerHTML = `<option value="">All Job Types</option>`;
   filterBA.innerHTML = `<option value="">All BA</option>`;
