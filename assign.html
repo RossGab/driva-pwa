@@ -81,7 +81,7 @@ select, input[type="date"] {
 
 <body>
 
-<h2>Manage Tasks V4.6.1.3-WIP</h2>
+<h2>Manage Tasks V4.6.1.4-WIP</h2>
 
 <button onclick="location.href='admin.html'" class="small-btn">⬅ Back</button>
 
@@ -212,8 +212,8 @@ const BUFFER = 10;
 
 const loadingBar = document.getElementById("loadingBar");
 const loadingProgress = document.getElementById("loadingProgress");
-const loadingText = loadingBar.querySelector("div:last-child");
-
+const loadingText = document.getElementById("loadingText");
+  
 let TASK_MAP = {};
 let LAST_FILTER_HASH = "";
 let VISIBLE_START = 0;
@@ -375,6 +375,7 @@ async function loadTasks() {
   }
 
   const dateKeys = [];
+  
 
   for (let d = new Date(from); d <= new Date(to); d.setDate(d.getDate() + 1)) {
     dateKeys.push(
@@ -382,6 +383,8 @@ async function loadTasks() {
        .replace(/-/g, "")
     );
   }
+
+  const hasLive = dateKeys.some(k => isTodayKey(k));
 
   let allTasks = [];
 
@@ -399,7 +402,14 @@ async function loadTasks() {
   result = await loadLiveTasksFromFirebase(
     key,
     (p, loaded, total) => {
-      const mapped = 50 + (p * 0.5);
+      let mapped;
+      
+      if (hasLive) {
+        mapped = 50 + (p * 0.5);
+      } else {
+        mapped = p;
+      }
+      
       loadingProgress.style.width = mapped + "%";
 
       loadingText.innerText =
@@ -421,9 +431,16 @@ async function loadTasks() {
 }
 
     if (!isTodayKey(key)) {
-      const progress = ((i + 1) / dateKeys.length) * 50; // snapshot = 80%
-      loadingProgress.style.width = progress + "%";
+    let progress;
+  
+    if (hasLive) {
+      progress = ((i + 1) / dateKeys.length) * 50;
+    } else {
+      progress = ((i + 1) / dateKeys.length) * 100;
     }
+  
+    loadingProgress.style.width = progress + "%";
+  }
 
     result.forEach(t => {
       if (t.status !== "COMPLETED") {
