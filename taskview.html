@@ -3,42 +3,16 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Admin Dashboard V 3</title>
-<!-- ===== LEAFLET (OPTION 2 MAP) ===== -->
-<link
-  rel="stylesheet"
-  href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-/>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<title>Task Viewer v2.0</title>
 
 <style>
 body {
-  font-family: Arial, sans-serif;
+  font-family: Arial;
   background:#f3f3f3;
   padding:10px;
 }
 
-h2 { text-align:center; }
-
-#scrollTopBtn {
-  position: fixed;
-  bottom: 20px;
-  right: 20px;
-  z-index: 999;
-  padding: 12px 14px;
-  border-radius: 50%;
-  border: none;
-  font-size: 18px;
-  background: #007bff;
-  color: #fff;
-  cursor: pointer;
-  box-shadow: 0 4px 10px rgba(0,0,0,0.25);
-  display: none; /* hidden by default */
-}
-
-#scrollTopBtn:hover {
-  background: #0056b3;
-}
+h1 { margin:0; }
 
 .dashboard {
   display:flex;
@@ -55,9 +29,6 @@ h2 { text-align:center; }
   box-shadow:0 0 4px rgba(0,0,0,.1);
 }
 
-.open { border-top:5px solid orange; }
-.done { border-top:5px solid green; }
-
 .big {
   font-size:32px;
   font-weight:bold;
@@ -72,60 +43,25 @@ h2 { text-align:center; }
 button {
   flex:1;
   padding:12px;
-  font-size:14px;
   border:none;
   border-radius:6px;
   cursor:pointer;
 }
 
-.assign { background:#007bff; color:#fff; }
-.openBtn { background:orange; color:#fff; }
 .doneBtn { background:green; color:#fff; }
-.refresh { background:#444; color:#fff; }
 
-.task-header {
-  cursor: pointer;
+.task {
+  background:#fff;
+  padding:12px;
+  margin-bottom:10px;
+  border-radius:8px;
+  box-shadow:0 0 4px rgba(0,0,0,.1);
+  border-left:5px solid green;
 }
 
-/* ===== LOADING SCREEN ===== */
-#loadingScreen {
-  position: fixed;
-  inset: 0;
-  background: rgba(255, 255, 255, 0.95);
-  z-index: 9999;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  opacity: 1;
-  transition: opacity 0.4s ease;
-}
-  
-#loadingScreen.hide {
-  opacity: 0;
-  pointer-events: none;
-}
-
-.loader-box {
-  text-align: center;
-}
-
-.spinner {
-  width: 42px;
-  height: 42px;
-  border: 4px solid #ddd;
-  border-top: 4px solid #007bff;
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-  margin: 0 auto 10px;
-}
-
-.loader-text {
-  font-size: 14px;
-  color: #555;
-}
-
-@keyframes spin {
-  to { transform: rotate(360deg); }
+.small {
+  font-size:13px;
+  color:#555;
 }
 
 #searchBox {
@@ -134,2078 +70,219 @@ button {
   margin-bottom:12px;
   border-radius:6px;
   border:1px solid #ccc;
-  font-size:14px;
-}
-
-.task {
-  background:#fff;
-  padding:12px;
-  margin-bottom:10px;
-  border-radius:8px;
-  box-shadow:0 0 4px rgba(0,0,0,.1);
-  border-left:5px solid #ccc;
-}
-
-  .task-form {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
-}
-
-.task-form .full {
-  grid-column: span 2;
-}
-
-.task-form label {
-  font-size: 12px;
-  font-weight: bold;
-  color: #555;
-}
-
-.task-form input,
-.task-form textarea,
-.task-form select {
-  width: 100%;
-  padding: 6px;
-  border-radius: 4px;
-  border: 1px solid #ccc;
-}
-
-.form-actions {
-  grid-column: span 2;
-  margin-top: 10px;
-}
-
-.task.completed { border-left-color:green; }
-.task.pending { border-left-color:orange; }
-
-.small {
-  font-size:13px;
-  color:#555;
-  margin-top:4px;
-}
-
-.remarks {
-  margin-top:6px;
-  padding:6px;
-  background:#f7f7f7;
-  border-left:3px solid #007bff;
-  font-size:13px;
-}
-
-.toggleBtn {
-  margin-top:8px;
-  background:#0069d9;
-  color:#fff;
-  padding:8px;
-  width:100%;
-  border-radius:5px;
-  font-size:13px;
-}
-.snapshot-btn {
-  flex: 1;
-  padding: 12px;
-  font-size: 13px;
-  border: none;
-  border-radius: 6px;
-  color: #fff;
-  cursor: default;
-  opacity: 0.95;
-}
-
-/* STATUS COLORS */
-.snapshot-fresh {
-  background: #28a745; /* green */
-}
-
-.snapshot-warn {
-  background: #f39c12; /* orange */
-}
-
-.snapshot-stale {
-  background: #dc3545; /* red */
-}
-
-.snapshot-unknown {
-  background: #6c757d; /* gray */
-}
-
-.reassignBox {
-  margin-top:10px;
-  display:flex;
-  gap:6px;
-}
-
-.reassignBox input {
-  flex:1;
-  padding:6px;
-}
-
-.reassignBtn {
-  background:#c0392b;
-  color:#fff;
-  padding:6px 10px;
-  border-radius:5px;
-}
-
-.deleteBtn {
-  margin-top:6px;
-  background:#b00020;
-  color:#fff;
-  padding:8px;
-  width:100%;
-  border-radius:5px;
-}
-
-.sla-ok { color:green; font-weight:bold; }
-.sla-warn { color:orange; font-weight:bold; }
-.sla-breach { color:red; font-weight:bold; }
-
-#mapContainer {
-  display:none;
-  margin-top:12px;
-}
-.version {
-  font-size: 16px;
-  color: #777;
-  margin-left: 6px;
-}
-
-.admin-header {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  margin-bottom: 12px;
-}
-
-.admin-logo {
-  height: 72px;
-  width: auto;
-  object-fit: contain;
-}
-
-#map {
-  height:420px;
-  border-radius:10px;
 }
 </style>
 </head>
 
 <body>
 
-<div class="admin-header" style="justify-content:space-between;">
+<h1>Task Viewer</h1>
 
-  <button onclick="logout()" style="
-  padding:10px 14px;
-  background:#dc3545;
-  color:#fff;
-  border:none;
-  border-radius:6px;
-  cursor:pointer;
-">
-  Logout(testing)
-</button>
-  
-  <div style="display:flex;align-items:center;gap:14px;">
-    <img src="./logo.jpg" class="admin-logo" alt="Company Logo">
-    <h1>Tasks Dashboard <span class="version">V1.0</span></h1>
-  </div>
-
-  <!-- 📅 DATE FILTER -->
-  <div style="display:flex; gap:8px; align-items:center;">
-  <input
-    type="date"
-    id="adminDateFrom"
-    style="padding:8px; border-radius:6px; border:1px solid #ccc;"
-  >
-
-  <span style="font-size:14px;">to</span>
-
-  <input
-    type="date"
-    id="adminDateTo"
-    style="padding:8px; border-radius:6px; border:1px solid #ccc;"
-  >
-</div>
+<!-- DATE -->
+<div style="margin-bottom:10px;">
+  <input type="date" id="dateFrom">
+  to
+  <input type="date" id="dateTo">
 </div>
 
-<!-- ===== DASHBOARD ===== -->
+<!-- DASHBOARD -->
 <div class="dashboard">
-  <div class="card done">
+  <div class="card">
     <div class="big" id="doneCount">0</div>
     Completed Tasks
   </div>
 </div>
 
-<!-- ===== ACTIONS ===== -->
+<!-- ACTION -->
 <div class="actions">
-  
-  <button class="assign" onclick="location.href='assign.html'">➕ Manage Task</button>
-  
-  <button class="doneBtn" onclick="showCompletedTasks()">✅ Completed</button>
-  <button class="assign" onclick="location.href='add-driver.html'">👤 Add Driver</button>
-  <button class="assign" onclick="location.href=''">⚙ Driver Configuration</button>
-  <button class="assign" onclick="openReport()">📊 Report</button>
-  <button
-    id="snapshotStatusBtn"
-    class="snapshot-btn snapshot-unknown"
-    disabled
-  >
-    📦 Snapshot: Unknown
-</button>
+  <button class="doneBtn" onclick="loadTasks()">✅ Refresh</button>
 </div>
 
-<div id="loadingScreen">
-  <div class="loader-box">
-    <div class="spinner"></div>
-    <div class="loader-text">Loading dashboard…</div>
-  </div>
-</div>
-  
-<!-- 🔍 SEARCH (Open & Completed only) -->
-<div id="searchWrapper" style="display:none; position:relative; margin-bottom:12px;">
-  <input
-    id="searchBox"
-    placeholder="Search name, address, driver, remarks…"
-    style="width:100%; padding:10px; padding-right:34px;
-           border-radius:6px; border:1px solid #ccc; font-size:14px;"
-  >
-  <button
-    id="clearSearchBtn"
-    onclick="clearSearch()"
-    style="
-      position:absolute;
-      right:8px;
-      top:50%;
-      transform:translateY(-50%);
-      border:none;
-      background:transparent;
-      font-size:16px;
-      cursor:pointer;
-      display:none;
-    "
-    title="Clear search"
-  >
-    ❌
-  </button>
-</div>
-  <div id="baFilters" style="display:none; background:#fff; padding:8px;
-     border-radius:6px; margin-bottom:12px; box-shadow:0 0 4px rgba(0,0,0,.1);">
-  <div style="font-size:13px;font-weight:bold;margin-bottom:6px;">
-    Filter by BA
-  </div>
-  <div id="baCheckboxes" style="display:flex;flex-wrap:wrap;gap:10px;"></div>
-</div>
+<!-- SEARCH -->
+<input id="searchBox" placeholder="Search...">
 
-<!-- ===== TASK LIST ===== -->
-<div id="taskList">Select Open or Completed</div>
-<div id="adminPagination" style="text-align:center;margin:12px 0;"></div>
+<!-- BA FILTER -->
+<div id="baFilters"></div>
 
-<!-- ===== LIVE MAP ===== -->
-<div id="mapContainer" style="display:none;">
-  <div style="display:flex; gap:10px;">
+<!-- LIST -->
+<div id="taskList"></div>
 
-    <div id="mapBAFilter" style="
-      background:#fff;
-      padding:8px;
-      border-radius:6px;
-      margin-bottom:8px;
-      box-shadow:0 0 4px rgba(0,0,0,.1);
-    ">
-      <b style="font-size:13px;">Filter Drivers by BA</b>
-      <div id="mapBACheckboxes"
-           style="
-             display:flex;
-             flex-direction:column;
-             gap:6px;
-             margin-top:6px;
-           ">
-      </div>
-    </div>
+<!-- PAGINATION -->
+<div id="pagination"></div>
 
-    <!-- 🗺 MAP (BLUE AREA) -->
-    <div id="map" style="flex:3; height:420px; border-radius:10px;"></div>
-
-    <!-- 👤 DRIVER LIST (YELLOW AREA) -->
-    <div id="driverList" style="
-      flex:1;
-      background:#fff;
-      border-radius:10px;
-      padding:10px;
-      overflow-y:auto;
-      max-height:420px;
-      box-shadow:0 0 4px rgba(0,0,0,.1);
-    ">
-    
-      <b>🚗 Drivers</b>
-    
-      <!-- ✅ ONLINE FILTER -->
-      <label style="
-        display:flex;
-        align-items:center;
-        gap:6px;
-        font-size:12px;
-        margin:6px 0 8px;
-        cursor:pointer;
-      ">
-        <input type="checkbox" id="onlineOnlyToggle">
-        Show online drivers only
-      </label>
-    
-      <div id="driverItems" style="margin-top:8px;">
-        Loading drivers…
-      </div>
-    </div>
-
-  </div>
-</div>
-
-<script type="module">
-import { getAuth, signOut } from
-"https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-import { initializeApp } from
-  "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import {
-  getDatabase, ref, get, update, remove, set
-} from
-  "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
-
-function getTaskCacheKey() {
-  return `ADMIN_TASK_CACHE_${SELECTED_DATE}`;
-}
-
-function getTaskIdCacheKey() {
-  return `ADMIN_TASK_IDS_${SELECTED_DATE}`;
-}
-
-/* ===== FIREBASE ===== */
-const firebaseConfig = {
-  apiKey: "AIzaSyDFW61pnwLvh6HGKWt10zLYNr860fI8vkg",
-  authDomain: "driva-pwa.firebaseapp.com",
-  databaseURL: "https://driva-pwa-default-rtdb.firebaseio.com",
-  projectId: "driva-pwa",
-  storageBucket: "driva-pwa.firebasestorage.app",
-  messagingSenderId: "299138219722",
-  appId: "1:299138219722:web:623ff6b0a067ea822dfe33"
-};
-
-
-
-
-window.DRIVER_UI_CONFIG = {};
+<script>
+const SNAPSHOT_BASE =
+"https://raw.githubusercontent.com/RossGab/driva-task-snapshots/main/snapshots";
 
 function getTodayPH() {
   return new Date().toLocaleDateString("en-CA", {
-    timeZone: "Asia/Manila"
+    timeZone:"Asia/Manila"
   });
 }
-
-let ALL_BA_FOR_DATE = new Set();
-let FILTERED_TASK_IDS = [];
-let FILTER_READY = false;
-let DRIVER_CACHE = {};
 
 let DATE_FROM = getTodayPH();
 let DATE_TO = getTodayPH();
 
-const dateFromInput = document.getElementById("adminDateFrom");
-const dateToInput = document.getElementById("adminDateTo");
-
-dateFromInput.value = DATE_FROM;
-dateToInput.value = DATE_TO;
-
-async function onDateRangeChange() {
-
-  const newFrom = dateFromInput.value;
-  const newTo = dateToInput.value;
-
-  if (!newFrom || !newTo) return;
-
-  const keys = getDateRangeKeys(newFrom, newTo);
-
-  // ✅ VALIDATE EARLY (THIS IS THE FIX)
-  if (keys.length > 7) {
-    alert("Max 7 days range only");
-
-    // 🔥 revert UI (DO NOT CHANGE STATE)
-    dateFromInput.value = DATE_FROM;
-    dateToInput.value = DATE_TO;
-
-    return;
-  }
-
-  // ✅ ONLY NOW update state
-  DATE_FROM = newFrom;
-  DATE_TO = newTo;
-
-  window.__SNAPSHOT_TASKS__ = null;
-
-  showLoader("Loading date range…");
-
-  try {
-    await loadTasks(CURRENT_STATUS || "PENDING");
-  } finally {
-    hideLoader();
-  }
-}
-
-dateFromInput.addEventListener("change", onDateRangeChange);
-dateToInput.addEventListener("change", onDateRangeChange);
-
-
-async function updateSnapshotStatusForDate(dateKey) {
-  const btn = document.getElementById("snapshotStatusBtn");
-  if (!btn) return;
-
-  const url =
-    `https://raw.githubusercontent.com/RossGab/driva-task-snapshots/main/snapshots/${dateKey}.json`;
-
-  try {
-    const res = await fetch(url, {
-      method: "HEAD",        // 🔥 lightweight check
-      cache: "no-store"
-    });
-
-    if (!res.ok) throw new Error("Missing");
-
-    btn.className = "snapshot-btn snapshot-fresh";
-    btn.textContent = "🟢 Snapshot Available";
-  } catch {
-    btn.className = "snapshot-btn snapshot-stale";
-    btn.textContent = "📦 No Snapshot for Selected Date";
-  }
-}
-
-function showNoSnapshotMessage(dateKey) {
-    const btn = document.getElementById("snapshotStatusBtn");
-  if (btn) {
-    btn.className = "snapshot-btn snapshot-stale";
-    btn.textContent = "📦 No Snapshot for Selected Date";
-  }
-}
-
-async function loadDriverUIConfig() {
-  const snap = await get(ref(db, "config/driverUI/jobTypes"));
-  window.DRIVER_UI_CONFIG = snap.val() || {};
-}
-
-function showLoader(text = "Loading…") {
-  const el = document.getElementById("loadingScreen");
-  if (!el) return;
-  setLoaderText(text);
-  el.classList.remove("hide");
-  el.style.display = "flex";
-}
-
-function reloadAllAdminViews() {
-  refreshDashboard();
-
-  if (MAP_VISIBLE) {
-    refreshMap();
-  } else if (CURRENT_STATUS) {
-    loadTasks(CURRENT_STATUS);
-  }
-}
-
-function normalizeDate(dateStr) {
-  if (!dateStr) return null;
-
-  const d = new Date(dateStr);
-
-  if (isNaN(d.getTime())) return null;
-
-  return d.toLocaleDateString("en-CA", {
-    timeZone: "Asia/Manila"
-  });
-}
-
-async function loadSnapshotTasks(dateKey) {
-  try {
-    const res = await fetch(getSnapshotUrl(dateKey), {
-      cache: "no-store"
-    });
-
-    if (!res.ok) return null;
-
-    const data = await res.json();
-
-    return Object.entries(data).map(([id, task]) => ({
-      _key: id,
-      ...task
-    }));
-  } catch (e) {
-    console.warn("Snapshot load failed", e);
-    return null;
-  }
-}
-  
-function renderAdminPagination() {
-  const el = document.getElementById("adminPagination");
-  if (!el) return;
-
-  // ❌ DO NOT show pagination in Live Map
-  if (MAP_VISIBLE) {
-    el.innerHTML = "";
-    return;
-  }
-
-  const totalPages = Math.max(
-    1,
-    Math.ceil(FILTERED_TASK_IDS.length / ADMIN_PAGE_SIZE)
-  );
-
-  el.innerHTML = `
-    <button ${ADMIN_CURRENT_PAGE === 0 ? "disabled" : ""}
-      onclick="adminPrevPage()">⬅ Prev</button>
-
-    <span style="margin:0 10px;">
-      Page ${ADMIN_CURRENT_PAGE + 1} of ${totalPages}
-      (${FILTERED_TASK_IDS.length} tasks)
-    </span>
-
-    <button ${ADMIN_CURRENT_PAGE >= totalPages - 1 ? "disabled" : ""}
-      onclick="adminNextPage()">Next ➡</button>
-  `;
-}
-
-window.adminPrevPage = function () {
-  if (ADMIN_CURRENT_PAGE > 0) {
-    ADMIN_CURRENT_PAGE--;
-    loadAdminPageFromSnapshot(CURRENT_STATUS);
-  }
-};
-
-window.adminNextPage = function () {
-  const totalPages = Math.ceil(FILTERED_TASK_IDS.length / ADMIN_PAGE_SIZE);
-  if (ADMIN_CURRENT_PAGE < totalPages - 1) {
-    ADMIN_CURRENT_PAGE++;
-    loadAdminPageFromSnapshot(CURRENT_STATUS);
-  }
-};
-
-function buildLiveMapBAFilters() {
-  const box = document.getElementById("mapBACheckboxes");
-  box.innerHTML = "";
-
-  const allBAs = new Set();
-
-  Object.values(DRIVER_BA_MAP).forEach(baList => {
-    baList.forEach(ba => allBAs.add(ba));
-  });
-
-  [...allBAs].sort().forEach(ba => {
-    const label = document.createElement("label");
-    label.style.cssText = `
-      font-size:13px;
-      display:flex;
-      align-items:center;
-      gap:6px;
-      padding:4px 6px;
-      border-radius:4px;
-      cursor:pointer;
-      background:#f5f5f5;
-    `;
-
-    label.innerHTML = `
-      <input type="checkbox" value="${ba}">
-      <span>${ba}</span>
-    `;
-
-    const input = label.querySelector("input");
-    input.checked = FILTER_BA.has(ba);
-
-    input.onchange = () => {
-      if (input.checked) FILTER_BA.add(ba);
-      else FILTER_BA.delete(ba);
-
-      refreshMap();        // 🔥 refresh markers
-    };
-
-    box.appendChild(label);
-  });
-}
-
-function driverMatchesBA(driverId) {
-  // No BA filter → show all drivers
-  if (!FILTER_BA.size) return true;
-
-  const baSet = DRIVER_BA_MAP[driverId];
-  if (!baSet) return false;
-
-  // Match if ANY BA overlaps
-  for (const ba of baSet) {
-    if (FILTER_BA.has(ba)) return true;
-  }
-
-  return false;
-}
-
-function hideLoader() {
-  const el = document.getElementById("loadingScreen");
-  if (!el || el.classList.contains("hide")) return;
-  el.classList.add("hide");
-  setTimeout(() => {
-    el.style.display = "none";
-  }, 400);
-}
-
-function withTimeout(promise, ms = 8000) {
-  return Promise.race([
-    promise,
-    new Promise((_, reject) =>
-      setTimeout(() => reject(new Error("Timeout")), ms)
-    )
-  ]);
-}
-
-window.openReport = function () {
-  window.location.href = "report.html";
-};
-
-function getCachedTasks() {
-  try {
-    const raw = localStorage.getItem(getTaskCacheKey())
-    return raw ? JSON.parse(raw) : null;
-  } catch {
-    return null;
-  }
-}
-
-function setCachedTasks(tasks) {
-  try {
-    localStorage.setItem(getTaskCacheKey(), JSON.stringify(tasks));
-  } catch {}
-}
-
-function clearTaskCache() {
-  localStorage.removeItem(getTaskCacheKey());
-  localStorage.removeItem(getTaskIdCacheKey());
-}
-
-/* =========================
-   SNAPSHOT CONFIG
-========================= */
-
-const SNAPSHOT_BASE_URL =
-  "https://raw.githubusercontent.com/RossGab/driva-task-snapshots/main/snapshots";
-
-function getSnapshotUrl(dateKey) {
-  return `${SNAPSHOT_BASE_URL}/${dateKey}.json`;
-}
-
-function isTodayPH(dateStr) {
-  return dateStr === getTodayPH();
-}
-
-const app = initializeApp(firebaseConfig);
-const db = getDatabase(app);
-const auth = getAuth(app);
-
-const EDITABLE_FIELDS = [
-  "driverId",
-  "JOBTYPE",
-  "BA",
-  "DMZ",
-  "MRU",
-  "SEQUENCE",
-  "METERNUMBER",
-  "ACCOUNTNUMBER",
-  "CUSTOMERNAME",
-  "ADDRESS",
-  "ZIPCODE",
-  "LATITUDE",
-  "LONGITUDE",
-  "deliveryType"
-];
-
-
-let CURRENT_STATUS = null;
+document.getElementById("dateFrom").value = DATE_FROM;
+document.getElementById("dateTo").value = DATE_TO;
+
+let TASKS = [];
+let FILTERED = [];
+let PAGE = 0;
+const PAGE_SIZE = 200;
+let SEARCH = "";
 let FILTER_BA = new Set();
-let SEARCH_TERM = "";
-let MAP_VISIBLE = false;
-let SHOW_ONLINE_ONLY = false;
-let TASK_STATS = {};
-let FILTER_DRIVER = null;
-let DRIVER_BA_MAP = {};
-const searchWrapper = document.getElementById("searchWrapper");
-const baFilters = document.getElementById("baFilters");
-const searchBox = document.getElementById("searchBox");
+let ALL_BA = new Set();
 
-const ADMIN_PAGE_SIZE = 200;
-let ADMIN_CURRENT_PAGE = 0;
-let ADMIN_TASK_IDS = [];
+/* LOAD SNAPSHOT */
+async function loadTasks() {
 
-let SEARCH_TIMER = null;
-const SEARCH_DELAY = 300; // ms (300–500 is ideal)
+  DATE_FROM = dateFrom.value;
+  DATE_TO = dateTo.value;
 
-/* ===== SEARCH ===== */
-searchBox.addEventListener("input", e => {
-  const value = e.target.value.toLowerCase();
+  const keys = getDateKeys(DATE_FROM, DATE_TO);
 
-  // Clear previous timer
-  if (SEARCH_TIMER) {
-    clearTimeout(SEARCH_TIMER);
+  let all = [];
+
+  for (const k of keys) {
+    try {
+      const res = await fetch(`${SNAPSHOT_BASE}/${k}.json`);
+      if (!res.ok) continue;
+
+      const data = await res.json();
+
+      const arr = Object.entries(data).map(([id,t]) => ({
+        _key:id, ...t
+      }));
+
+      all = all.concat(arr);
+
+    } catch {}
   }
 
-  // Delay execution
-  SEARCH_TIMER = setTimeout(() => {
-    SEARCH_TERM = value;
-    ADMIN_CURRENT_PAGE = 0; // 🔥 ADD
-    const clearBtn = document.getElementById("clearSearchBtn");
-    clearBtn.style.display = SEARCH_TERM ? "block" : "none";
-
-    if (CURRENT_STATUS) {
-      // 🔥 IMPORTANT: only reload current page
-      loadAdminPageFromSnapshot(CURRENT_STATUS);
-    }
-  }, SEARCH_DELAY);
-});
-  
- function renderGlobalBAFilters() {
-  if (MAP_VISIBLE || !CURRENT_STATUS) {
-    baFilters.style.display = "none";
+  if (!all.length) {
+    taskList.innerHTML = "No data";
     return;
   }
 
-  const container = document.getElementById("baFilters");
-  const box = document.getElementById("baCheckboxes");
+  // ✅ ONLY COMPLETED
+  TASKS = all.filter(t => t.status === "COMPLETED");
 
-  box.innerHTML = "";
+  // collect BA
+  ALL_BA.clear();
+  TASKS.forEach(t => t.BA && ALL_BA.add(t.BA));
 
-  if (!ALL_BA_FOR_DATE.size) {
-    container.style.display = "none";
-    return;
-  }
-
-  container.style.display = "block";
-
-  [...ALL_BA_FOR_DATE].sort().forEach(ba => {
-    const label = document.createElement("label");
-    label.style.cssText =
-      "font-size:13px;display:flex;align-items:center;gap:6px;";
-
-    label.innerHTML = `
-      <input type="checkbox" value="${ba}">
-      <span>${ba}</span>
-    `;
-
-    const input = label.querySelector("input");
-    input.checked = FILTER_BA.has(ba);
-
-    input.onchange = () => {
-      if (input.checked) FILTER_BA.add(ba);
-      else FILTER_BA.delete(ba);
-    
-      ADMIN_CURRENT_PAGE = 0; // 🔥 reset to first page
-      loadAdminPageFromSnapshot(CURRENT_STATUS);
-    };
-
-    box.appendChild(label);
-  });
-}
-  
-/* ===== SLA ===== */
-function getSLA(task) {
-  if (!task.createdAt || task.status === "COMPLETED") return null;
-  const hrs = (Date.now() - new Date(task.createdAt)) / 36e5;
-  if (hrs < 24) return { text:"Within SLA", cls:"sla-ok" };
-  if (hrs < 48) return { text:"At Risk", cls:"sla-warn" };
-  return { text:"SLA Breached", cls:"sla-breach" };
+  renderBA();
+  applyFilters();
+  renderDashboard();
 }
 
-const DRIVER_SNAPSHOT_URL =
-  "https://raw.githubusercontent.com/RossGab/driva-task-snapshots/main/snapshots/drivers.json";
-
-async function loadDriverSnapshot() {
-  try {
-    const res = await fetch(DRIVER_SNAPSHOT_URL, { cache: "no-store" });
-    if (!res.ok) throw new Error("Driver snapshot not found");
-
-    const data = await res.json();
-
-    // Normalize to existing structure
-    DRIVER_CACHE = data || {};
-  } catch (e) {
-    console.warn("⚠️ Failed to load driver snapshot", e);
-    DRIVER_CACHE = {};
-  }
-}
-
-async function updateSnapshotFreshness() {
-  const btn = document.getElementById("snapshotStatusBtn");
-  if (!btn) return;
-
-  const metaUrl =
-    "https://raw.githubusercontent.com/RossGab/driva-task-snapshots/main/snapshots/latest.json";
-
-  try {
-    const res = await fetch(metaUrl, { cache: "no-store" });
-    if (!res.ok) throw new Error("No meta");
-    
-    const meta = await res.json();
-    const status = meta.status || "idle";
-    const updatedAt = new Date(meta.updatedAt);
-
-    const now = new Date();
-    // 🟣 RUNNING STATE (HIGHEST PRIORITY)
-    if (status === "running") {
-      btn.className = "snapshot-btn";
-      btn.classList.add("snapshot-warn");
-    
-      btn.textContent = "⏳ Snapshot in progress...";
-      btn.disabled = true;
-      btn.style.cursor = "default";
-      btn.onclick = null;
-    
-      return; // ⛔ stop here
-    }
-    const diffMin = Math.floor((now - updatedAt) / 60000);
-
-    // Format time in PH locale
-    const timeStr = updatedAt.toLocaleTimeString("en-PH", {
-      hour: "numeric",
-      minute: "2-digit",
-      hour12: true
-    });
-
-    const dateStr = updatedAt.toLocaleDateString("en-PH", {
-      month: "short",
-      day: "numeric"
-    });
-
-    btn.className = "snapshot-btn";
-
-    // 🔴 stale (> 1 hour)
-    if (diffMin > 60) {
-      btn.classList.add("snapshot-stale");
-      btn.textContent = `🔴 Snapshot Updated: ${dateStr} ${timeStr}`;
-      btn.disabled = false;
-      btn.style.cursor = "pointer";
-      btn.onclick = triggerSnapshotWorkflow;
-    }
-    
-    // 🟡 warning (> 15 mins)
-    else if (diffMin > 15) {
-      btn.classList.add("snapshot-warn");
-      btn.textContent = `🟡 Snapshot Updated: ${timeStr}`;
-      btn.disabled = false;
-      btn.style.cursor = "pointer";
-      btn.onclick = triggerSnapshotWorkflow;
-    }
-    
-    // 🟢 fresh
-    else {
-      btn.classList.add("snapshot-fresh");
-      btn.textContent = `🟢 Snapshot Updated: ${timeStr}`;
-      btn.disabled = true;
-      btn.style.cursor = "default";
-      btn.onclick = null;
-    }
-
-  } catch {
-    // silently fail — availability handled elsewhere
-  }
-}
-
-async function triggerSnapshotWorkflow() {
-
-  const btn = document.getElementById("snapshotStatusBtn");
-
-  btn.textContent = "⏳ Snapshot in progress...";
-  btn.className = "snapshot-btn snapshot-warn";
-  btn.disabled = true;
-  btn.style.cursor = "default";
-
-  try {
-
-    const res = await fetch(
-      "https://trigger.rcnitura.workers.dev",
-      { method: "POST" }
-    );
-
-    const data = await res.json();
-
-    if (!data.ok) throw new Error();
-
-    setTimeout(updateSnapshotFreshness, 2000);
-
-  } catch (e) {
-
-    console.error(e);
-    btn.textContent = "❌ Trigger failed";
-    btn.disabled = false;
-
-  }
-}
-
-
-window.onerror = (msg, src, line) => {
-  alert(`JS Error:\n${msg}\nLine: ${line}`);
-};window.clearSearch = function () {
-  SEARCH_TERM = "";
-  searchBox.value = "";
-  document.getElementById("clearSearchBtn").style.display = "none";
-
-  if (CURRENT_STATUS) {
-    loadAdminPageFromSnapshot(CURRENT_STATUS); // ✅ page-only reload
-  }
-};
-
-window.logout = function () {
-  signOut(auth).then(() => {
-    window.location.href = "login.html";
-  });
-};
-  
-window.refreshDashboard = function () {
-  if (!window.__SNAPSHOT_TASKS__) {
-    openCount.innerText = 0;
-    doneCount.innerText = 0;
-    slaOk.innerText = 0;
-    slaWarn.innerText = 0;
-    slaBreach.innerText = 0;
-    return;
-  }
-
-  let done = 0;
-
-window.__SNAPSHOT_TASKS__.forEach(t => {
-  if (t.status === "COMPLETED") {
-    done++;
-  }
-});
-
-openCount.innerText = 0;
-doneCount.innerText = done;
-
-slaOk.innerText = 0;
-slaWarn.innerText = 0;
-slaBreach.innerText = 0;
-
-      if (!t.createdAt) return;
-      const hrs = (Date.now() - new Date(t.createdAt)) / 36e5;
-      if (hrs < 24) ok++;
-      else if (hrs < 48) warn++;
-      else breach++;
-    }
-  });
-
-  openCount.innerText = open;
-  doneCount.innerText = done;
-  slaOk.innerText = ok;
-  slaWarn.innerText = warn;
-  slaBreach.innerText = breach;
-};
-
-function renderCompletedPhotos(t) {
-  const photos = [
-    t.photo1Url,
-    t.photo2Url,
-    t.photo3Url
-  ].filter(Boolean);
-
-  if (!photos.length) return "";
-
-  return `
-    <div style="margin-top:12px">
-      <b>📸 Photos</b>
-      <div style="
-        display:grid;
-        grid-template-columns:repeat(3,1fr);
-        gap:6px;
-        margin-top:8px;
-      ">
-        ${photos.map(url => `
-          <img 
-            data-src="${url}"
-            class="lazy-photo"
-            loading="lazy"
-            onclick="window.open('${url}','_blank')"
-            style="
-              width:100%;
-              height:90px;
-              object-fit:cover;
-              border-radius:6px;
-              border:2px solid #28a745;
-              cursor:pointer;
-            ">
-        `).join("")}
-      </div>
-    </div>
-  `;
-}
-
-
-function renderDynamicCompletedFields(t) {
-  if (!t.deliveryType || !t.JOBTYPE) return "";
-
-  const cfg =
-    window.DRIVER_UI_CONFIG?.[t.JOBTYPE]
-      ?.deliveryMethods
-      ?.[t.deliveryType];
-
-  if (!cfg || !cfg._order || !cfg.fields) return "";
-
-  let html = `
-    <div class="task-form full" style="margin-top:12px">
-      <b>DELIVERY DETAILS</b>
-  `;
-
-  /* ===============================
-     1️⃣ NORMAL INPUT FIELDS
-     =============================== */
-
-  for (const key of cfg._order) {
-    const field = cfg.fields[key];
-    if (!field) continue;
-
-    if (field.type === "radio") continue; // skip radio here
-
-    const value = t[key] || "";
-
-    if (field.type === "textarea") {
-      html += `
-        <label class="full">${field.label}</label>
-        <textarea class="full" disabled>${value}</textarea>
-      `;
-    } else {
-      html += `
-        <label class="full">${field.label}</label>
-        <input class="full" value="${value}" disabled>
-      `;
-    }
-  }
-
-  /* ===============================
-     2️⃣ RADIO RESULT + CHILD FIELDS
-     =============================== */
-
-  const selected = t.result;
-
-  if (selected && cfg.fields[selected]) {
-    const radioField = cfg.fields[selected];
-
-    html += `
-      <label class="full">Result</label>
-      <input class="full" value="${radioField.label}" disabled>
-    `;
-
-    const children = radioField.fields?.options;
-
-    if (children && radioField.fields?._order?.length) {
-      for (const childKey of radioField.fields._order) {
-        const child = children[childKey];
-        if (!child) continue;
-
-        const value = t[childKey] || "";
-
-        if (child.type === "textarea") {
-          html += `
-            <label class="full">${child.label}</label>
-            <textarea class="full" disabled>${value}</textarea>
-          `;
-        } else {
-          html += `
-            <label class="full">${child.label}</label>
-            <input class="full" value="${value}" disabled>
-          `;
-        }
-      }
-    }
-  }
-
-  html += `</div>`;
-  return html;
-}
-  
-function renderTaskDetails(t) {
-  return `
-    <div class="task-form">
-
-      <label>ASSIGNED DRIVER</label>
-      <select data-field="driverId" disabled>
-        <option value="">— Unassigned —</option>
-        ${Object.entries(DRIVER_CACHE).map(([id, d]) => `
-          <option value="${id}" ${id === t.driverId ? "selected" : ""}>
-            ${id} - ${d.name || ""}
-          </option>
-        `).join("")}
-      </select>
-
-      <label>JOB TYPE</label>
-      <input data-field="JOBTYPE" value="${t.JOBTYPE || ""}" disabled>
-
-      <label>BA</label>
-      <input data-field="BA" value="${t.BA || ""}" disabled>
-
-      <label>DMZ</label>
-      <input data-field="DMZ" value="${t.DMZ || ""}" disabled>
-
-      <label>MRU</label>
-      <input data-field="MRU" value="${t.MRU || ""}" disabled>
-
-      <label>SEQUENCE</label>
-      <input data-field="SEQUENCE" value="${t.SEQUENCE || ""}" disabled>
-
-      <label>METER NUMBER</label>
-      <input data-field="METERNUMBER" value="${t.METERNUMBER || ""}" disabled>
-
-      <label>ACCOUNT NUMBER</label>
-      <input data-field="ACCOUNTNUMBER" value="${t.ACCOUNTNUMBER || ""}" disabled>
-
-      <label>CUSTOMER NAME</label>
-      <input data-field="CUSTOMERNAME" value="${t.CUSTOMERNAME || ""}" disabled>
-
-      <label class="full">ADDRESS</label>
-      <textarea class="full" data-field="ADDRESS" disabled>${t.ADDRESS || ""}</textarea>
-
-      <label>ZIP CODE</label>
-      <input data-field="ZIPCODE" value="${t.ZIPCODE || ""}" disabled>
-
-      <label>DELIVERY TYPE</label>
-      <input data-field="deliveryType" value="${t.deliveryType || ""}" disabled>
-      <label>LATITUDE</label>
-      <input data-field="LATITUDE" value="${t.LATITUDE || ""}" disabled>
-      
-      <label>LONGITUDE</label>
-      <input data-field="LONGITUDE" value="${t.LONGITUDE || ""}" disabled>
-
-    </div>
-  `;
-}
-
-function initLazyPhotos() {
-  const images = document.querySelectorAll(".lazy-photo");
-
-  const observer = new IntersectionObserver(entries => {
-    entries.forEach(entry => {
-      if (!entry.isIntersecting) return;
-
-      const img = entry.target;
-      const realSrc = img.dataset.src;
-
-      if (realSrc) {
-        img.src = realSrc;
-        img.removeAttribute("data-src");
-      }
-
-      observer.unobserve(img);
-    });
-  }, {
-    rootMargin: "100px"
-  });
-
-  images.forEach(img => observer.observe(img));
-}
-
-window.revertToPending = async function (taskKey) {
-  if (!confirm("Reset task and send back to pending?")) return;
-
-  showLoader("Resetting task…");
-
-  try {
-    const snap = await get(ref(db, `tasks/${taskKey}`));
-    if (!snap.exists()) {
-      alert("Task not found");
-      return;
-    }
-
-    const original = snap.val();
-
-    // 1️⃣ Fields to CLEAR (completion-only data)
-    const RESET_FIELDS = [
-      "deliveryType",
-      "result",
-      "remarks",
-      "finalized"
-    ];
-
-    // Also clear any dynamic form fields
-    Object.keys(original).forEach(k => {
-      if (
-        k.startsWith("photo") === false &&
-        k !== "createdAt" &&
-        k !== "driverId" &&
-        k !== "JOBTYPE" &&
-        k !== "BA" &&
-        k !== "DMZ" &&
-        k !== "MRU" &&
-        k !== "SEQUENCE" &&
-        k !== "METERNUMBER" &&
-        k !== "ACCOUNTNUMBER" &&
-        k !== "CUSTOMERNAME" &&
-        k !== "ADDRESS" &&
-        k !== "ZIPCODE" &&
-        k !== "LATITUDE" &&
-        k !== "LONGITUDE" &&
-        k !== "AGENTID" &&
-        k !== "AGENTNAME" &&
-        k !== "rowIndex" &&
-        k !== "status"
-      ) {
-        RESET_FIELDS.push(k);
-      }
-    });
-
-    const updates = {};
-
-    RESET_FIELDS.forEach(k => {
-      updates[k] = null;
-    });
-
-    // 2️⃣ Force safe pending state
-    Object.assign(updates, {
-      status: "PENDING",
-      finalized: false,
-      forceReopen: true,
-      reopenedAt: new Date().toISOString()
-    });
-
-    // 3️⃣ Apply LIGHT update
-    await update(ref(db, `tasks/${taskKey}`), updates);
-
-    // 4️⃣ Update local cache
-    const cached = getCachedTasks() || [];
-    const idx = cached.findIndex(t => t._key === taskKey);
-
-    if (idx !== -1) {
-      cached[idx] = {
-        ...cached[idx],
-        ...updates
-      };
-      setCachedTasks(cached);
-    }
-
-    alert("✅ Task reset to pending");
-
-    refreshDashboard();
-    loadTasks("PENDING");
-
-  } catch (err) {
-    console.error(err);
-    alert("Failed to reset task");
-  } finally {
-    hideLoader();
-  }
-};
-  
-window.showCompletedTasks = function () {
-  // ✅ STEP 4
-  searchWrapper.style.display = "block";
-  baFilters.style.display = "block";
-
-  MAP_VISIBLE = false;
-  FILTER_DRIVER = null;
-
-  mapContainer.style.display = "none";
-  taskList.style.display = "block";
-
-  loadTasks("COMPLETED");
-};
-
-  
-window.forceRefresh = async function () {
-  clearTaskCache();
-  showLoader("Force refreshing all data…");
-
-  try {
-    await loadDriverSnapshot(); // ✅ snapshot instead
-    await refreshDashboard();
-    await loadTasks(CURRENT_STATUS || "PENDING");
-  } finally {
-    hideLoader();
-  }
-};
-
-window.softRefresh = async function () {
-  showLoader("Refreshing data…");
-
-  try {
-    // 1️⃣ Always refresh counters (cheap)
-    await refreshDashboard();
-
-    // 2️⃣ Reload current page only
-    if (CURRENT_STATUS && window.__SNAPSHOT_TASKS__) {
-      await loadAdminPageFromSnapshot(CURRENT_STATUS);
-    }
-
-    // 3️⃣ Live Map only if visible
-    if (MAP_VISIBLE) {
-      buildTaskStatsFromSnapshot();
-      await refreshMap();
-    }
-  } finally {
-    hideLoader();
-  }
-};
-
-function getDateRangeKeys(from, to) {
-  const keys = [];
-
-  const d1 = new Date(from);
-  const d2 = new Date(to);
-
-  for (let d = new Date(d1); d <= d2; d.setDate(d.getDate() + 1)) {
-    const key = d.toLocaleDateString("en-CA", {
-      timeZone: "Asia/Manila"
-    }).replace(/-/g, "");
-
-    keys.push(key);
-  }
-
-  return keys;
-}
-  
-window.loadTasks = async function (status) {
-  CURRENT_STATUS = status;
-  taskList.innerHTML = "Loading...";
-
-
-
-  showLoader("Loading snapshot…");
-
-  const keys = getDateRangeKeys(DATE_FROM, DATE_TO);
-
-
-  let snapshotTasks = [];
-  
-  for (const key of keys) {
-    const data = await loadSnapshotTasks(key);
-    if (data) {
-      snapshotTasks = snapshotTasks.concat(data);
-    }
-  }
-
-  // ✅ STRICT MODE: NO FALLBACK
-  if (!snapshotTasks.length) {
-    window.__SNAPSHOT_TASKS__ = null;
-    showNoSnapshotMessage(DATE_FROM);
-    hideLoader();
-    return;
-  }
-
-  console.log("📦 Using snapshot range:", DATE_FROM, "to", DATE_TO);
-
-  ADMIN_TASK_IDS = snapshotTasks.map(t => t._key);
-  FILTERED_TASK_IDS = [...ADMIN_TASK_IDS];
-  ADMIN_CURRENT_PAGE = 0;
-
-  ALL_BA_FOR_DATE.clear();
-  snapshotTasks.forEach(t => {
-    if (t.BA) ALL_BA_FOR_DATE.add(t.BA);
-  });
-
-  renderGlobalBAFilters();
-
-  window.__SNAPSHOT_TASKS__ = snapshotTasks;
-
-  updateSnapshotStatusForDate(keys[keys.length - 1]); // latest date
-  updateSnapshotFreshness();
-  refreshDashboard();
-
-  await loadAdminPageFromSnapshot(status);
-  updateSnapshotFreshness();
-  hideLoader();
-};
-
-async function loadAdminPageFromSnapshot(status) {
-  if (!window.__SNAPSHOT_TASKS__) return;
-
-  let tasks = window.__SNAPSHOT_TASKS__.filter(t =>
-  t.status === "COMPLETED"
-);
-
-  // 🔍 Search filter
-  if (SEARCH_TERM) {
-    tasks = tasks.filter(t =>
-      Object.values(t).some(v =>
-        String(v || "").toLowerCase().includes(SEARCH_TERM)
+/* FILTER */
+function applyFilters() {
+  let t = [...TASKS];
+
+  if (SEARCH) {
+    t = t.filter(x =>
+      Object.values(x).some(v =>
+        String(v).toLowerCase().includes(SEARCH)
       )
     );
   }
 
-  // 🏷 BA filter
   if (FILTER_BA.size) {
-    tasks = tasks.filter(t => FILTER_BA.has(t.BA));
+    t = t.filter(x => FILTER_BA.has(x.BA));
   }
 
-  FILTERED_TASK_IDS = tasks.map(t => t._key);
+  // ✅ SORT LATEST FIRST
+  t.sort((a,b)=>
+    new Date(b.completedAt || b.createdAt || 0)
+    - new Date(a.completedAt || a.createdAt || 0)
+  );
 
-  const start = ADMIN_CURRENT_PAGE * ADMIN_PAGE_SIZE;
-  const pageTasks = tasks.slice(start, start + ADMIN_PAGE_SIZE);
+  FILTERED = t;
+  PAGE = 0;
 
-  renderAdminTasks(pageTasks);
-  renderAdminPagination();
+  renderList();
+  renderPagination();
 }
 
-function renderAdminTasks(tasks) {
-  taskList.innerHTML = "";
+/* DASHBOARD */
+function renderDashboard() {
+  doneCount.innerText = TASKS.length;
+}
 
-  if (!tasks.length) {
-    const isSearching = SEARCH_TERM && SEARCH_TERM.length > 0;
-    const hasMorePages =
-      (ADMIN_CURRENT_PAGE + 1) * ADMIN_PAGE_SIZE < FILTERED_TASK_IDS.length;
+/* LIST */
+function renderList() {
 
-    if (isSearching && hasMorePages) {
-      taskList.innerHTML = `
-        <div style="
-          padding:12px;
-          background:#fff;
-          border-radius:8px;
-          text-align:center;
-          font-size:14px;
-          color:#555;
-          box-shadow:0 0 4px rgba(0,0,0,.1);
-        ">
-          🔍 <b>No results on this page</b><br>
-          <span style="font-size:13px;">
-            Try the <b>Next</b> page →
-          </span>
-        </div>
-      `;
-    } else {
-      taskList.innerHTML = `
-        <div style="
-          padding:12px;
-          background:#fff;
-          border-radius:8px;
-          text-align:center;
-          font-size:14px;
-          color:#777;
-          box-shadow:0 0 4px rgba(0,0,0,.1);
-        ">
-          No tasks found
-        </div>
-      `;
-    }
+  const start = PAGE * PAGE_SIZE;
+  const items = FILTERED.slice(start, start+PAGE_SIZE);
 
+  if (!items.length) {
+    taskList.innerHTML = "No results";
     return;
   }
 
-  // ✅ THIS MUST BE INSIDE THE FUNCTION
-  tasks.forEach(t => {
-    const sla = getSLA(t);
-
-    const div = document.createElement("div");
-    div.className = `task ${t.status === "COMPLETED" ? "completed" : "pending"}`;
-
-    div.innerHTML = `
-      <div class="task-header">
-        <b>${t.CUSTOMERNAME || ""}</b>
-        <div class="small">${t.ADDRESS || ""}</div>
-        <div class="small">Driver: ${t.driverId || "—"}</div>
-        
-      </div>
-
-      <div class="task-details" data-task-id="${t._key}" style="display:none">
-        ${renderTaskDetails(t)}
-        ${t.status === "COMPLETED" ? renderDynamicCompletedFields(t) : ""}
-        <button onclick="loadTaskPhotos('${t._key}', this)">
-          📸 Load Photos
-        </button>
-        ${t.status === "COMPLETED" ? `
-          <button class="deleteBtn"
-            onclick="revertToPending('${t._key}')">
-            🔁 Back to Pending (Reset)
-          </button>
-        ` : ""}
-        <div class="form-actions">
-          <button class="toggleBtn" onclick="enableEdit(this)">
-            ✏ Modify Task
-          </button>
-        </div>
-      </div>
-    `;
-
-    const header = div.querySelector(".task-header");
-    const details = div.querySelector(".task-details");
-
-    header.onclick = () => {
-      details.style.display =
-        details.style.display === "none" ? "block" : "none";
-    };
-
-    taskList.appendChild(div);
-  });
-  initLazyPhotos();
+  taskList.innerHTML = items.map(t => `
+    <div class="task">
+      <b>${t.CUSTOMERNAME || ""}</b>
+      <div class="small">${t.ADDRESS || ""}</div>
+      <div class="small">Driver: ${t.driverId || "—"}</div>
+    </div>
+  `).join("");
 }
 
-window.enableEdit = function (btn) {
-  const details = btn.closest(".task-details");
-  const fields = details.querySelectorAll("input, textarea, select");
+/* PAGINATION */
+function renderPagination() {
+  const total = Math.ceil(FILTERED.length / PAGE_SIZE);
 
-  fields.forEach(el => {
-    el.dataset.original = el.value;
-    el.disabled = false;
-  });
-
-  details.querySelector(".form-actions").innerHTML = `
-    <button class="toggleBtn" onclick="saveEdit(this)">💾 Save</button>
-    <button class="toggleBtn" style="background:#777"
-      onclick="cancelEdit(this)">❌ Cancel</button>
+  pagination.innerHTML = `
+    <button ${PAGE===0?"disabled":""} onclick="prev()">Prev</button>
+    Page ${PAGE+1} / ${total}
+    <button ${PAGE>=total-1?"disabled":""} onclick="next()">Next</button>
   `;
-};
-  
-window.cancelEdit = function (btn) {
-  const details = btn.closest(".task-details");
-  const fields = details.querySelectorAll("input, textarea, select");
+}
 
-  fields.forEach(el => {
-    el.value = el.dataset.original;
-    el.disabled = true;
-  });
+function prev(){ PAGE--; renderList(); renderPagination(); }
+function next(){ PAGE++; renderList(); renderPagination(); }
 
-  details.querySelector(".form-actions").innerHTML = `
-    <button class="toggleBtn" onclick="enableEdit(this)">
-      ✏ Modify Task
-    </button>
-  `;
-};
+/* BA FILTER */
+function renderBA() {
+  baFilters.innerHTML = [...ALL_BA].map(ba => `
+    <label>
+      <input type="checkbox" value="${ba}"
+      onchange="toggleBA('${ba}', this.checked)">
+      ${ba}
+    </label>
+  `).join(" ");
+}
 
-window.loadTaskPhotos = async function (taskId, btn) {
-  if (btn.dataset.loaded === "1") return;
+function toggleBA(ba, checked) {
+  checked ? FILTER_BA.add(ba) : FILTER_BA.delete(ba);
+  applyFilters();
+}
 
-  btn.dataset.loaded = "1";
-  btn.disabled = true;
-  btn.innerText = "Loading photos…";
-
-  const snap = await get(ref(db, `tasks/${taskId}`));
-  if (!snap.exists()) {
-    btn.innerText = "No photos";
-    return;
-  }
-
-  const t = snap.val();
-  const parent = btn.parentElement;
-
-  // 🔹 Create container
-  const photoContainer = document.createElement("div");
-  photoContainer.style.cssText = `
-    display:grid;
-    grid-template-columns:repeat(auto-fill, minmax(120px,1fr));
-    gap:8px;
-    margin-top:10px;
-  `;
-
-  let hasPhoto = false;
-
-  [1,2,3].forEach(i => {
-    const url = t[`photo${i}Url`];
-    if (!url) return;
-
-    hasPhoto = true;
-
-    const img = document.createElement("img");
-    img.src = url;
-    img.style.cssText = `
-      width:100%;
-      aspect-ratio:1/1;
-      object-fit:cover;
-      border-radius:6px;
-      border:2px solid #28a745;
-      cursor:pointer;
-    `;
-    img.onclick = () => window.open(url, "_blank");
-
-    photoContainer.appendChild(img);
-  });
-
-  if (!hasPhoto) {
-    btn.innerText = "No photos";
-    return;
-  }
-
-  // 🔥 Append instead of replacing
-  btn.insertAdjacentElement("afterend", photoContainer);
-
-  btn.innerText = "Photos Loaded";
+/* SEARCH */
+searchBox.oninput = e => {
+  SEARCH = e.target.value.toLowerCase();
+  applyFilters();
 };
 
-  window.saveEdit = async function (btn) {
-  const details = btn.closest(".task-details");
-  const taskId = details.dataset.taskId;
+/* DATE KEYS */
+function getDateKeys(from,to){
+  const arr=[];
+  let d=new Date(from);
+  const end=new Date(to);
 
-  showLoader("Saving changes…");
-
-  try {
-    // 1️⃣ Read original task (source of truth)
-    const snap = await get(ref(db, `tasks/${taskId}`));
-    if (!snap.exists()) {
-      alert("Task not found");
-      return;
-    }
-
-    const original = snap.val();
-
-    // 2️⃣ Allowlist editable fields
-    const EDITABLE_FIELDS = [
-      "driverId",
-      "JOBTYPE",
-      "BA",
-      "DMZ",
-      "MRU",
-      "SEQUENCE",
-      "METERNUMBER",
-      "ACCOUNTNUMBER",
-      "CUSTOMERNAME",
-      "ADDRESS",
-      "ZIPCODE",
-      "LATITUDE",
-      "LONGITUDE",
-      "deliveryType"
-    ];
-
-    const fields = details.querySelectorAll("input, textarea, select");
-    const payload = {};
-
-    fields.forEach(el => {
-      const key = el.dataset.field;
-      if (!EDITABLE_FIELDS.includes(key)) return;
-
-      payload[key] = el.value;
-      el.disabled = true;
-    });
-
-    // 3️⃣ Preserve critical fields (ABSOLUTE)
-    payload.createdAt = original.createdAt;
-    payload.status = original.status;
-    payload.finalized = original.finalized || false;
-
-    // 4️⃣ Handle agent name safely
-    if (payload.driverId && DRIVER_CACHE[payload.driverId]) {
-      payload.AGENTID = payload.driverId;
-      payload.AGENTNAME = DRIVER_CACHE[payload.driverId].name || "";
-    } else {
-      payload.AGENTID = "";
-      payload.AGENTNAME = "";
-    }
-
-    // 5️⃣ Update Firebase (light write)
-    await update(ref(db, `tasks/${taskId}`), payload);
-
-    // 6️⃣ Update LOCAL CACHE only (NO refetch)
-    const cached = getCachedTasks() || [];
-    const idx = cached.findIndex(t => t._key === taskId);
-
-    if (idx !== -1) {
-      cached[idx] = {
-        ...cached[idx],
-        ...payload
-      };
-      setCachedTasks(cached);
-    }
-
-    alert("✅ Task updated");
-
-    // 7️⃣ Restore UI
-    details.querySelector(".form-actions").innerHTML = `
-      <button class="toggleBtn" onclick="enableEdit(this)">
-        ✏ Modify Task
-      </button>
-    `;
-
-    refreshDashboard();
-    loadTasks(CURRENT_STATUS);
-
-  } catch (err) {
-    console.error(err);
-    alert("Failed to save task");
-  } finally {
-    hideLoader();
+  while(d<=end){
+    arr.push(d.toISOString().slice(0,10).replace(/-/g,""));
+    d.setDate(d.getDate()+1);
   }
-};
-  
-/* ===== LIVE MAP ===== */
-let map, markers={};
-
-window.toggleLiveMap = async function () {
-  
-  MAP_VISIBLE = !MAP_VISIBLE;
-
-  if (MAP_VISIBLE) {
-    document.getElementById("adminPagination").innerHTML = "";
-  }
-
-  mapContainer.style.display = MAP_VISIBLE ? "block" : "none";
-  taskList.style.display = MAP_VISIBLE ? "none" : "block";
-
-  // ✅ HIDE SEARCH BAR IN LIVE MAP
-  searchWrapper.style.display = MAP_VISIBLE ? "none" : "block";
-
-  // Optional: also hide BA filters on map
-  baFilters.style.display = MAP_VISIBLE ? "none" : "block";
-
-  if (!MAP_VISIBLE) {
-    stopMapAutoRefresh();
-    return;
-  }
-  
-  startMapAutoRefresh();
-
-  // ✅ apply online filter immediately
-  if (SHOW_ONLINE_ONLY) {
-    refreshMap();
-  }
-
-  initMap();
-  setTimeout(() => map.invalidateSize(), 200);
-
-  buildTaskStatsFromSnapshot();
-  buildDriverBAMapFromSnapshot();
-  buildLiveMapBAFilters();
-  await refreshMap();
-};  
-  
-window.showDriverOpenTasks = function (driverId) {
-  FILTER_DRIVER = driverId;
-
-  // Exit map view
-  MAP_VISIBLE = false;
-  mapContainer.style.display = "none";
-  taskList.style.display = "block";
-
-  // Load open tasks for this driver
-  loadTasks("PENDING");
-};
-  
-function initMap(){
-  if(map) return;
-  map=L.map("map").setView([14.5995,120.9842],11);
-  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png").addTo(map);
-  refreshMap();
-}
-  
-function getDriverStatus(lastSeen) {
-  if (!lastSeen) return { label: "Unknown", color: "gray" };
-
-  const diff = Date.now() - new Date(lastSeen).getTime();
-
-  if (diff < 60000) return { label: "Active", color: "green" };
-  if (diff < 120000) return { label: "Idle", color: "orange" };
-  return { label: "Offline", color: "red" };
-}
-
-function log(msg) {
-  const box = document.getElementById("debugLog");
-  if (!box) return;
-
-  box.style.display = "block";
-  const time = new Date().toLocaleTimeString();
-  box.innerHTML += `[${time}] ${msg}<br>`;
-  box.scrollTop = box.scrollHeight;
-}
-
-function renderDriverList(statusData = {}) {
-  const list = document.getElementById("driverItems");
-  list.innerHTML = "";
-
-  const driverIds = Object.keys(DRIVER_CACHE);
-
-  driverIds.forEach(driverId => {
-    const driverInfo = DRIVER_CACHE[driverId];
-    const status = statusData[driverId] || {};
-
-    // 🔹 BA filter (based on tasks, not GPS)
-    if (!driverMatchesBA(driverId)) return;
-
-    const hasLocation =
-      status.latitude != null &&
-      status.longitude != null;
-
-    const driverStatus = getDriverStatus(status.lastSeen);
-    const stats = TASK_STATS[driverId] || { open: 0, completed: 0 };
-    // ✅ Online-only filter
-    if (SHOW_ONLINE_ONLY && driverStatus.label !== "Active") {
-      return;
-    }
-
-    const row = document.createElement("div");
-    row.style.cssText = `
-      display:flex;
-      gap:8px;
-      padding:8px 0;
-      border-bottom:1px solid #eee;
-      cursor:${hasLocation ? "pointer" : "default"};
-      align-items:flex-start;
-      opacity:${hasLocation ? "1" : "0.6"};
-    `;
-
-    row.innerHTML = `
-      <!-- STATUS DOT -->
-      <div style="
-        width:10px;
-        height:10px;
-        margin-top:4px;
-        border-radius:50%;
-        background:${driverStatus.color};
-        flex-shrink:0;
-      "></div>
-
-      <!-- DRIVER INFO -->
-      <div style="flex:1">
-        <div style="font-size:13px;font-weight:bold;">
-          ${driverInfo.name || "Unnamed Driver"}
-        </div>
-
-        <div style="font-size:12px;color:#444;">
-          📞 ${driverInfo.contact || "—"}
-        </div>
-
-        <div style="font-size:11px;color:#666;margin-top:2px;">
-          ${driverId} · ${driverStatus.label}
-          ${!hasLocation ? " · No GPS yet" : ""}
-        </div>
-
-        <div style="font-size:11px;color:#444;margin-top:4px;">
-          <span
-            style="color:orange;cursor:pointer;font-weight:bold"
-            onclick="event.stopPropagation(); showDriverOpenTasks('${driverId}')">
-            🟠 Open: ${stats.open}
-          </span>
-          |
-          <span style="color:green">
-            ✅ Done: ${stats.completed}
-          </span>
-        </div>
-      </div>
-    `;
-
-    // 🗺 Focus map ONLY if GPS exists
-    if (hasLocation) {
-      row.onclick = () => {
-        map.setView([status.latitude, status.longitude], 15);
-        markers[driverId]?.openPopup();
-      };
-    }
-
-    list.appendChild(row);
-  });
-
-  if (!list.children.length) {
-    list.innerHTML = `
-      <div style="font-size:12px;color:#888;padding:6px 0;">
-        No drivers available
-      </div>
-    `;
-  }
-}
-
-function buildTaskStatsFromSnapshot() {
-  TASK_STATS = {};
-
-  if (!window.__SNAPSHOT_TASKS__) return;
-
-  window.__SNAPSHOT_TASKS__.forEach(t => {
-    if (!t.driverId) return;
-
-    if (!TASK_STATS[t.driverId]) {
-      TASK_STATS[t.driverId] = { open: 0, completed: 0 };
-    }
-
-    if (t.status === "COMPLETED") {
-      TASK_STATS[t.driverId].completed++;
-    } else {
-      TASK_STATS[t.driverId].open++;
-    }
-  });
-}
-
-function buildDriverBAMapFromSnapshot() {
-  DRIVER_BA_MAP = {};
-
-  if (!window.__SNAPSHOT_TASKS__) return;
-
-  window.__SNAPSHOT_TASKS__.forEach(t => {
-    if (!t.driverId || !t.BA) return;
-
-    if (!DRIVER_BA_MAP[t.driverId]) {
-      DRIVER_BA_MAP[t.driverId] = [];
-    }
-
-    if (!DRIVER_BA_MAP[t.driverId].includes(t.BA)) {
-      DRIVER_BA_MAP[t.driverId].push(t.BA);
-    }
-  });
-}
-
-  
-async function refreshMap() {
-  const snap = await withTimeout(get(ref(db, "driverStatus")), 8000);
-  const data = snap.val() || {};
-
-  renderDriverList(data);
-
-  Object.entries(data).forEach(([id, d]) => {
-
-  // 🔥 BA FILTER
-  if (!driverMatchesBA(id)) {
-    if (markers[id]) {
-      map.removeLayer(markers[id]);
-      delete markers[id];
-    }
-    return;
-  }
-    if (!d.latitude || !d.longitude) return;
-
-    const pos = [d.latitude, d.longitude];
-    const status = getDriverStatus(d.lastSeen);
-    // ✅ Online-only filter (map markers)
-    if (SHOW_ONLINE_ONLY && status.label !== "Active") {
-      if (markers[id]) {
-        map.removeLayer(markers[id]);
-        delete markers[id];
-      }
-      return;
-    }
-
-    const icon = L.divIcon({
-      html: `<div style="
-        width:14px;
-        height:14px;
-        background:${status.color};
-        border-radius:50%;
-        border:2px solid white;
-      "></div>`,
-      className: ""
-    });
-
-    if (!markers[id]) {
-      markers[id] = L.marker(pos, { icon })
-        .addTo(map)
-        .bindPopup(`
-          <b>${id}</b><br>
-          Status: ${status.label}<br>
-          Last seen: ${new Date(d.lastSeen).toLocaleString()}
-        `);
-    } else {
-      markers[id].setLatLng(pos);
-      markers[id].setIcon(icon);
-    }
-  });
-
-  // 🧹 CLEANUP REMOVED DRIVERS
-  Object.keys(markers).forEach(id => {
-    if (!data[id]) {
-      map.removeLayer(markers[id]);
-      delete markers[id];
-    }
-  });
-}
-
-let MAP_REFRESH_TIMER = null;
-
-function startMapAutoRefresh() {
-  if (MAP_REFRESH_TIMER) return;
-
-  MAP_REFRESH_TIMER = setInterval(async () => {
-    if (!MAP_VISIBLE) return;
-    buildTaskStatsFromSnapshot();     // 📦 Snapshot
-  }, 60000); // 🔥 every 60 seconds
-}
-
-function stopMapAutoRefresh() {
-  if (MAP_REFRESH_TIMER) {
-    clearInterval(MAP_REFRESH_TIMER);
-    MAP_REFRESH_TIMER = null;
-  }
-}
-
-/* ===== SCROLL TO TOP BUTTON ===== */
-const scrollTopBtn = document.getElementById("scrollTopBtn");
-
-window.addEventListener("scroll", () => {
-  if (window.scrollY > 300) {
-    scrollTopBtn.style.display = "block";
-  } else {
-    scrollTopBtn.style.display = "none";
-  }
-});
-
-window.scrollToTop = function () {
-  window.scrollTo({
-    top: 0,
-    behavior: "smooth"
-  });
-};
-
-async function ensureDriverStatusNodes() {
-  const statusSnap = await get(ref(db, "driverStatus"));
-  const statusData = statusSnap.val() || {};
-
-  for (const driverId of Object.keys(DRIVER_CACHE)) {
-    if (!statusData[driverId]) {
-      console.log("➕ Creating driverStatus for", driverId);
-
-      await update(ref(db, `driverStatus/${driverId}`), {
-        lastSeen: null,
-        latitude: null,
-        longitude: null
-      });
-    }
-  }
+  return arr;
 }
 
 /* INIT */
-function setLoaderText(txt) {
-  const el = document.querySelector(".loader-text");
-  if (el) el.textContent = txt;
-}
-
-(async function init() {
-  showLoader("Loading drivers…");
-  try {
-    await loadDriverSnapshot()
-
-    // 🔥 ADD THIS
-    await ensureDriverStatusNodes();
-
-    showLoader("Loading driver config…");
-    await loadDriverUIConfig();
-
-    // showLoader("Loading dashboard…");
-    // await refreshDashboard();
-
-    showLoader("Loading tasks…");
-    await loadTasks("COMPLETED");
-  } catch (e) {
-    alert("Dashboard failed to load. Please refresh.");
-  } finally {
-    // ✅ Online-only driver toggle (Live Map)
-    const onlineToggle = document.getElementById("onlineOnlyToggle");
-    
-    if (onlineToggle) {
-      onlineToggle.addEventListener("change", e => {
-        SHOW_ONLINE_ONLY = e.target.checked;
-    
-        if (MAP_VISIBLE) {
-          refreshMap(); // 🔥 re-filter drivers + markers
-        }
-      });
-    }
-
-    await updateSnapshotFreshness(); // 🔥 run immediately
-    setInterval(updateSnapshotFreshness, 10000);
-    
-    hideLoader();
-  }
-})();
+loadTasks();
 </script>
 
-<button id="scrollTopBtn" onclick="scrollToTop()">⬆</button>
-
-<div id="debugLog" style="
-  position:fixed;
-  bottom:0;
-  left:0;
-  right:0;
-  max-height:40%;
-  overflow:auto;
-  background:#111;
-  color:#0f0;
-  font-size:11px;
-  padding:6px;
-  z-index:10000;
-  display:none;
-"></div>
 </body>
 </html>
