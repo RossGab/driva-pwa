@@ -81,7 +81,7 @@ select, input[type="date"] {
 
 <body>
 
-<h2>Manage Tasks V4.5.8-WIP</h2>
+<h2>Manage Tasks V4.6.0-WIP</h2>
 
 <button onclick="location.href='admin.html'" class="small-btn">⬅ Back</button>
 
@@ -286,12 +286,54 @@ async function loadSnapshotTasks(dateKey, retries = 2) {
   }
 }
 
+async function loadLiveTasksFromFirebase(dateKey) {
+  try {
+    const idsSnap = await get(ref(db, `tasksByDate/${dateKey}`));
+    if (!idsSnap.exists()) return [];
+
+    const ids = Object.keys(idsSnap.val());
+
+    const BATCH_SIZE = 20; // 🔥 tweak: 10–30 depending on speed
+    let results = [];
+
+    for (let i = 0; i < ids.length; i += BATCH_SIZE) {
+      const batch = ids.slice(i, i + BATCH_SIZE);
+
+      const snaps = await Promise.all(
+        batch.map(id => get(ref(db, `tasks/${id}`)))
+      );
+
+      const parsed = snaps
+        .map((snap, idx) => {
+          if (!snap.exists()) return null;
+          return {
+            _key: batch[idx],
+            ...snap.val()
+          };
+        })
+        .filter(Boolean);
+
+      results.push(...parsed);
+    }
+
+    return results;
+
+  } catch (e) {
+    console.error("🔥 Live load failed:", e);
+    return [];
+  }
+}
+
+function isTodayKey(dateKey) {
+  return dateKey === getTodayPH().replace(/-/g, "");
+}
+
 /* ===== LOAD TASKS ===== */
 async function loadTasks() {
 
-loadingBar.style.display = "block";
-if (loadingProgress) loadingProgress.style.width = "0%";
-  
+  loadingBar.style.display = "block";
+  if (loadingProgress) loadingProgress.style.width = "0%";
+
   const from = filterDateFrom.value;
   const to   = filterDateTo.value;
 
@@ -309,12 +351,20 @@ if (loadingProgress) loadingProgress.style.width = "0%";
     );
   }
 
-  let snapshotTasks = [];
+  let allTasks = [];
 
   for (let i = 0; i < dateKeys.length; i++) {
     const key = dateKeys[i];
-  
-    const result = await loadSnapshotTasks(key);
+
+    let result = [];
+
+    if (isTodayKey(key)) {
+      console.log("🔥 LIVE:", key);
+      result = await loadLiveTasksFromFirebase(key);
+    } else {
+      console.log("📦 SNAPSHOT:", key);
+      result = await loadSnapshotTasks(key);
+    }
 
     const progress = ((i + 1) / dateKeys.length) * 100;
     if (loadingProgress) {
@@ -323,25 +373,32 @@ if (loadingProgress) loadingProgress.style.width = "0%";
 
     result.forEach(t => {
       if (t.status !== "COMPLETED") {
-        snapshotTasks.push(t);
+        allTasks.push(t);
       }
     });
   }
 
-  // 🔥 STORE IN MEMORY (IMPORTANT)
-  window.__SNAPSHOT_TASKS__ = snapshotTasks;
-  
+  // ✅ STORE DATA
+  window.__SNAPSHOT_TASKS__ = allTasks;
+
   TASK_MAP = {};
-  snapshotTasks.forEach(t => {
+  allTasks.forEach(t => {
     TASK_MAP[t._key] = t;
   });
 
+  // 🔥 RESET SELECTION STATE
+  SELECTED_IDS.clear();
+  checkAll.checked = false;
+
   LAST_FILTER_HASH = "";
 
-  if (!window.__FILTER_BUILT__) {   buildFilterLists();   window.__FILTER_BUILT__ = true; }
+  buildFilterLists(); // always rebuild on new load
+
   applyFilters();
+
   loadingBar.style.display = "none";
 }
+
 
 checkAll.onchange = () => {
   if (checkAll.checked) {
@@ -652,17 +709,40 @@ async function bulkDelete(ids) {
     });
   }
 
-  loadTasks();
+  // 🔥 LOCAL DELETE (instant UI)
+
+  ids.forEach(id => {
+    delete TASK_MAP[id];
+  });
+  
+  window.__SNAPSHOT_TASKS__ =
+    window.__SNAPSHOT_TASKS__.filter(t => !ids.includes(t._key));
+  
+  SELECTED_IDS.clear();
+  
+  applyFilters();
+  
 }
 
 async function bulkTransfer(ids) {
   const newDriver = prompt("Enter NEW DRIVER ID:");
   if(!newDriver) return;
 
-  const updates={};
-  ids.forEach(id=>updates[`tasks/${id}/driverId`]=newDriver);
-  await update(ref(db),updates);
-  loadTasks();
+  const updates = {};
+  ids.forEach(id => updates[`tasks/${id}/driverId`] = newDriver);
+
+  await update(ref(db), updates);
+
+  // 🔥 LOCAL UPDATE (instant UI)
+  ids.forEach(id => {
+    if (TASK_MAP[id]) {
+      TASK_MAP[id].driverId = newDriver;
+    }
+  });
+
+  SELECTED_IDS.clear();
+
+  applyFilters();
 }
 
 
@@ -685,11 +765,25 @@ const REQUIRED_HEADERS = [
 ];
 
 function appendTasksToLocalState(newTasks) {
-  const existing = new Set(TASKS.map(t => t._key));
+  const existing = new Set(
+    (window.__SNAPSHOT_TASKS__ || []).map(t => t._key)
+  );
+
   const unique = newTasks.filter(t => !existing.has(t._key));
 
-  TASKS.push(...unique);
-  if (!window.__FILTER_BUILT__) {   buildFilterLists();   window.__FILTER_BUILT__ = true; }
+  // 🔥 inject into main dataset
+  window.__SNAPSHOT_TASKS__.push(...unique);
+
+  // 🔥 update TASK_MAP too (important for delete/transfer)
+  unique.forEach(t => {
+    TASK_MAP[t._key] = t;
+  });
+
+  // rebuild filters (so new drivers/jobtypes appear)
+  window.__FILTER_BUILT__ = false;
+  buildFilterLists();
+  window.__FILTER_BUILT__ = true;
+
   applyFilters();
 }
 
