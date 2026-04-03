@@ -81,7 +81,7 @@ select, input[type="date"] {
 
 <body>
 
-<h2>Manage Tasks V4.6.1.15-WIP</h2>
+<h2>Manage Tasks V4.6.1.16-WIP</h2>
 
 <button onclick="location.href='admin.html'" class="small-btn">⬅ Back</button>
 
@@ -565,10 +565,15 @@ allTasks.forEach(t => {
 
 
 checkAll.onchange = () => {
+  const start = CURRENT_PAGE * PAGE_SIZE;
+  const end = start + PAGE_SIZE;
+
+  const pageData = FILTERED_TASKS.slice(start, end);
+
   if (checkAll.checked) {
-    SELECTED_IDS = new Set(FILTERED_TASKS.map(t => t._key));
+    pageData.forEach(t => SELECTED_IDS.add(t._key));
   } else {
-    SELECTED_IDS.clear();
+    pageData.forEach(t => SELECTED_IDS.delete(t._key));
   }
 
   renderCurrentPage();
@@ -676,6 +681,11 @@ function applyFilters() {
     CURRENT_PAGE = 0; // reset ONLY when filters change
     LAST_FILTER_HASH = filterHash;
   }
+
+  if (filterHash === LAST_FILTER_HASH) {
+  renderCurrentPage();
+  return;
+}
 
   let base = [];
 
@@ -792,7 +802,6 @@ function renderTasks(data) {
       <div style="display:flex;justify-content:space-between;">
         <input type="checkbox"
           data-id="${t._key}"
-          ${SELECTED_IDS.has(t._key) ? "checked" : ""}
           onchange="toggleSelect(this)">
         
         <div style="font-size:11px;color:#777;">
@@ -814,10 +823,18 @@ function renderTasks(data) {
   });
 
   container.appendChild(frag);
+
+  // 🔥 sync checkbox state (FAST)
+const checkboxes = container.querySelectorAll("input[type=checkbox]");
+checkboxes.forEach(cb => {
+  cb.checked = SELECTED_IDS.has(cb.dataset.id);
+});
   // sync header checkbox
+  const pageIds = data.map(t => t._key);
+  
   checkAll.checked =
-    FILTERED_TASKS.length > 0 &&
-    SELECTED_IDS.size === FILTERED_TASKS.length;
+    pageIds.length > 0 &&
+    pageIds.every(id => SELECTED_IDS.has(id));
   checkSelection();
 }
 
