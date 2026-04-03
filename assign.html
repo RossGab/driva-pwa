@@ -81,7 +81,7 @@ select, input[type="date"] {
 
 <body>
 
-<h2>Manage Tasks V4.6.1.1-WIP</h2>
+<h2>Manage Tasks V4.6.1.2-WIP</h2>
 
 <button onclick="location.href='admin.html'" class="small-btn">⬅ Back</button>
 
@@ -341,7 +341,7 @@ function isTodayKey(dateKey) {
 
 /* ===== LOAD TASKS ===== */
 async function loadTasks() {
-
+  document.getElementById("taskList").innerHTML = "";
   loadingBar.style.display = "block";
   if (loadingProgress) loadingProgress.style.width = "0%";
 
@@ -409,6 +409,8 @@ async function loadTasks() {
         allTasks.push(t);
       }
     });
+    window.__SNAPSHOT_TASKS__ = allTasks;
+    applyFilters();
   }
 
   // ✅ STORE DATA
