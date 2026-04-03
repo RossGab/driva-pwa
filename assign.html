@@ -81,7 +81,7 @@ select, input[type="date"] {
 
 <body>
 
-<h2>Manage Tasks V4.6.1.22-WIP</h2>
+<h2>Manage Tasks V4.6.1.23-WIP</h2>
 
 <button onclick="location.href='admin.html'" class="small-btn">⬅ Back</button>
 
@@ -484,6 +484,7 @@ for (const key of liveKeys) {
   });
 }
   window.__SNAPSHOT_TASKS__ = allTasks;
+    applyFilters(); // 🔥 THIS IS WHAT YOU ARE MISSING
   buildFilterLists(); // 🔥 move it here (immediate)
 
   // 🔥 INIT INDEXES
