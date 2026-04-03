@@ -81,7 +81,7 @@ select, input[type="date"] {
 
 <body>
 
-<h2>Manage Tasks V4.6.1.7-WIP</h2>
+<h2>Manage Tasks V4.6.1.8-WIP</h2>
 
 <button onclick="location.href='admin.html'" class="small-btn">⬅ Back</button>
 
@@ -370,7 +370,8 @@ function isTodayKey(dateKey) {
   return dateKey === getTodayPH().replace(/-/g, "");
 }
 
-/* ===== LOAD TASKS ===== */async function loadTasks() {
+/* ===== LOAD TASKS ===== */
+async function loadTasks() {
   if (loadBtn.disabled) return;
 
   loadBtn.disabled = true;
@@ -465,9 +466,15 @@ for (const key of liveKeys) {
 
   LAST_FILTER_HASH = "";
 
-  buildFilterLists(); // always rebuild on new load
-
-  applyFilters();
+  // 🔥 PREVENT UI FREEZE
+  setTimeout(() => {
+    buildFilterLists();
+  
+    setTimeout(() => {
+      applyFilters();
+    }, 0);
+  
+  }, 0);
 
   
 
@@ -509,13 +516,18 @@ function buildFilterLists() {
   const dmzs = new Set();
   const mrus = new Set();
 
-  (window.__SNAPSHOT_TASKS__ || []).forEach(t=>{
-    if(t.driverId) drivers.add(t.driverId);
-    if(t.JOBTYPE) jobs.add(t.JOBTYPE);
-    if(t.BA) bas.add(t.BA);
-    if(t.DMZ) dmzs.add(t.DMZ);
-    if(t.MRU) mrus.add(t.MRU);
-  });
+  const data = window.__SNAPSHOT_TASKS__ || [];
+  const MAX = 3000; // 🔥 limit ONLY for dropdown scan
+
+  for (let i = 0; i < data.length && i < MAX; i++) {
+    const t = data[i];
+
+    if (t.driverId) drivers.add(t.driverId);
+    if (t.JOBTYPE) jobs.add(t.JOBTYPE);
+    if (t.BA) bas.add(t.BA);
+    if (t.DMZ) dmzs.add(t.DMZ);
+    if (t.MRU) mrus.add(t.MRU);
+  }
 
   filterDriver.innerHTML = `<option value="">All Drivers</option>`;
   filterJob.innerHTML = `<option value="">All Job Types</option>`;
@@ -523,11 +535,11 @@ function buildFilterLists() {
   filterDMZ.innerHTML = `<option value="">All DMZ</option>`;
   filterMRU.innerHTML = `<option value="">All MRU</option>`;
 
-  drivers.forEach(v=>filterDriver.innerHTML += `<option>${v}</option>`);
-  jobs.forEach(v=>filterJob.innerHTML += `<option>${v}</option>`);
-  bas.forEach(v=>filterBA.innerHTML += `<option>${v}</option>`);
-  dmzs.forEach(v=>filterDMZ.innerHTML += `<option>${v}</option>`);
-  mrus.forEach(v=>filterMRU.innerHTML += `<option>${v}</option>`);
+  drivers.forEach(v => filterDriver.innerHTML += `<option>${v}</option>`);
+  jobs.forEach(v => filterJob.innerHTML += `<option>${v}</option>`);
+  bas.forEach(v => filterBA.innerHTML += `<option>${v}</option>`);
+  dmzs.forEach(v => filterDMZ.innerHTML += `<option>${v}</option>`);
+  mrus.forEach(v => filterMRU.innerHTML += `<option>${v}</option>`);
 }
 function renderPaginationControls() {
   const el = document.getElementById("paginationControls");
@@ -571,75 +583,62 @@ window.nextPage = function () {
 
 function applyFilters() {
 
-  const hash = JSON.stringify({
-  d1: filterDateFrom.value,
-  d2: filterDateTo.value,
-  dr: filterDriver.value,
-  j: filterJob.value,
-  ba: filterBA.value,
-  dmz: filterDMZ.value,
-  mru: filterMRU.value,
-  s: SEARCH_TERM
-});
+  const source = window.__SNAPSHOT_TASKS__ || [];
+  const result = [];
 
-if (hash === LAST_FILTER_HASH) return;
-LAST_FILTER_HASH = hash;
-  
-  let data = window.__SNAPSHOT_TASKS__ || [];
+  let i = 0;
+  const CHUNK = 1000;
 
-  /* ===== DATE FILTER ===== */
-  if (filterDateFrom.value || filterDateTo.value) {
-    const from = filterDateFrom.value || "0000-00-00";
-    const to   = filterDateTo.value   || "9999-99-99";
+  function processChunk() {
 
-    data = data.filter(t => {
-      const d = normalizeDate(t.createdAt);
-      return d && d >= from && d <= to;
-    });
+    const end = Math.min(i + CHUNK, source.length);
+
+    for (; i < end; i++) {
+      const t = source[i];
+
+      // ===== DATE FILTER =====
+      if (filterDateFrom.value || filterDateTo.value) {
+        const from = filterDateFrom.value || "0000-00-00";
+        const to   = filterDateTo.value   || "9999-99-99";
+
+        const d = normalizeDate(t.createdAt);
+        if (!d || d < from || d > to) continue;
+      }
+
+      // ===== DROPDOWNS =====
+      if (filterDriver.value && t.driverId !== filterDriver.value) continue;
+      if (filterJob.value && t.JOBTYPE !== filterJob.value) continue;
+      if (filterBA.value && t.BA !== filterBA.value) continue;
+      if (filterDMZ.value && t.DMZ !== filterDMZ.value) continue;
+      if (filterMRU.value && t.MRU !== filterMRU.value) continue;
+
+      // ===== SEARCH (optimized) =====
+      if (SEARCH_TERM) {
+        const haystack = (
+          (t.CUSTOMERNAME || "") +
+          (t.ADDRESS || "") +
+          (t.ACCOUNTNUMBER || "") +
+          (t.METERNUMBER || "") +
+          (t.driverId || "")
+        ).toLowerCase();
+
+        if (!haystack.includes(SEARCH_TERM)) continue;
+      }
+
+      result.push(t);
+    }
+
+    if (i < source.length) {
+      setTimeout(processChunk, 0); // 🔥 prevent freeze
+    } else {
+      FILTERED_TASKS = result;
+      CURRENT_PAGE = 0;
+      renderCurrentPage();
+      renderPaginationControls();
+    }
   }
 
-  /* ===== DROPDOWN FILTERS ===== */
-  if (filterDriver.value)
-    data = data.filter(t => t.driverId === filterDriver.value);
-
-  if (filterJob.value)
-    data = data.filter(t => t.JOBTYPE === filterJob.value);
-
-  if (filterBA.value)
-    data = data.filter(t => t.BA === filterBA.value);
-
-  if (filterDMZ.value)
-    data = data.filter(t => t.DMZ === filterDMZ.value);
-
-  if (filterMRU.value)
-    data = data.filter(t => t.MRU === filterMRU.value);
-
-  /* ===== SEARCH FILTER ===== */
-  if (SEARCH_TERM) {
-    data = data.filter(t => {
-      const haystack = [
-        t.CUSTOMERNAME,
-        t.ADDRESS,
-        t.ACCOUNTNUMBER,
-        t.METERNUMBER,
-        t.JOBTYPE,
-        t.BA,
-        t.DMZ,
-        t.MRU,
-        t.driverId
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
-
-      return haystack.includes(SEARCH_TERM);
-    });
-  }
-
-  FILTERED_TASKS = data;
-  CURRENT_PAGE = 0;
-  renderCurrentPage();
-  renderPaginationControls();
+  processChunk();
 }
 
 function renderCurrentPage() {
