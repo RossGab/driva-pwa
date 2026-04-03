@@ -3,16 +3,19 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Task Viewer v2.0</title>
+<title>Task Viewer</title>
 
 <style>
-body {
-  font-family: Arial;
-  background:#f3f3f3;
-  padding:10px;
+body { font-family: Arial; background:#f3f3f3; padding:10px; }
+
+.admin-header {
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  margin-bottom:12px;
 }
 
-h1 { margin:0; }
+.admin-logo { height:60px; }
 
 .dashboard {
   display:flex;
@@ -27,22 +30,15 @@ h1 { margin:0; }
   border-radius:10px;
   text-align:center;
   box-shadow:0 0 4px rgba(0,0,0,.1);
+  border-top:5px solid green;
 }
 
-.big {
-  font-size:32px;
-  font-weight:bold;
-}
+.big { font-size:28px; font-weight:bold; }
 
-.actions {
-  display:flex;
-  gap:8px;
-  margin-bottom:12px;
-}
+.actions { display:flex; gap:8px; margin-bottom:12px; }
 
 button {
-  flex:1;
-  padding:12px;
+  padding:10px;
   border:none;
   border-radius:6px;
   cursor:pointer;
@@ -59,10 +55,9 @@ button {
   border-left:5px solid green;
 }
 
-.small {
-  font-size:13px;
-  color:#555;
-}
+.task-header { cursor:pointer; }
+
+.small { font-size:13px; color:#555; }
 
 #searchBox {
   width:100%;
@@ -76,16 +71,19 @@ button {
 
 <body>
 
-<h1>Task Viewer</h1>
+<div class="admin-header">
+  <div style="display:flex;align-items:center;gap:10px;">
+    <img src="./logo.jpg" class="admin-logo">
+    <h2>Task Viewer (Completed Only)</h2>
+  </div>
 
-<!-- DATE -->
-<div style="margin-bottom:10px;">
-  <input type="date" id="dateFrom">
-  to
-  <input type="date" id="dateTo">
+  <div>
+    <input type="date" id="dateFrom">
+    to
+    <input type="date" id="dateTo">
+  </div>
 </div>
 
-<!-- DASHBOARD -->
 <div class="dashboard">
   <div class="card">
     <div class="big" id="doneCount">0</div>
@@ -93,21 +91,13 @@ button {
   </div>
 </div>
 
-<!-- ACTION -->
 <div class="actions">
-  <button class="doneBtn" onclick="loadTasks()">✅ Refresh</button>
+  <button class="doneBtn" onclick="loadTasks()">🔄 Refresh</button>
 </div>
 
-<!-- SEARCH -->
 <input id="searchBox" placeholder="Search...">
 
-<!-- BA FILTER -->
-<div id="baFilters"></div>
-
-<!-- LIST -->
 <div id="taskList"></div>
-
-<!-- PAGINATION -->
 <div id="pagination"></div>
 
 <script>
@@ -123,25 +113,22 @@ function getTodayPH() {
 let DATE_FROM = getTodayPH();
 let DATE_TO = getTodayPH();
 
-document.getElementById("dateFrom").value = DATE_FROM;
-document.getElementById("dateTo").value = DATE_TO;
+dateFrom.value = DATE_FROM;
+dateTo.value = DATE_TO;
 
 let TASKS = [];
 let FILTERED = [];
 let PAGE = 0;
 const PAGE_SIZE = 200;
 let SEARCH = "";
-let FILTER_BA = new Set();
-let ALL_BA = new Set();
 
-/* LOAD SNAPSHOT */
+/* LOAD */
 async function loadTasks() {
 
   DATE_FROM = dateFrom.value;
   DATE_TO = dateTo.value;
 
   const keys = getDateKeys(DATE_FROM, DATE_TO);
-
   let all = [];
 
   for (const k of keys) {
@@ -160,19 +147,9 @@ async function loadTasks() {
     } catch {}
   }
 
-  if (!all.length) {
-    taskList.innerHTML = "No data";
-    return;
-  }
-
   // ✅ ONLY COMPLETED
   TASKS = all.filter(t => t.status === "COMPLETED");
 
-  // collect BA
-  ALL_BA.clear();
-  TASKS.forEach(t => t.BA && ALL_BA.add(t.BA));
-
-  renderBA();
   applyFilters();
   renderDashboard();
 }
@@ -189,11 +166,7 @@ function applyFilters() {
     );
   }
 
-  if (FILTER_BA.size) {
-    t = t.filter(x => FILTER_BA.has(x.BA));
-  }
-
-  // ✅ SORT LATEST FIRST
+  // SORT LATEST FIRST
   t.sort((a,b)=>
     new Date(b.completedAt || b.createdAt || 0)
     - new Date(a.completedAt || a.createdAt || 0)
@@ -222,13 +195,38 @@ function renderList() {
     return;
   }
 
-  taskList.innerHTML = items.map(t => `
-    <div class="task">
-      <b>${t.CUSTOMERNAME || ""}</b>
-      <div class="small">${t.ADDRESS || ""}</div>
-      <div class="small">Driver: ${t.driverId || "—"}</div>
-    </div>
-  `).join("");
+  taskList.innerHTML = "";
+
+  items.forEach(t => {
+
+    const div = document.createElement("div");
+    div.className = "task";
+
+    div.innerHTML = `
+      <div class="task-header">
+        <b>${t.CUSTOMERNAME || ""}</b>
+        <div class="small">${t.ADDRESS || ""}</div>
+        <div class="small">Driver: ${t.driverId || "—"}</div>
+      </div>
+
+      <div class="task-details" style="display:none">
+        <div class="small"><b>Account:</b> ${t.ACCOUNTNUMBER || ""}</div>
+        <div class="small"><b>Meter:</b> ${t.METERNUMBER || ""}</div>
+        <div class="small"><b>BA:</b> ${t.BA || ""}</div>
+        <div class="small"><b>Job Type:</b> ${t.JOBTYPE || ""}</div>
+      </div>
+    `;
+
+    const header = div.querySelector(".task-header");
+    const details = div.querySelector(".task-details");
+
+    header.onclick = () => {
+      details.style.display =
+        details.style.display === "none" ? "block" : "none";
+    };
+
+    taskList.appendChild(div);
+  });
 }
 
 /* PAGINATION */
@@ -245,29 +243,13 @@ function renderPagination() {
 function prev(){ PAGE--; renderList(); renderPagination(); }
 function next(){ PAGE++; renderList(); renderPagination(); }
 
-/* BA FILTER */
-function renderBA() {
-  baFilters.innerHTML = [...ALL_BA].map(ba => `
-    <label>
-      <input type="checkbox" value="${ba}"
-      onchange="toggleBA('${ba}', this.checked)">
-      ${ba}
-    </label>
-  `).join(" ");
-}
-
-function toggleBA(ba, checked) {
-  checked ? FILTER_BA.add(ba) : FILTER_BA.delete(ba);
-  applyFilters();
-}
-
 /* SEARCH */
 searchBox.oninput = e => {
   SEARCH = e.target.value.toLowerCase();
   applyFilters();
 };
 
-/* DATE KEYS */
+/* DATE */
 function getDateKeys(from,to){
   const arr=[];
   let d=new Date(from);
