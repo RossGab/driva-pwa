@@ -81,7 +81,7 @@ select, input[type="date"] {
 
 <body>
 
-<h2>Manage Tasks V4.6.1.6-WIP</h2>
+<h2>Manage Tasks V4.6.1.6.1-WIP</h2>
 
 <button onclick="location.href='admin.html'" class="small-btn">⬅ Back</button>
 
@@ -1000,6 +1000,12 @@ window.uploadCSV = async function(btn){
     btn.innerText = "Upload CSV";
   }
 };
+
+// 🔥 EXPOSE FUNCTIONS TO HTML BUTTONS
+window.loadTasks = loadTasks;
+window.openBulkActions = openBulkActions;
+window.uploadCSV = uploadCSV;
+window.toggleSelect = toggleSelect;
 
 </script>
 </body>
