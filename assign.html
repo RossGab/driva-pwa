@@ -81,7 +81,7 @@ select, input[type="date"] {
 
 <body>
 
-<h2>Manage Tasks V4.6.1.17-WIP</h2>
+<h2>Manage Tasks V4.6.1.18-WIP</h2>
 
 <button onclick="location.href='admin.html'" class="small-btn">⬅ Back</button>
 
@@ -677,13 +677,10 @@ function applyFilters() {
 
   const prevPage = CURRENT_PAGE;
 
-  if (filterHash === LAST_FILTER_HASH) {
-  renderCurrentPage();
-  return;
-}
-
-CURRENT_PAGE = 0;
-LAST_FILTER_HASH = filterHash;
+  if (filterHash !== LAST_FILTER_HASH) {
+    CURRENT_PAGE = 0;
+    LAST_FILTER_HASH = filterHash;
+  }
 
   let base = [];
 
