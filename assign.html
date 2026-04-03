@@ -81,7 +81,7 @@ select, input[type="date"] {
 
 <body>
 
-<h2>Manage Tasks V4.6.1.10-WIP</h2>
+<h2>Manage Tasks V4.6.1.11-WIP</h2>
 
 <button onclick="location.href='admin.html'" class="small-btn">⬅ Back</button>
 
@@ -582,7 +582,7 @@ function renderPaginationControls() {
 
     <span style="margin:0 12px;">
       Page ${CURRENT_PAGE + 1} of ${totalPages}
-      (${FILTERED_TASKS.length} tasks)
+      (${window.__TOTAL_MATCHES__ || 0} tasks)
     </span>
 
     <button ${CURRENT_PAGE >= totalPages - 1 ? "disabled" : ""}
@@ -593,7 +593,7 @@ function renderPaginationControls() {
 window.prevPage = function () {
   if (CURRENT_PAGE > 0) {
     CURRENT_PAGE--;
-    renderCurrentPage();
+    applyFilters(); // 🔥 IMPORTANT
   }
 };
 
@@ -601,7 +601,7 @@ window.nextPage = function () {
   const totalPages = Math.ceil((window.__TOTAL_MATCHES__ || 0) / PAGE_SIZE);
   if (CURRENT_PAGE < totalPages - 1) {
     CURRENT_PAGE++;
-    renderCurrentPage();
+    applyFilters(); // 🔥 IMPORTANT
   }
 };
 
@@ -668,13 +668,7 @@ function applyFilters() {
 }
 
 function renderCurrentPage() {
-  const start = CURRENT_PAGE * PAGE_SIZE;
-  const end = start + PAGE_SIZE;
-
-  const pageData = FILTERED_TASKS.slice(start, end);
-
-  renderTasks(pageData);
-  renderPaginationControls();
+  renderTasks(FILTERED_TASKS); // already paginated
 }
 
 window.toggleSelect = function (el) {
