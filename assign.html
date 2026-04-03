@@ -81,7 +81,7 @@ select, input[type="date"] {
 
 <body>
 
-<h2>Manage Tasks V4.6.1.24-WIP</h2>
+<h2>Manage Tasks V4.6.1.25-WIP</h2>
 
 <button onclick="location.href='admin.html'" class="small-btn">⬅ Back</button>
 
@@ -484,7 +484,6 @@ for (const key of liveKeys) {
   });
 }
   window.__SNAPSHOT_TASKS__ = allTasks;
-    applyFilters(); // 🔥 THIS IS WHAT YOU ARE MISSING
   buildFilterLists(); // 🔥 move it here (immediate)
 
   // 🔥 INIT INDEXES
@@ -494,44 +493,59 @@ window.__TASKS_BY_JOB__ = {};
 
 TASK_MAP = {};
 
-allTasks.forEach(t => {
-  TASK_MAP[t._key] = t;
+let i = 0;
+const CHUNK = 500;
 
-  // ===== CACHE =====
-  let d = normalizeDate(t.createdAt);
+function buildChunk() {
+  const end = Math.min(i + CHUNK, allTasks.length);
 
-// 🔥 fallback to filter date if missing
-if (!d) {
-  d = filterDateFrom.value;
-}
+  for (; i < end; i++) {
+    const t = allTasks[i];
 
-t._date = d;
+    TASK_MAP[t._key] = t;
 
-if (!window.__TASKS_BY_DATE__[d]) {
-  window.__TASKS_BY_DATE__[d] = [];
-}
-window.__TASKS_BY_DATE__[d].push(t);
+    let d = normalizeDate(t.createdAt);
+    if (!d) d = filterDateFrom.value;
 
-t._search = Object.values(t)
-  .map(v => (v || "").toString().toLowerCase())
-  .join(" ");
+    t._date = d;
 
-  // ===== DRIVER INDEX =====
-  if (t.driverId) {
-    if (!window.__TASKS_BY_DRIVER__[t.driverId]) {
-      window.__TASKS_BY_DRIVER__[t.driverId] = [];
+    if (!window.__TASKS_BY_DATE__[d]) {
+      window.__TASKS_BY_DATE__[d] = [];
     }
-    window.__TASKS_BY_DRIVER__[t.driverId].push(t);
+    window.__TASKS_BY_DATE__[d].push(t);
+
+    // ✅ optimized search
+    t._search =
+      (t.CUSTOMERNAME || "") + " " +
+      (t.ADDRESS || "") + " " +
+      (t.ACCOUNTNUMBER || "") + " " +
+      (t.METERNUMBER || "");
+
+    t._search = t._search.toLowerCase();
+
+    if (t.driverId) {
+      if (!window.__TASKS_BY_DRIVER__[t.driverId]) {
+        window.__TASKS_BY_DRIVER__[t.driverId] = [];
+      }
+      window.__TASKS_BY_DRIVER__[t.driverId].push(t);
+    }
+
+    if (t.JOBTYPE) {
+      if (!window.__TASKS_BY_JOB__[t.JOBTYPE]) {
+        window.__TASKS_BY_JOB__[t.JOBTYPE] = [];
+      }
+      window.__TASKS_BY_JOB__[t.JOBTYPE].push(t);
+    }
   }
 
-  // ===== JOB INDEX =====
-  if (t.JOBTYPE) {
-    if (!window.__TASKS_BY_JOB__[t.JOBTYPE]) {
-      window.__TASKS_BY_JOB__[t.JOBTYPE] = [];
-    }
-    window.__TASKS_BY_JOB__[t.JOBTYPE].push(t);
+  if (i < allTasks.length) {
+    setTimeout(buildChunk, 0);
+  } else {
+    applyFilters(); // run AFTER indexing
   }
-});
+}
+
+buildChunk();
 
   applyFilters(); // ✅ AFTER indexes are ready
 
@@ -716,61 +730,60 @@ else {
   }
 }
 
-
-
 const hasSearch = !!SEARCH_TERM;
+
+let i = 0;
+const CHUNK = 1000;
 let result = [];
 
-for (let i = 0; i < base.length; i++) {
-  const t = base[i];
+function processChunk() {
+  const end = Math.min(i + CHUNK, base.length);
 
-  // DATE
-  if (filterDateFrom.value || filterDateTo.value) {
-    const from = filterDateFrom.value || "0000-00-00";
-    const to   = filterDateTo.value   || "9999-99-99";
+  for (; i < end; i++) {
+    const t = base[i];
 
-    const d = t._date;
-    if (d && (d < from || d > to)) continue;
+    // DATE
+    if (filterDateFrom.value || filterDateTo.value) {
+      const from = filterDateFrom.value || "0000-00-00";
+      const to   = filterDateTo.value   || "9999-99-99";
+
+      const d = t._date;
+      if (d && (d < from || d > to)) continue;
+    }
+
+    // OTHER FILTERS
+    if (filterDriver.value && t.driverId !== filterDriver.value) continue;
+    if (filterJob.value && t.JOBTYPE !== filterJob.value) continue;
+    if (filterBA.value && t.BA !== filterBA.value) continue;
+    if (filterDMZ.value && t.DMZ !== filterDMZ.value) continue;
+    if (filterMRU.value && t.MRU !== filterMRU.value) continue;
+
+    // SEARCH
+    if (hasSearch && (!t._search || !t._search.includes(SEARCH_TERM))) continue;
+
+    result.push(t);
   }
 
-  // OTHER FILTERS
-  if (filterDriver.value && t.driverId !== filterDriver.value) continue;
-  if (filterJob.value && t.JOBTYPE !== filterJob.value) continue;
-  if (filterBA.value && t.BA !== filterBA.value) continue;
-  if (filterDMZ.value && t.DMZ !== filterDMZ.value) continue;
-  if (filterMRU.value && t.MRU !== filterMRU.value) continue;
+  if (i < base.length) {
+    setTimeout(processChunk, 0);
+  } else {
+    // ✅ ONLY update UI AFTER FULL FILTER
+    FILTERED_TASKS = result;
 
-  // SEARCH
- if (hasSearch && (!t._search || !t._search.includes(SEARCH_TERM))) continue;
+    const totalPages = Math.ceil(FILTERED_TASKS.length / PAGE_SIZE);
 
-  result.push(t);
+    if (prevPage < totalPages) {
+      CURRENT_PAGE = prevPage;
+    } else {
+      CURRENT_PAGE = Math.max(0, totalPages - 1);
+    }
+
+    renderCurrentPage();
+  }
 }
 
-  FILTERED_TASKS = result;
-
-  const totalPages = Math.ceil(FILTERED_TASKS.length / PAGE_SIZE);
-
-  // 🔥 KEEP PAGE IF STILL VALID
-  if (prevPage < totalPages) {
-    CURRENT_PAGE = prevPage;
-  } else {
-    CURRENT_PAGE = Math.max(0, totalPages - 1);
-  }
-
-  renderCurrentPage();
+processChunk();
 }
-
-window.toggleSelect = function (el) {
-  const id = el.dataset.id;
-
-  if (el.checked) {
-    SELECTED_IDS.add(id);
-  } else {
-    SELECTED_IDS.delete(id);
-  }
-
-  checkSelection();
-};
 
 /* ===== RENDER ===== */
 function renderTasks(data) {
