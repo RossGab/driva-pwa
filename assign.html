@@ -81,7 +81,7 @@ select, input[type="date"] {
 
 <body>
 
-<h2>Manage Tasks V4.6.1.8-WIP</h2>
+<h2>Manage Tasks V4.6.1.9-WIP</h2>
 
 <button onclick="location.href='admin.html'" class="small-btn">⬅ Back</button>
 
@@ -318,6 +318,36 @@ async function loadSnapshotTasks(dateKey, retries = 2) {
   }
 }
 
+async function processSnapshots(snapshotResults, allTasks) {
+  const flat = snapshotResults.flat();
+
+  let i = 0;
+  const CHUNK = 800;
+
+  return new Promise(resolve => {
+
+    function processChunk() {
+      const end = Math.min(i + CHUNK, flat.length);
+
+      for (; i < end; i++) {
+        const t = flat[i];
+
+        if (t.status !== "COMPLETED") {
+          allTasks.push(t);
+        }
+      }
+
+      if (i < flat.length) {
+        setTimeout(processChunk, 0); // 🔥 prevents freeze
+      } else {
+        resolve();
+      }
+    }
+
+    processChunk();
+  });
+}
+
 async function loadLiveTasksFromFirebase(dateKey, onProgress) {
   try {
     const idsSnap = await get(ref(db, `tasksByDate/${dateKey}`));
@@ -426,13 +456,7 @@ for (let i = 0; i < snapshotKeys.length; i++) {
   loadingProgress.style.width = progress + "%";
 }
 
-snapshotResults.forEach(result => {
-  result.forEach(t => {
-    if (t.status !== "COMPLETED") {
-      allTasks.push(t);
-    }
-  });
-});
+await processSnapshots(snapshotResults, allTasks);
 
 // 🔥 LOAD LIVE (still sequential for progress)
 for (const key of liveKeys) {
