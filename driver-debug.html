@@ -261,7 +261,7 @@ import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "htt
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "v4.0.20.0-WIP";
+const VERSION = "v4.0.20.0.1-debug";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -1516,24 +1516,47 @@ async function loadTasks() {
     }
 
     const reads = ids.map(async id => {
-      const s = await get(ref(db, `tasks/${id}`));
-      if (!s.exists()) return null;
+  const s = await get(ref(db, `tasks/${id}`));
 
-      const task = s.val();
-      
-      if (
-        String(task.driverId || "").trim().toUpperCase() !==
-        String(DRIVER_ID).trim().toUpperCase()
-      ) return null;
-      
-      // 🔒 Skip tasks already completed locally
-      const local = cached.find(t => t._key === id);
-      if (local?.status === "LOCAL_COMPLETED") return null;
-      
-      if (task.status === "COMPLETED") return null;
+  if (!s.exists()) {
+    console.log("❌ Missing task:", id);
+    return null;
+  }
 
-      return { _key: id, ...task, dateKey };
-    });
+  const task = s.val();
+
+  console.log("-----");
+  console.log("TASK ID:", id);
+  console.log("task.driverId:", JSON.stringify(task.driverId));
+  console.log("app DRIVER_ID:", JSON.stringify(DRIVER_ID));
+  console.log("task.status:", task.status);
+
+  const local = cached.find(t => t._key === id);
+  console.log("local:", local);
+
+  // check each condition
+  if (
+    String(task.driverId || "").trim().toUpperCase() !==
+    String(DRIVER_ID).trim().toUpperCase()
+  ) {
+    console.log("🚫 FILTERED: driverId mismatch");
+    return null;
+  }
+
+  if (local?.status === "LOCAL_COMPLETED") {
+    console.log("🚫 FILTERED: LOCAL_COMPLETED");
+    return null;
+  }
+
+  if (task.status === "COMPLETED") {
+    console.log("🚫 FILTERED: COMPLETED");
+    return null;
+  }
+
+  console.log("✅ PASSED");
+
+  return { _key: id, ...task, dateKey };
+});
 
     let freshTasks = (await Promise.all(reads)).filter(Boolean);
 
