@@ -1515,33 +1515,26 @@ async function loadTasks() {
       return;
     }
 
-    const reads = ids.map(async id => {
+   const reads = ids.map(async id => {
   const s = await get(ref(db, `tasks/${id}`));
-
-  if (!s.exists()) {
-    console.log("❌ Missing task:", id);
-    return null;
-  }
+  if (!s.exists()) return null;
 
   const task = s.val();
 
-  console.log("-----");
+  // 🎯 ONLY log if driver matches
+  const driverMatch =
+    String(task.driverId || "").trim().toUpperCase() ===
+    String(DRIVER_ID).trim().toUpperCase();
+
+  if (!driverMatch) return null; // ❌ skip everything else
+
+  console.log("----- MATCHED DRIVER -----");
   console.log("TASK ID:", id);
-  console.log("task.driverId:", JSON.stringify(task.driverId));
-  console.log("app DRIVER_ID:", JSON.stringify(DRIVER_ID));
-  console.log("task.status:", task.status);
+  console.log("driverId:", JSON.stringify(task.driverId));
+  console.log("status:", task.status);
 
   const local = cached.find(t => t._key === id);
   console.log("local:", local);
-
-  // check each condition
-  if (
-    String(task.driverId || "").trim().toUpperCase() !==
-    String(DRIVER_ID).trim().toUpperCase()
-  ) {
-    console.log("🚫 FILTERED: driverId mismatch");
-    return null;
-  }
 
   if (local?.status === "LOCAL_COMPLETED") {
     console.log("🚫 FILTERED: LOCAL_COMPLETED");
