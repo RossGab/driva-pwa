@@ -308,7 +308,7 @@ button {
   
   <div style="display:flex;align-items:center;gap:14px;">
     <img src="./logo.jpg" class="admin-logo" alt="Company Logo">
-    <h1>Admin Dashboard <span class="version">V4.0.2-WIP</span></h1>
+    <h1>Admin Dashboard <span class="version">V4.0.3-WIP</span></h1>
   </div>
 
   <!-- 📅 DATE FILTER -->
@@ -1608,8 +1608,17 @@ function renderAdminTasks(tasks) {
     div.className = `task ${t.status === "COMPLETED" ? "completed" : "pending"}`;
 
     div.innerHTML = `
-      <div class="task-header">
-        <b>${t.CUSTOMERNAME || ""}</b>
+  <div class="task-header">
+
+    <div style="
+      font-size:12px;
+      color:#888;
+      margin-bottom:4px;
+    ">
+      ID: ${t._key}
+    </div>
+
+    <b>${t.CUSTOMERNAME || ""}</b>
         <div class="small">${t.ADDRESS || ""}</div>
         <div class="small">Driver: ${t.driverId || "—"}</div>
         ${sla ? `<div class="small ${sla.cls}">⏱ ${sla.text}</div>` : ""}
