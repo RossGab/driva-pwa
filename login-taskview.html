@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Admin Login</title>
+  <title>Task Viewer Login</title>
   <style>
     body {
       display:flex;
@@ -43,7 +43,7 @@
 
 <body>
 <div class="box">
-  <h3>Admin Login</h3>
+  <h3>Task Viewer Login</h3>
   <input id="email" placeholder="Email">
   <input id="password" type="password" placeholder="Password">
   <button onclick="login()">Login</button>
@@ -74,7 +74,7 @@ const auth = getAuth(app);
 // ✅ Auto redirect if already logged in
 onAuthStateChanged(auth, (user) => {
   if (user) {
-    window.location.href = "admin_selected.html";
+    window.location.href = "taskview.html"; // ✅ CHANGED
   }
 });
 
@@ -90,7 +90,7 @@ window.login = async function () {
 
   try {
     await signInWithEmailAndPassword(auth, email, pass);
-    window.location.href = "admin_selected.html";
+    window.location.href = "taskview.html"; // ✅ CHANGED
   } catch (e) {
     errorBox.innerText = e.message;
     btn.innerText = "Login";
