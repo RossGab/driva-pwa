@@ -1546,6 +1546,11 @@ async function loadTasks() {
     return null;
   }
 
+  if (task.status === "PENDING) {
+    console.log("🚫 FILTERED: PENDING");
+    return null;
+  }
+
   console.log("✅ PASSED");
 
   return { _key: id, ...task, dateKey };
