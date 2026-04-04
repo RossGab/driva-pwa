@@ -5,54 +5,43 @@ admin.initializeApp();
 
 exports.createTaskViewerUser = functions.https.onCall(async (data, context) => {
 
-  // 🔐 MUST BE LOGGED IN
-  if (!context.auth) {
-    throw new functions.https.HttpsError("unauthenticated", "Not logged in");
-  }
-
-  const uid = context.auth.uid;
-
-  // 🔐 CHECK IF ADMIN
-  const snap = await admin.database().ref("config/taskviewUsers/admin").once("value");
-
-  let isAdmin = false;
-
-  snap.forEach(child => {
-    if (child.key === uid && child.val().active) {
-      isAdmin = true;
-    }
-  });
-
-  if (!isAdmin) {
-    throw new functions.https.HttpsError("permission-denied", "Not admin");
-  }
-
-  const email = (data.email || "").toLowerCase();
-  const password = data.password;
-  const role = data.role; // "admin" or "viewer"
+  const { email, password, role } = data;
 
   if (!email || !password || !role) {
-    throw new functions.https.HttpsError("invalid-argument", "Missing fields");
+    throw new functions.https.HttpsError(
+      "invalid-argument",
+      "Missing email/password/role"
+    );
+  }
+
+  // 🔐 Require logged-in user
+  if (!context.auth) {
+    throw new functions.https.HttpsError(
+      "unauthenticated",
+      "You must be logged in"
+    );
   }
 
   try {
     // ✅ CREATE AUTH USER
-    const userRecord = await admin.auth().createUser({
+    await admin.auth().createUser({
       email,
       password
     });
 
-    const newUid = userRecord.uid;
-
-    // ✅ SAVE TO DB
-    await admin.database().ref(`config/taskviewUsers/${role}/${newUid}`).set({
+    // ✅ SAVE TO DATABASE
+    await admin.database().ref(`config/taskviewUsers/${role}`).push({
       email,
-      active: true
+      active: true,
+      createdAt: Date.now()
     });
 
     return { success: true };
 
   } catch (err) {
-    throw new functions.https.HttpsError("internal", err.message);
+    throw new functions.https.HttpsError(
+      "internal",
+      err.message
+    );
   }
 });
