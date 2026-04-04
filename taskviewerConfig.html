@@ -30,7 +30,7 @@ input, select, button {
 
 <body>
 
-<h2>Task Viewer Config v1.0.2</h2>
+<h2>Task Viewer Config v1.0.3</h2>
 
 <div class="box">
   <h3>Add User</h3>
@@ -58,15 +58,18 @@ import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/
 const firebaseConfig = {
   apiKey: "AIzaSyDFW61pnwLvh6HGKWt10zLYNr860fI8vkg",
   authDomain: "driva-pwa.firebaseapp.com",
-  databaseURL: "https://driva-pwa-default-rtdb.firebaseio.com"
+  databaseURL: "https://driva-pwa-default-rtdb.firebaseio.com",
+  projectId: "driva-pwa"
 };
 
 const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
 const db = getDatabase(app);
 const auth = getAuth(app);
 
-const functions = getFunctions(app);
+const functions = getFunctions(app, "us-central1");
 const createUserFn = httpsCallable(functions, "createTaskViewerUser");
+
+
 
 /* 🔐 AUTH + ADMIN CHECK */
 onAuthStateChanged(auth, async (user) => {
