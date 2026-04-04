@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>IndexedDB Debug</title>
+<style>
+body {
+  font-family: Arial;
+  background:#f4f4f4;
+  padding:10px;
+}
+h2 {
+  margin-top:20px;
+}
+.card {
+  background:#fff;
+  padding:10px;
+  margin-bottom:8px;
+  border-radius:6px;
+  font-size:13px;
+  border-left:5px solid #3498db;
+}
+.bad {
+  border-left-color:#e74c3c;
+}
+.good {
+  border-left-color:#2ecc71;
+}
+</style>
+</head>
+
+<body>
+
+<h1>📦 IndexedDB Debug Viewer</h1>
+
+<button onclick="loadData()">🔄 Load Data</button>
+<button onclick="clearTasks()">🧹 Clear Tasks</button>
+<button onclick="clearPhotos()">🧹 Clear Photos</button>
+
+<h2>🗂 Tasks</h2>
+<div id="tasks"></div>
+
+<h2>📸 Photos</h2>
+<div id="photos"></div>
+
+<script>
+const DB_NAME = "driver_uploads";
+const STORE = "photos";
+const TASK_STORE = "tasks";
+
+function openDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME);
+
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function loadData() {
+  const db = await openDB();
+
+  // ===== TASKS =====
+  const taskDiv = document.getElementById("tasks");
+  taskDiv.innerHTML = "Loading...";
+
+  const tx1 = db.transaction(TASK_STORE, "readonly");
+  const req1 = tx1.objectStore(TASK_STORE).getAll();
+
+  req1.onsuccess = () => {
+    const tasks = req1.result || [];
+
+    taskDiv.innerHTML = `<b>Total: ${tasks.length}</b><br><br>`;
+
+    tasks.forEach(t => {
+      const div = document.createElement("div");
+
+      const isBlocked = t.status === "LOCAL_COMPLETED";
+
+      div.className = "card " + (isBlocked ? "bad" : "good");
+
+      div.innerHTML = `
+        <b>Key:</b> ${t._key}<br>
+        <b>Status:</b> ${t.status}<br>
+        <b>Driver:</b> "${t.driverId}"<br>
+        <b>DateKey:</b> ${t.dateKey}<br>
+      `;
+
+      if (isBlocked) {
+        div.innerHTML += `<b style="color:red;">⚠ LOCAL_COMPLETED (will be hidden)</b>`;
+      }
+
+      taskDiv.appendChild(div);
+    });
+  };
+
+  // ===== PHOTOS =====
+  const photoDiv = document.getElementById("photos");
+  photoDiv.innerHTML = "Loading...";
+
+  const tx2 = db.transaction(STORE, "readonly");
+  const req2 = tx2.objectStore(STORE).getAll();
+
+  req2.onsuccess = () => {
+    const photos = req2.result || [];
+
+    photoDiv.innerHTML = `<b>Total: ${photos.length}</b><br><br>`;
+
+    photos.forEach(p => {
+      const div = document.createElement("div");
+
+      div.className = "card";
+
+      div.innerHTML = `
+        <b>ID:</b> ${p.id}<br>
+        <b>Task:</b> ${p.taskKey}<br>
+        <b>Photo Index:</b> ${p.photoIndex}<br>
+        <b>Submit Intent:</b> ${p.submitIntent}<br>
+      `;
+
+      photoDiv.appendChild(div);
+    });
+  };
+}
+
+async function clearTasks() {
+  if (!confirm("Delete ALL tasks?")) return;
+
+  const db = await openDB();
+  const tx = db.transaction(TASK_STORE, "readwrite");
+  tx.objectStore(TASK_STORE).clear();
+
+  tx.oncomplete = () => {
+    alert("Tasks cleared");
+    loadData();
+  };
+}
+
+async function clearPhotos() {
+  if (!confirm("Delete ALL photos?")) return;
+
+  const db = await openDB();
+  const tx = db.transaction(STORE, "readwrite");
+  tx.objectStore(STORE).clear();
+
+  tx.oncomplete = () => {
+    alert("Photos cleared");
+    loadData();
+  };
+}
+</script>
+
+</body>
+</html>
