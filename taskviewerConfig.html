@@ -30,7 +30,7 @@ input, select, button {
 
 <body>
 
-<h2>Task Viewer Config v1.0.3.1</h2>
+<h2>Task Viewer Config v1.0.4</h2>
 
 <div class="box">
   <h3>Add User</h3>
@@ -104,6 +104,16 @@ onAuthStateChanged(auth, async (user) => {
 
 window.addUser = async function () {
 
+  const user = auth.currentUser;
+
+  if (!user) {
+    alert("Not logged in");
+    return;
+  }
+
+  // 🔥 FORCE TOKEN (THIS IS THE FIX)
+  await user.getIdToken(true);
+
   const email = document.getElementById("email").value.trim().toLowerCase();
   const password = document.getElementById("password").value.trim();
   const role = document.getElementById("role").value;
@@ -114,6 +124,8 @@ window.addUser = async function () {
   }
 
   try {
+    console.log("Calling function as:", user.email);
+
     await createUserFn({
       email,
       password,
@@ -128,7 +140,7 @@ window.addUser = async function () {
     loadUsers();
 
   } catch (e) {
-    console.error(e);
+    console.error("Function error:", e);
     alert("❌ " + (e.message || "Error creating user"));
   }
 };
