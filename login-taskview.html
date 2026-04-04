@@ -92,7 +92,10 @@ window.login = async function () {
     await signInWithEmailAndPassword(auth, email, pass);
     window.location.href = "taskview.html"; // ✅ CHANGED
   } catch (e) {
-    errorBox.innerText = e.message;
+    console.error(e); // still logs real error in console (for you)
+  
+    errorBox.innerText = "Wrong email or password";
+  
     btn.innerText = "Login";
     btn.disabled = false;
   }
