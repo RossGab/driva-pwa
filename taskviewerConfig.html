@@ -39,7 +39,7 @@ input, select, button {
 
 <body>
 
-<h2>Task Viewer Config v1.3.1</h2>
+<h2>Task Viewer Config v1.3.2</h2>
 
 <!-- ========================= -->
 <!-- 🔥 BA MANAGEMENT -->
@@ -161,7 +161,17 @@ window.addBA = async function () {
 window.deleteBA = async function (ba) {
   if (!confirm(`Delete BA "${ba}"?`)) return;
 
-  await update(ref(db, `config/baList/${ba}`), null);
+  import { remove } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+
+window.deleteBA = async function (ba) {
+
+  if (!confirm(`Delete BA "${ba}"?`)) return;
+
+  await remove(ref(db, `config/baList/${ba}`)); // ✅ FIXED
+
+  await loadBAOptions();
+  await loadBAManageList();
+};
 
   loadBAOptions();
   loadBAManageList();
