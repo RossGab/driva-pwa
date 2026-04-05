@@ -52,26 +52,36 @@ button {
   cursor:pointer;
 }
 
-.btn-primary { background:#2563eb; color:#fff; }
-.btn-primary:hover { background:#1d4ed8; }
+.btn-primary {
+  background:#2563eb;
+  color:#fff;
+}
 
-.btn-danger { background:#ef4444; color:#fff; }
-.btn-danger:hover { background:#dc2626; }
+.btn-primary:hover {
+  background:#1d4ed8;
+}
 
-.btn-small { padding:6px 10px; font-size:12px; }
+.btn-danger {
+  background:#ef4444;
+  color:#fff;
+}
 
-/* ===== BA LIST (MANAGE) ===== */
+.btn-small {
+  padding:6px 10px;
+  font-size:12px;
+}
+
+/* ===== BA MANAGE ===== */
 .ba-item {
   display:flex;
   justify-content:space-between;
-  align-items:center;
   padding:10px;
   border-bottom:1px solid #eee;
 }
 
-/* ===== BA SELECT (🔥 CLEAN FIX) ===== */
+/* ===== BA SELECT (FINAL FIX) ===== */
 #baList {
-  max-height:160px;
+  max-height:180px;
   overflow-y:auto;
   border:1px solid #eee;
   border-radius:8px;
@@ -82,8 +92,8 @@ button {
 .ba-row {
   display:flex;
   align-items:center;
-  gap:10px;
   padding:10px 12px;
+  gap:10px;
   border-bottom:1px solid #f1f5f9;
   cursor:pointer;
 }
@@ -103,18 +113,12 @@ button {
   margin:0;
 }
 
-/* text */
+/* label text */
 .ba-row span {
   font-size:14px;
 }
 
-/* selected style */
-.ba-row input:checked + span {
-  color:#2563eb;
-  font-weight:600;
-}
-
-/* ===== USER LIST ===== */
+/* ===== USERS ===== */
 .user-item {
   padding:10px;
   border-bottom:1px solid #eee;
@@ -129,7 +133,7 @@ button {
 
 <body>
 
-<h2>Task Viewer Config v1.3.12</h2>
+<h2>Task Viewer Config v1.3.13</h2>
 
 <!-- ===== BA MANAGEMENT ===== -->
 <div class="box">
@@ -162,11 +166,11 @@ button {
   <div style="margin-top:12px;">
     <b>Select BA</b>
 
-    <!-- CLEAN SELECT ALL -->
-    <div class="ba-row" style="font-weight:600;">
+    <!-- SELECT ALL -->
+    <label class="ba-row" style="font-weight:600;">
       <input type="checkbox" id="selectAllBA">
       <span>Select All</span>
-    </div>
+    </label>
 
     <div id="baList"></div>
   </div>
@@ -190,7 +194,7 @@ import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/
 
 /* FIREBASE */
 const firebaseConfig = {
-  apiKey: "AIzaSy...",
+  apiKey: "AIzaSyDFW61pnwLvh6HGKWt10zLYNr860fI8vkg",
   authDomain: "driva-pwa.firebaseapp.com",
   databaseURL: "https://driva-pwa-default-rtdb.firebaseio.com",
   projectId: "driva-pwa"
@@ -199,12 +203,16 @@ const firebaseConfig = {
 const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
 const db = getDatabase(app);
 const auth = getAuth(app);
+
 const functions = getFunctions(app, "us-central1");
 const createUserFn = httpsCallable(functions, "createTaskViewerUser");
 
 /* AUTH */
 onAuthStateChanged(auth, async (user) => {
-  if (!user) return location.href="login-taskview.html";
+  if (!user) {
+    window.location.href = "login-taskview.html";
+    return;
+  }
 
   document.body.style.display = "block";
 
@@ -214,9 +222,10 @@ onAuthStateChanged(auth, async (user) => {
 });
 
 /* ===== BA ===== */
-window.addBA = async () => {
+window.addBA = async function () {
   const input = document.getElementById("newBA");
   const ba = input.value.trim().toUpperCase();
+
   if (!ba) return alert("Enter BA");
 
   await set(ref(db, `config/baList/${ba}`), true);
@@ -226,9 +235,11 @@ window.addBA = async () => {
   loadBAManageList();
 };
 
-window.deleteBA = async (ba) => {
+window.deleteBA = async function (ba) {
   if (!confirm(`Delete ${ba}?`)) return;
+
   await remove(ref(db, `config/baList/${ba}`));
+
   loadBAOptions();
   loadBAManageList();
 };
@@ -262,15 +273,15 @@ async function loadBAOptions() {
   container.innerHTML = "";
 
   Object.keys(data).sort().forEach(ba => {
-    const row = document.createElement("label");
-    row.className = "ba-row";
+    const label = document.createElement("label");
+    label.className = "ba-row";
 
-    row.innerHTML = `
+    label.innerHTML = `
       <input type="checkbox" value="${ba}">
       <span>${ba}</span>
     `;
 
-    container.appendChild(row);
+    container.appendChild(label);
   });
 
   document.getElementById("selectAllBA").onchange = function () {
@@ -281,32 +292,44 @@ async function loadBAOptions() {
 }
 
 /* ===== ADD USER ===== */
-window.addUser = async (e) => {
-  const btn = e.target;
+window.addUser = async function (event) {
+  const btn = event.target;
   btn.disabled = true;
   btn.innerText = "Creating...";
 
-  const email = document.getElementById("email").value.trim();
+  const user = auth.currentUser;
+  if (!user) return alert("Not logged in");
+
+  await user.getIdToken(true);
+
+  const email = document.getElementById("email").value.trim().toLowerCase();
   const password = document.getElementById("password").value.trim();
   const role = document.getElementById("role").value;
 
-  const ba = [...document.querySelectorAll("#baList input:checked")]
-    .map(el => el.value);
+  const ba = Array.from(
+    document.querySelectorAll("#baList input:checked")
+  ).map(el => el.value);
 
   if (!email || !password) {
     alert("Missing fields");
-    btn.disabled=false;
-    btn.innerText="Create User";
+    btn.disabled = false;
+    btn.innerText = "Create User";
     return;
   }
 
-  await createUserFn({ email, password, role, ba });
+  try {
+    await createUserFn({ email, password, role, ba });
 
-  alert("User created");
-  loadUsers();
+    alert("✅ User created");
+    loadUsers();
 
-  btn.disabled=false;
-  btn.innerText="Create User";
+  } catch (e) {
+    console.error(e);
+    alert("❌ Failed to create user");
+  }
+
+  btn.disabled = false;
+  btn.innerText = "Create User";
 };
 
 /* ===== USERS ===== */
