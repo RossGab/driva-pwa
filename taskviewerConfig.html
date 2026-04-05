@@ -121,7 +121,7 @@ button {
 
 <body>
 
-<h2>Task Viewer Config v1.3.16</h2>
+<h2>Task Viewer Config v1.3.17</h2>
 
 <!-- ===== BA MANAGEMENT ===== -->
 <div class="box">
@@ -155,10 +155,9 @@ button {
     <b>Select BA</b>
 
     <!-- SELECT ALL -->
-    <label style="display:flex;align-items:center;gap:10px;margin-top:8px;padding:10px 12px;">
-      <input type="checkbox" id="selectAllBA">
-      <span>Select All</span>
-    </label>
+    <div id="selectAllBA" class="ba-chip" style="margin-top:8px;">
+      Select All
+    </div>
 
     <div id="baList"></div>
   </div>
@@ -279,18 +278,31 @@ async function loadBAOptions() {
     chip.innerText = ba;
 
     chip.onclick = () => {
-      chip.classList.toggle("active");
-    };
+  chip.classList.toggle("active");
+
+  const chips = document.querySelectorAll(".ba-chip:not(#selectAllBA)");
+  const allSelected = Array.from(chips).every(c => c.classList.contains("active"));
+
+  document.getElementById("selectAllBA").classList.toggle("active", allSelected);
+};
 
     container.appendChild(chip);
   });
 
   // SELECT ALL
-  document.getElementById("selectAllBA").onchange = function () {
-    document.querySelectorAll(".ba-chip").forEach(chip => {
-      chip.classList.toggle("active", this.checked);
-    });
-  };
+  const selectAllBtn = document.getElementById("selectAllBA");
+
+selectAllBtn.onclick = () => {
+  const chips = document.querySelectorAll(".ba-chip:not(#selectAllBA)");
+
+  const allSelected = Array.from(chips).every(c => c.classList.contains("active"));
+
+  chips.forEach(chip => {
+    chip.classList.toggle("active", !allSelected);
+  });
+
+  selectAllBtn.classList.toggle("active", !allSelected);
+};
 }
 
 /* ===== ADD USER ===== */
