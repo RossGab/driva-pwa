@@ -121,7 +121,7 @@ button {
 
 <body>
 
-<h2>Task Viewer Config v1.3.18</h2>
+<h2>Task Viewer Config v1.3.19</h2>
 
 <!-- ===== BA MANAGEMENT ===== -->
 <div class="box">
@@ -193,6 +193,8 @@ const auth = getAuth(app);
 
 const functions = getFunctions(app, "us-central1");
 const createUserFn = httpsCallable(functions, "createTaskViewerUser");
+const deleteUserFn = httpsCallable(functions, "deleteTaskViewerUser");
+const updateUserBAFn = httpsCallable(functions, "updateTaskViewerUserBA");
 
 /* AUTH */
 onAuthStateChanged(auth, async (user) => {
@@ -242,6 +244,83 @@ window.deleteBA = async function (ba) {
 
   loadBAOptions();
   loadBAManageList();
+};
+
+window.deleteUser = async function(role, key, email) {
+  if (!confirm(`Delete ${email}?`)) return;
+
+  try {
+    // delete auth
+    await deleteUserFn({ email });
+
+    // delete from DB
+    await remove(ref(db, `config/taskviewUsers/${role}/${key}`));
+
+    alert("✅ User deleted");
+    loadUsers();
+
+  } catch (e) {
+    console.error(e);
+    alert("❌ Failed to delete user");
+  }
+};
+
+window.editBA = async function(role, key, currentBA) {
+
+  const selected = currentBA ? currentBA.split("|") : [];
+
+  const snap = await get(ref(db, "config/baList"));
+  const baList = Object.keys(snap.val() || {});
+
+  let html = `<div style="display:flex;flex-wrap:wrap;gap:8px;">`;
+
+  baList.forEach(ba => {
+    const active = selected.includes(ba) ? "active" : "";
+    html += `<div class="ba-chip ${active}" onclick="this.classList.toggle('active')">${ba}</div>`;
+  });
+
+  html += `</div><br><button onclick="saveBA('${role}','${key}')">Save</button>`;
+
+  const modal = document.createElement("div");
+  modal.innerHTML = `
+    <div style="
+      position:fixed;
+      top:0;left:0;width:100%;height:100%;
+      background:rgba(0,0,0,0.4);
+      display:flex;align-items:center;justify-content:center;
+      z-index:999;
+    ">
+      <div style="background:#fff;padding:20px;border-radius:10px;">
+        <h3>Edit BA</h3>
+        ${html}
+      </div>
+    </div>
+  `;
+
+  modal.id = "editModal";
+  document.body.appendChild(modal);
+};
+
+window.saveBA = async function(role, key) {
+
+  const selected = Array.from(
+    document.querySelectorAll("#editModal .ba-chip.active")
+  ).map(el => el.innerText);
+
+  try {
+    await update(ref(db, `config/taskviewUsers/${role}/${key}`), {
+      ba: selected
+    });
+
+    alert("✅ BA updated");
+
+    document.getElementById("editModal").remove();
+    loadUsers();
+
+  } catch (e) {
+    console.error(e);
+    alert("❌ Failed to update BA");
+  }
 };
 
 async function loadBAManageList() {
@@ -362,29 +441,7 @@ window.addUser = async function (event) {
 };
 
 /* ===== USERS ===== */
-async function loadUsers() {
-  const snap = await get(ref(db, "config/taskviewUsers"));
-  const data = snap.val() || {};
-
-  const container = document.getElementById("userList");
-  container.innerHTML = "";
-
-  ["admin","viewer"].forEach(role => {
-    const users = data[role] || {};
-
-    Object.values(users).forEach(u => {
-      const div = document.createElement("div");
-      div.className = "user-item";
-
-      div.innerHTML = `
-        <b>${u.email}</b> (${role})<br>
-        <small>BA: ${(u.ba || []).join(", ") || "ALL"}</small>
-      `;
-
-      container.appendChild(div);
-    });
-  });
-}
+loadUsers()
 
 </script>
 
