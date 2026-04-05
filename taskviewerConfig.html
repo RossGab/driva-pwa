@@ -121,7 +121,7 @@ button {
 
 <body>
 
-<h2>Task Viewer Config v1.3.19</h2>
+<h2>Task Viewer Config v1.3.20</h2>
 
 <!-- ===== BA MANAGEMENT ===== -->
 <div class="box">
@@ -441,7 +441,41 @@ window.addUser = async function (event) {
 };
 
 /* ===== USERS ===== */
-loadUsers()
+async function loadUsers() {
+  const snap = await get(ref(db, "config/taskviewUsers"));
+  const data = snap.val() || {};
+
+  const container = document.getElementById("userList");
+  container.innerHTML = "";
+
+  ["admin","viewer"].forEach(role => {
+    const users = data[role] || {};
+
+    Object.entries(users).forEach(([key, u]) => {
+
+      const div = document.createElement("div");
+      div.className = "user-item";
+
+      div.innerHTML = `
+        <b>${u.email}</b> (${role})<br>
+        <small>BA: ${(u.ba || []).join(", ") || "ALL"}</small>
+        <br><br>
+
+        <button class="btn-small btn-primary"
+          onclick="editBA('${role}','${key}','${(u.ba || []).join("|")}')">
+          Edit BA
+        </button>
+
+        <button class="btn-small btn-danger"
+          onclick="deleteUser('${role}','${key}','${u.email}')">
+          Delete
+        </button>
+      `;
+
+      container.appendChild(div);
+    });
+  });
+}
 
 </script>
 
