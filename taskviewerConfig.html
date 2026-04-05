@@ -39,8 +39,23 @@ input, select, button {
 
 <body>
 
-<h2>Task Viewer Config v1.2.0</h2>
+<h2>Task Viewer Config v1.3.1</h2>
 
+<!-- ========================= -->
+<!-- 🔥 BA MANAGEMENT -->
+<!-- ========================= -->
+<div class="box">
+  <h3>Manage BA</h3>
+
+  <input id="newBA" placeholder="Enter BA name">
+  <button onclick="addBA()">➕ Add BA</button>
+
+  <div id="baManageList" style="margin-top:10px;"></div>
+</div>
+
+<!-- ========================= -->
+<!-- 👤 ADD USER -->
+<!-- ========================= -->
 <div class="box">
   <h3>Add User</h3>
 
@@ -52,7 +67,6 @@ input, select, button {
     <option value="viewer">Viewer</option>
   </select>
 
-  <!-- ✅ BA SELECT -->
   <div style="margin-top:10px;">
     <b>Select BA</b>
 
@@ -66,6 +80,9 @@ input, select, button {
   <button onclick="addUser()">Add</button>
 </div>
 
+<!-- ========================= -->
+<!-- 📋 USERS -->
+<!-- ========================= -->
 <div class="box">
   <h3>Users</h3>
   <div id="userList"></div>
@@ -116,10 +133,69 @@ onAuthStateChanged(auth, async (user) => {
   document.body.style.display = "block";
 
   loadUsers();
-  loadBAOptions(); // ✅ LOAD BA
+  loadBAOptions();
+  loadBAManageList();
 });
 
+/* ========================= */
+/* 🔥 BA MANAGEMENT */
+/* ========================= */
+
+window.addBA = async function () {
+  const input = document.getElementById("newBA");
+  const ba = input.value.trim().toUpperCase();
+
+  if (!ba) {
+    alert("Enter BA name");
+    return;
+  }
+
+  await update(ref(db, `config/baList/${ba}`), true);
+
+  input.value = "";
+
+  loadBAOptions();
+  loadBAManageList();
+};
+
+window.deleteBA = async function (ba) {
+  if (!confirm(`Delete BA "${ba}"?`)) return;
+
+  await update(ref(db, `config/baList/${ba}`), null);
+
+  loadBAOptions();
+  loadBAManageList();
+};
+
+async function loadBAManageList() {
+  const snap = await get(ref(db, "config/baList"));
+  const data = snap.val() || {};
+
+  const container = document.getElementById("baManageList");
+  container.innerHTML = "";
+
+  Object.keys(data).sort().forEach(ba => {
+
+    const div = document.createElement("div");
+    div.style.padding = "6px";
+    div.style.borderBottom = "1px solid #eee";
+
+    div.innerHTML = `
+      ${ba}
+      <button onclick="deleteBA('${ba}')"
+        style="float:right;background:#e74c3c;color:#fff;border:none;">
+        ❌
+      </button>
+    `;
+
+    container.appendChild(div);
+  });
+}
+
+/* ========================= */
 /* 🔥 LOAD BA OPTIONS */
+/* ========================= */
+
 async function loadBAOptions() {
   const snap = await get(ref(db, "config/baList"));
   const data = snap.val() || {};
@@ -139,7 +215,6 @@ async function loadBAOptions() {
     container.appendChild(label);
   });
 
-  // ✅ SELECT ALL
   document.getElementById("selectAllBA").onchange = function () {
     document.querySelectorAll("#baList input").forEach(cb => {
       cb.checked = this.checked;
@@ -147,7 +222,10 @@ async function loadBAOptions() {
   };
 }
 
+/* ========================= */
 /* ➕ ADD USER */
+/* ========================= */
+
 window.addUser = async function () {
 
   const user = auth.currentUser;
@@ -163,7 +241,6 @@ window.addUser = async function () {
   const password = document.getElementById("password").value.trim();
   const role = document.getElementById("role").value;
 
-  // ✅ GET SELECTED BA
   const ba = Array.from(
     document.querySelectorAll("#baList input:checked")
   ).map(el => el.value);
@@ -180,7 +257,7 @@ window.addUser = async function () {
       email,
       password,
       role,
-      ba // ✅ SEND BA
+      ba
     });
 
     alert("✅ User created (Auth + DB)");
@@ -188,7 +265,6 @@ window.addUser = async function () {
     document.getElementById("email").value = "";
     document.getElementById("password").value = "";
 
-    // reset checkboxes
     document.querySelectorAll("#baList input").forEach(cb => cb.checked = false);
     document.getElementById("selectAllBA").checked = false;
 
@@ -200,7 +276,10 @@ window.addUser = async function () {
   }
 };
 
+/* ========================= */
 /* 📋 LOAD USERS */
+/* ========================= */
+
 async function loadUsers() {
   const snap = await get(ref(db, "config/taskviewUsers"));
   const data = snap.val() || {};
