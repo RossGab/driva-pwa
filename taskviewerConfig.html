@@ -121,7 +121,7 @@ button {
 
 <body>
 
-<h2>Task Viewer Config v1.3.17</h2>
+<h2>Task Viewer Config v1.3.18</h2>
 
 <!-- ===== BA MANAGEMENT ===== -->
 <div class="box">
@@ -336,6 +336,20 @@ window.addUser = async function (event) {
     await createUserFn({ email, password, role, ba });
 
     alert("✅ User created");
+    
+    // ✅ RESET FORM
+    document.getElementById("email").value = "";
+    document.getElementById("password").value = "";
+    document.getElementById("role").value = "admin";
+    
+    // clear BA chips
+    document.querySelectorAll(".ba-chip").forEach(chip => {
+      chip.classList.remove("active");
+    });
+    
+    // also reset Select All
+    document.getElementById("selectAllBA").classList.remove("active");
+    
     loadUsers();
 
   } catch (e) {
