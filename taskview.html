@@ -73,7 +73,7 @@ body {
 
   <div class="admin-header">
   <img src="./logo.jpg" class="admin-logo">
-  <h2>Tasks Viewer v1.0.5</h2>
+  <h2>Tasks Viewer v1.1.0</h2>
 
   <div>
     <input type="date" id="from">
@@ -132,6 +132,23 @@ onAuthStateChanged(auth, async (user) => {
   const data = snap.val() || {};
 
   let role = null;
+  let userBA = null;
+  
+  // 🔍 CHECK ADMIN
+  Object.values(data.admin || {}).forEach(u => {
+    if (u.email === email && u.active) {
+      role = "admin";
+      userBA = null; // admin sees all
+    }
+  });
+  
+  // 🔍 CHECK VIEWER
+  Object.values(data.viewer || {}).forEach(u => {
+    if (u.email === email && u.active) {
+      role = "viewer";
+      userBA = u.ba || []; // 👈 IMPORTANT
+    }
+  });
 
   // 🔍 CHECK ADMIN
   Object.values(data.admin || {}).forEach(u => {
@@ -156,6 +173,7 @@ onAuthStateChanged(auth, async (user) => {
 
   // ✅ SAVE ROLE (optional for later UI control)
   window.USER_ROLE = role;
+  window.USER_BA = userBA;
 
   // 👀 SHOW PAGE
   document.body.style.display = "block";
@@ -263,7 +281,12 @@ function buildBAFilters(){
   const container = document.getElementById("baFilters");
   container.innerHTML="";
 
-  const bas = new Set(TASKS.map(t=>t.BA).filter(Boolean));
+  let bas = new Set(TASKS.map(t=>t.BA).filter(Boolean));
+
+    // 🔥 restrict BA filters for viewer
+    if (window.USER_ROLE !== "admin" && window.USER_BA?.length) {
+      bas = new Set([...bas].filter(ba => window.USER_BA.includes(ba)));
+    }
 
   bas.forEach(ba=>{
     const label=document.createElement("label");
@@ -290,6 +313,11 @@ function buildBAFilters(){
 function render(){
 
   let tasks = TASKS;
+
+  // 🔥 APPLY USER BA FILTER
+  if (window.USER_ROLE !== "admin" && window.USER_BA?.length) {
+    tasks = tasks.filter(t => window.USER_BA.includes(t.BA));
+  }
 
   if(SEARCH_TERM){
     tasks = tasks.filter(t =>
