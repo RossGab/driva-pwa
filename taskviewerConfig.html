@@ -95,55 +95,38 @@ button {
   margin-top:6px;
 }
 
-/* CLEAN ROW STYLE */
-#baList label {
+.ba-row {
   display:flex;
   align-items:center;
   gap:10px;
   padding:10px 12px;
   border-bottom:1px solid #f1f5f9;
   cursor:pointer;
-  width:100%;
 }
 
-/* REMOVE LAST BORDER */
-#baList label:last-child {
+.ba-row:last-child {
   border-bottom:none;
 }
 
-/* HOVER */
-#baList label:hover {
+.ba-row:hover {
   background:#f8fafc;
 }
 
-/* CHECKBOX */
-#baList input {
+.ba-row input {
   width:16px;
   height:16px;
-  margin:0;
 }
 
-/* TEXT */
-#baList span {
+.ba-row span {
   font-size:14px;
 }
-
-/* ===== USER LIST ===== */
-.user-item {
-  padding:10px;
-  border-bottom:1px solid #eee;
-}
-
-.user-item small {
-  color:#666;
-}
-
+  
 </style>
 </head>
 
 <body>
 
-<h2>Task Viewer Config v1.3.14</h2>
+<h2>Task Viewer Config v1.3.15</h2>
 
 <!-- ===== BA MANAGEMENT ===== -->
 <div class="box">
@@ -296,14 +279,24 @@ async function loadBAOptions() {
   container.innerHTML = "";
 
   Object.keys(data).sort().forEach(ba => {
-    const label = document.createElement("label");
 
-    label.innerHTML = `
+    const row = document.createElement("div");
+    row.className = "ba-row";
+
+    row.innerHTML = `
       <input type="checkbox" value="${ba}">
       <span>${ba}</span>
     `;
 
-    container.appendChild(label);
+    // 🔥 make entire row clickable
+    row.onclick = (e) => {
+      if (e.target.tagName !== "INPUT") {
+        const cb = row.querySelector("input");
+        cb.checked = !cb.checked;
+      }
+    };
+
+    container.appendChild(row);
   });
 
   document.getElementById("selectAllBA").onchange = function () {
