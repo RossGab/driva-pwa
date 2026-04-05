@@ -109,8 +109,21 @@ button {
 }
 
 /* REMOVE STRETCHING */
-#baList label span {
-  display:inline-block;
+#baList span {
+  flex:unset; /* 🔥 prevents stretching */
+}
+
+#baList label:last-child {
+  border-bottom:none;
+}
+#baList {
+  text-align:left;
+}
+#baList {
+  padding:4px 0;
+}
+#baList label {
+  width:100%;
 }
 
 #baList input {
@@ -138,7 +151,7 @@ button {
 
 <body>
 
-<h2>Task Viewer Config v1.3.10</h2>
+<h2>Task Viewer Config v1.3.11</h2>
 
 <!-- ===== BA MANAGEMENT ===== -->
 <div class="box">
@@ -171,7 +184,7 @@ button {
   <div style="margin-top:12px;">
     <b>Select BA</b>
 
-    <label style="display:flex;gap:8px;margin-top:6px;">
+    <label style="display:flex;align-items:center;gap:10px;margin-top:8px;padding:6px 12px;">
       <input type="checkbox" id="selectAllBA"> Select All
     </label>
 
@@ -293,7 +306,7 @@ async function loadBAOptions() {
 
     label.innerHTML = `
       <input type="checkbox" value="${ba}">
-      <span>${ba}</span>
+      <span style="margin-left:6px;">${ba}</span>
     `;
 
     container.appendChild(label);
