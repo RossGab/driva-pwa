@@ -86,39 +86,34 @@ button {
   border-bottom:1px solid #eee;
 }
 
-/* ===== ✅ FIXED BA CHECKBOX LIST ===== */
+/* ===== BA CHIP STYLE ===== */
 #baList {
-  max-height:160px;
-  overflow-y:auto;
-  border:1px solid #eee;
-  border-radius:8px;
-  margin-top:6px;
-}
-
-.ba-row {
   display:flex;
-  align-items:center;
-  gap:10px;
-  padding:10px 12px;
-  border-bottom:1px solid #f1f5f9;
-  cursor:pointer;
+  flex-wrap:wrap;
+  gap:8px;
+  margin-top:10px;
 }
 
-.ba-row:last-child {
-  border-bottom:none;
-}
-
-.ba-row:hover {
+.ba-chip {
+  padding:8px 14px;
+  border-radius:20px;
+  border:1px solid #ddd;
   background:#f8fafc;
+  cursor:pointer;
+  font-size:13px;
+  transition:0.2s;
 }
 
-.ba-row input {
-  width:16px;
-  height:16px;
+/* hover */
+.ba-chip:hover {
+  background:#e2e8f0;
 }
 
-.ba-row span {
-  font-size:14px;
+/* selected */
+.ba-chip.active {
+  background:#2563eb;
+  color:#fff;
+  border-color:#2563eb;
 }
   
 </style>
@@ -126,7 +121,7 @@ button {
 
 <body>
 
-<h2>Task Viewer Config v1.3.15</h2>
+<h2>Task Viewer Config v1.3.16</h2>
 
 <!-- ===== BA MANAGEMENT ===== -->
 <div class="box">
@@ -270,7 +265,6 @@ async function loadBAManageList() {
   });
 }
 
-/* ===== BA CHECKBOX ===== */
 async function loadBAOptions() {
   const snap = await get(ref(db, "config/baList"));
   const data = snap.val() || {};
@@ -280,28 +274,21 @@ async function loadBAOptions() {
 
   Object.keys(data).sort().forEach(ba => {
 
-    const row = document.createElement("div");
-    row.className = "ba-row";
+    const chip = document.createElement("div");
+    chip.className = "ba-chip";
+    chip.innerText = ba;
 
-    row.innerHTML = `
-      <input type="checkbox" value="${ba}">
-      <span>${ba}</span>
-    `;
-
-    // 🔥 make entire row clickable
-    row.onclick = (e) => {
-      if (e.target.tagName !== "INPUT") {
-        const cb = row.querySelector("input");
-        cb.checked = !cb.checked;
-      }
+    chip.onclick = () => {
+      chip.classList.toggle("active");
     };
 
-    container.appendChild(row);
+    container.appendChild(chip);
   });
 
+  // SELECT ALL
   document.getElementById("selectAllBA").onchange = function () {
-    document.querySelectorAll("#baList input").forEach(cb => {
-      cb.checked = this.checked;
+    document.querySelectorAll(".ba-chip").forEach(chip => {
+      chip.classList.toggle("active", this.checked);
     });
   };
 }
@@ -325,8 +312,8 @@ window.addUser = async function (event) {
   const role = document.getElementById("role").value;
 
   const ba = Array.from(
-    document.querySelectorAll("#baList input:checked")
-  ).map(el => el.value);
+  document.querySelectorAll(".ba-chip.active")
+).map(el => el.innerText);
 
   if (!email || !password) {
     alert("Missing fields");
