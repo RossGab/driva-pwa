@@ -73,7 +73,7 @@ body {
 
   <div class="admin-header">
   <img src="./logo.jpg" class="admin-logo">
-  <h2>Tasks Viewer v1.1.0</h2>
+  <h2>Tasks Viewer v1.1.0.1</h2>
 
   <div>
     <input type="date" id="from">
@@ -201,6 +201,21 @@ let SEARCH_TERM = "";
 const ADMIN_PAGE_SIZE = 200;
 let ADMIN_CURRENT_PAGE = 0;
 let FILTERED_TASK_IDS = [];
+
+function formatDateTime(ts){
+  if(!ts) return "";
+
+  const d = new Date(ts);
+
+  return d.toLocaleString("en-PH", {
+    timeZone: "Asia/Manila",
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit"
+  });
+}
 
 /* DATE */
 function getTodayPH(){
@@ -359,6 +374,9 @@ function renderPage(tasks){
         <b>${t.CUSTOMERNAME||""}</b>
         <div class="small">${t.ADDRESS||""}</div>
         <div class="small">Driver: ${t.driverId||"—"}</div>
+        <div class="small" style="color:#16a34a;">
+          Completed: ${formatDateTime(t.uploadedAt)}
+        </div>
       </div>
 
       <div class="details" style="display:none">
