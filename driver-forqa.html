@@ -261,7 +261,7 @@ import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "htt
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "v4.0.20.0.2-debug";
+const VERSION = "v4.0.21-ForQATEST";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -763,8 +763,22 @@ for (const task of completed) {
 if (allUploaded) {
 
   // 🔎 VERIFY FIREBASE REALLY HAS THE PHOTOS
-  const verify = await get(ref(db, `tasks/${task._key}`));
-  const data = verify.val() || {};
+  let data = {};
+
+  for (let i = 0; i < 3; i++) {
+    const verify = await get(ref(db, `tasks/${task._key}`));
+    data = verify.val() || {};
+  
+    const allPhotosExist = related.every(p =>
+      data[`photo${p.photoIndex}Url`]
+    );
+  
+    if (allPhotosExist && data.status === "COMPLETED") {
+      break; // ✅ confirmed
+    }
+  
+    await new Promise(r => setTimeout(r, 500)); // ⏳ wait 0.5s
+  }
 
   let verified = true;
 
@@ -1366,7 +1380,12 @@ async function uploadNow(
   const taskSnap = await get(ref(db, `tasks/${taskKey}`));
   const task = taskSnap.val() || {};
 
-  const filename = `photo_${photoIndex}_${Date.now()}.jpg`;
+  if (task[`photo${photoIndex}Url`]) {
+    console.log("⚠️ Already uploaded — skipping", taskKey, photoIndex);
+    return true;
+  }
+
+  const filename = `${taskKey}_photo_${photoIndex}.jpg`;
 
   const imgRef = sRef(storage, `tasks/${taskKey}/${filename}`);
 
@@ -1515,46 +1534,30 @@ async function loadTasks() {
       return;
     }
 
-   const reads = ids.map(async id => {
-  const s = await get(ref(db, `tasks/${id}`));
-  if (!s.exists()) return null;
+    const reads = ids.map(async id => {
+      const s = await get(ref(db, `tasks/${id}`));
+      if (!s.exists()) return null;
 
-  const task = s.val();
+      const task = s.val();
+      
+      if (
+        String(task.driverId || "").trim().toUpperCase() !==
+        String(DRIVER_ID).trim().toUpperCase()
+      ) return null;
+      
+      // 🔒 Skip tasks already completed locally
+      const local = cached.find(t => t._key === id);
+      if (local?.status === "LOCAL_COMPLETED") {
+        // If server is NOT completed yet → ignore (keep local)
+        if (task.status !== "COMPLETED") return null;
+      
+        // If server IS completed → allow it (so it can sync + cleanup)
+      }
+      
+      if (task.status === "COMPLETED") return null;
 
-  // 🎯 ONLY log if driver matches
-  const driverMatch =
-    String(task.driverId || "").trim().toUpperCase() ===
-    String(DRIVER_ID).trim().toUpperCase();
-
-  if (!driverMatch) return null; // ❌ skip everything else
-
-  console.log("----- MATCHED DRIVER -----");
-  console.log("TASK ID:", id);
-  console.log("driverId:", JSON.stringify(task.driverId));
-  console.log("status:", task.status);
-
-  const local = cached.find(t => t._key === id);
-  console.log("local:", local);
-
-  if (local?.status === "LOCAL_COMPLETED") {
-    console.log("🚫 FILTERED: LOCAL_COMPLETED");
-    return null;
-  }
-
-  if (task.status === "COMPLETED") {
-    console.log("🚫 FILTERED: COMPLETED");
-    return null;
-  }
-
-  if (task.status === "PENDING") {
-    console.log("🚫 FILTERED: PENDING");
-    return null;
-  }
-
-  console.log("✅ PASSED");
-
-  return { _key: id, ...task, dateKey };
-});
+      return { _key: id, ...task, dateKey };
+    });
 
     let freshTasks = (await Promise.all(reads)).filter(Boolean);
 
@@ -1598,7 +1601,8 @@ async function loadTasks() {
       if (
         local.dateKey === dateKey &&
         local.driverId === DRIVER_ID &&
-        !freshIds.has(local._key)
+        !freshIds.has(local._key) &&
+        local.status !== "LOCAL_COMPLETED"
       ) {
         await deleteTaskFromIndexedDB(local._key);
       }
