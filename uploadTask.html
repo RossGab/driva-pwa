@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin Upload Processor</title>
+
+<style>
+body {
+  font-family: Arial;
+  background:#f5f5f5;
+  padding:20px;
+}
+
+.container {
+  max-width:900px;
+  margin:auto;
+  background:#fff;
+  padding:20px;
+  border-radius:10px;
+}
+
+button {
+  padding:10px 15px;
+  border:none;
+  border-radius:6px;
+  cursor:pointer;
+  margin-top:10px;
+}
+
+.upload { background:#007bff; color:white; }
+.process { background:#28a745; color:white; }
+
+.preview {
+  margin-top:20px;
+  max-height:300px;
+  overflow:auto;
+  background:#eee;
+  padding:10px;
+  border-radius:6px;
+  font-size:12px;
+}
+
+.status {
+  margin-top:15px;
+  font-weight:bold;
+}
+</style>
+</head>
+
+<body>
+
+<div class="container">
+  <h2>📂 Upload & Process File</h2>
+
+  <input type="file" id="fileInput" accept=".json">
+  <br>
+
+  <button class="upload" onclick="loadFile()">Load File</button>
+  <button class="process" onclick="uploadToFirebase()">Upload to Firebase</button>
+
+  <div class="status" id="status"></div>
+  <div class="preview" id="preview"></div>
+</div>
+
+<script type="module">
+
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getFirestore, collection, addDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+// 🔥 REPLACE THIS WITH YOUR FIREBASE CONFIG
+const firebaseConfig = {
+  apiKey: "YOUR_API_KEY",
+  authDomain: "YOUR_PROJECT.firebaseapp.com",
+  projectId: "YOUR_PROJECT_ID",
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
+let parsedData = [];
+
+// 📂 LOAD FILE
+window.loadFile = function () {
+  const file = document.getElementById("fileInput").files[0];
+  if (!file) return alert("Select a file first!");
+
+  const reader = new FileReader();
+
+  reader.onload = function(e) {
+    try {
+      const data = JSON.parse(e.target.result);
+
+      // Normalize structure
+      parsedData = Array.isArray(data) ? data : Object.values(data);
+
+      document.getElementById("status").innerText =
+        `✅ Loaded ${parsedData.length} records`;
+
+      document.getElementById("preview").innerText =
+        JSON.stringify(parsedData.slice(0, 5), null, 2);
+
+    } catch (err) {
+      alert("❌ Invalid JSON file");
+    }
+  };
+
+  reader.readAsText(file);
+};
+
+// 🧹 CLEAN DATA
+function cleanData(item) {
+  return {
+    taskId: item.taskId || generateId(),
+    timestamp: item.timestamp || Date.now(),
+    status: item.status || "pending",
+    photos: item.photos || [],
+    createdAt: new Date().toISOString()
+  };
+}
+
+// 🔑 GENERATE ID
+function generateId() {
+  return "TASK_" + Date.now() + "_" + Math.floor(Math.random()*1000);
+}
+
+// 🚀 UPLOAD
+window.uploadToFirebase = async function () {
+  if (!parsedData.length) {
+    alert("No data loaded!");
+    return;
+  }
+
+  const statusEl = document.getElementById("status");
+  statusEl.innerText = "⏳ Uploading...";
+
+  let success = 0;
+  let failed = 0;
+
+  for (let i = 0; i < parsedData.length; i++) {
+    try {
+      const clean = cleanData(parsedData[i]);
+
+      await addDoc(collection(db, "tasks"), clean);
+      success++;
+
+    } catch (err) {
+      console.error(err);
+      failed++;
+    }
+  }
+
+  statusEl.innerText =
+    `✅ Done! Success: ${success}, Failed: ${failed}`;
+};
+
+</script>
+
+</body>
+</html>
