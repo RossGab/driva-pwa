@@ -41,12 +41,13 @@ button {
   height:100%;
   width:0%;
   background:#2ecc71;
-  transition:width 0.3s;
+  transition:width 0.2s;
 }
 
 #status {
   margin-top:10px;
   font-size:14px;
+  line-height:1.6;
 }
 </style>
 </head>
@@ -74,7 +75,16 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebas
 import { getDatabase, ref, update, get } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-const firebaseConfig = { /* SAME CONFIG */ };
+/* ✅ REAL CONFIG (REQUIRED) */
+const firebaseConfig = {
+  apiKey: "AIzaSyDFW61pnwLvh6HGKWt10zLYNr860fI8vkg",
+  authDomain: "driva-pwa.firebaseapp.com",
+  databaseURL: "https://driva-pwa-default-rtdb.firebaseio.com",
+  projectId: "driva-pwa",
+  storageBucket: "driva-pwa.firebasestorage.app",
+  messagingSenderId: "299138219722",
+  appId: "1:299138219722:web:623ff6b0a067ea822dfe33"
+};
 
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
@@ -83,27 +93,9 @@ const storage = getStorage(app);
 let tasks = [];
 let photos = [];
 
-window.loadFile = function() {
-  const file = document.getElementById("fileInput").files[0];
-  if (!file) return alert("Select a file");
-
-  const reader = new FileReader();
-  reader.onload = e => {
-    const raw = JSON.parse(e.target.result);
-    tasks = raw.tasks || [];
-    photos = raw.photos || [];
-
-    status(`✅ Loaded ${tasks.length} tasks, ${photos.length} photos`);
-  };
-  reader.readAsText(file);
-};
-
-window.previewData = function() {
-  if (!tasks.length) return alert("No tasks");
-  alert(`Preview: ${tasks.length} tasks`);
-};
-
-function status(msg) {
+/* ========================= */
+function log(msg) {
+  console.log(msg);
   document.getElementById("status").innerHTML = msg;
 }
 
@@ -112,91 +104,129 @@ function updateProgress(current, total) {
   document.getElementById("progressFill").style.width = percent + "%";
 }
 
+/* ========================= */
+window.loadFile = function() {
+  const file = document.getElementById("fileInput").files[0];
+  if (!file) return alert("Select a file");
+
+  const reader = new FileReader();
+
+  reader.onload = e => {
+    try {
+      const raw = JSON.parse(e.target.result);
+      tasks = raw.tasks || [];
+      photos = raw.photos || [];
+
+      log(`✅ Loaded ${tasks.length} tasks, ${photos.length} photos`);
+    } catch (err) {
+      alert("Invalid JSON");
+      console.error(err);
+    }
+  };
+
+  reader.readAsText(file);
+};
+
+/* ========================= */
+window.previewData = function() {
+  if (!tasks.length) return alert("No tasks loaded");
+  alert(`Loaded ${tasks.length} tasks`);
+};
+
+/* ========================= */
 function base64ToBlob(base64) {
   const parts = base64.split(",");
   const mime = parts[0].match(/:(.*?);/)[1];
   const bstr = atob(parts[1]);
-  let n = bstr.length;
-  const u8arr = new Uint8Array(n);
-  while (n--) u8arr[n] = bstr.charCodeAt(n);
+  const u8arr = new Uint8Array(bstr.length);
+
+  for (let i = 0; i < bstr.length; i++) {
+    u8arr[i] = bstr.charCodeAt(i);
+  }
+
   return new Blob([u8arr], { type: mime });
 }
 
+/* ========================= */
 window.uploadData = async function() {
 
-  if (!tasks.length) return alert("No data");
+  if (!tasks.length) return alert("No data loaded");
 
-  let totalSteps = tasks.length + photos.length;
-  let currentStep = 0;
+  let total = tasks.length + photos.length;
+  let current = 0;
 
   let saved = 0;
   let skipped = 0;
   let photoSkipped = 0;
 
-  // ======================
-  // TASKS
-  // ======================
+  log("🚀 Starting upload...");
+
+  /* ===== TASKS ===== */
   for (const t of tasks) {
-    currentStep++;
-    updateProgress(currentStep, totalSteps);
+    current++;
+    updateProgress(current, total);
 
-    status(`📄 Processing Task: ${t._key}`);
+    log(`📄 Task: ${t._key}`);
 
-    const snap = await get(ref(db, `tasks/${t._key}`));
+    try {
+      const snap = await get(ref(db, `tasks/${t._key}`));
 
-    // 🔥 SKIP DUPLICATE
-    if (snap.exists()) {
-      skipped++;
-      continue;
+      if (snap.exists()) {
+        skipped++;
+        continue;
+      }
+
+      await update(ref(db, `tasks/${t._key}`), t);
+      await update(ref(db, `tasksByDate/${t.dateKey}/${t._key}`), true);
+
+      saved++;
+
+    } catch (err) {
+      console.error("Task error:", err);
     }
-
-    await update(ref(db, `tasks/${t._key}`), t);
-    await update(ref(db, `tasksByDate/${t.dateKey}/${t._key}`), true);
-
-    saved++;
   }
 
-  // ======================
-  // PHOTOS
-  // ======================
+  /* ===== PHOTOS ===== */
   for (const p of photos) {
-    currentStep++;
-    updateProgress(currentStep, totalSteps);
+    current++;
+    updateProgress(current, total);
 
-    status(`📸 Processing Photo: ${p.taskKey} (${p.photoIndex})`);
+    log(`📸 Photo: ${p.taskKey} (${p.photoIndex})`);
 
-    const taskSnap = await get(ref(db, `tasks/${p.taskKey}`));
-    const task = taskSnap.val() || {};
+    try {
+      const taskSnap = await get(ref(db, `tasks/${p.taskKey}`));
+      const task = taskSnap.val() || {};
 
-    // 🔥 SKIP IF PHOTO EXISTS
-    if (task[`photo${p.photoIndex}Url`]) {
-      photoSkipped++;
-      continue;
+      if (task[`photo${p.photoIndex}Url`]) {
+        photoSkipped++;
+        continue;
+      }
+
+      const blob = base64ToBlob(p.base64);
+
+      const filename = `photo_${p.photoIndex}_${Date.now()}.jpg`;
+      const storageRef = sRef(storage, `tasks/${p.taskKey}/${filename}`);
+
+      await uploadBytes(storageRef, blob);
+      const url = await getDownloadURL(storageRef);
+
+      await update(ref(db, `tasks/${p.taskKey}`), {
+        [`photo${p.photoIndex}Url`]: url,
+        [`photo${p.photoIndex}TakenAt`]: p.takenAt,
+        ...(p.deliveryData || {}),
+        status: "COMPLETED"
+      });
+
+    } catch (err) {
+      console.error("Photo error:", err);
     }
-
-    const blob = base64ToBlob(p.base64);
-    const filename = `photo_${p.photoIndex}_${Date.now()}.jpg`;
-
-    const storageRef = sRef(storage, `tasks/${p.taskKey}/${filename}`);
-    await uploadBytes(storageRef, blob);
-    const url = await getDownloadURL(storageRef);
-
-    await update(ref(db, `tasks/${p.taskKey}`), {
-      [`photo${p.photoIndex}Url`]: url,
-      [`photo${p.photoIndex}TakenAt`]: p.takenAt,
-      ...(p.deliveryData || {}),
-      status: "COMPLETED"
-    });
   }
 
-  // ======================
-  // FINAL STATUS
-  // ======================
-  status(`
-    ✅ Upload Complete<br><br>
-    📄 Tasks Saved: ${saved}<br>
-    ⏭ Skipped (existing): ${skipped}<br>
-    📸 Photos Skipped: ${photoSkipped}
+  log(`
+    ✅ DONE<br>
+    Saved: ${saved}<br>
+    Skipped Tasks: ${skipped}<br>
+    Skipped Photos: ${photoSkipped}
   `);
 };
 </script>
