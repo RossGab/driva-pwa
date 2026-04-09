@@ -3,47 +3,28 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Admin Upload Processor</title>
+<title>Admin Upload Tasks</title>
 
 <style>
 body {
   font-family: Arial;
-  background:#f5f5f5;
-  padding:20px;
+  padding: 20px;
+  background: #f4f4f4;
 }
-
 .container {
-  max-width:900px;
-  margin:auto;
-  background:#fff;
-  padding:20px;
-  border-radius:10px;
+  background: #fff;
+  padding: 20px;
+  border-radius: 8px;
 }
-
 button {
-  padding:10px 15px;
-  border:none;
-  border-radius:6px;
-  cursor:pointer;
-  margin-top:10px;
+  padding: 12px;
+  margin-top: 10px;
+  width: 100%;
+  font-size: 14px;
 }
-
-.upload { background:#007bff; color:white; }
-.process { background:#28a745; color:white; }
-
-.preview {
-  margin-top:20px;
-  max-height:300px;
-  overflow:auto;
-  background:#eee;
-  padding:10px;
-  border-radius:6px;
-  font-size:12px;
-}
-
-.status {
-  margin-top:15px;
-  font-weight:bold;
+#status {
+  margin-top: 10px;
+  font-weight: bold;
 }
 </style>
 </head>
@@ -51,81 +32,71 @@ button {
 <body>
 
 <div class="container">
-  <h2>📂 Upload & Process File</h2>
+  <h2>📤 Upload Extracted File</h2>
 
   <input type="file" id="fileInput" accept=".json">
-  <br>
+  <button onclick="loadFile()">📂 Load File</button>
 
-  <button class="upload" onclick="loadFile()">Load File</button>
-  <button class="process" onclick="uploadToFirebase()">Upload to Firebase</button>
+  <button onclick="uploadToFirebase()">🚀 Upload to Firebase</button>
 
-  <div class="status" id="status"></div>
-  <div class="preview" id="preview"></div>
+  <div id="status"></div>
 </div>
 
 <script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import { getDatabase, ref, set } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getFirestore, collection, addDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-
-// 🔥 REPLACE THIS WITH YOUR FIREBASE CONFIG
+// 🔥 SAME CONFIG AS DRIVER
 const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_PROJECT.firebaseapp.com",
-  projectId: "YOUR_PROJECT_ID",
+  apiKey: "AIzaSyDFW61pnwLvh6HGKWt10zLYNr860fI8vkg",
+  authDomain: "driva-pwa.firebaseapp.com",
+  databaseURL: "https://driva-pwa-default-rtdb.firebaseio.com",
+  projectId: "driva-pwa",
+  storageBucket: "driva-pwa.firebasestorage.app",
+  messagingSenderId: "299138219722",
+  appId: "1:299138219722:web:623ff6b0a067ea822dfe33"
 };
 
 const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
+const db = getDatabase(app);
 
 let parsedData = [];
 
-// 📂 LOAD FILE
+/* =========================
+   LOAD FILE
+========================= */
 window.loadFile = function () {
   const file = document.getElementById("fileInput").files[0];
-  if (!file) return alert("Select a file first!");
+
+  if (!file) {
+    alert("Select a JSON file first");
+    return;
+  }
 
   const reader = new FileReader();
 
-  reader.onload = function(e) {
+  reader.onload = e => {
     try {
-      const data = JSON.parse(e.target.result);
-
-      // Normalize structure
-      parsedData = Array.isArray(data) ? data : Object.values(data);
+      parsedData = JSON.parse(e.target.result);
 
       document.getElementById("status").innerText =
         `✅ Loaded ${parsedData.length} records`;
 
-      document.getElementById("preview").innerText =
-        JSON.stringify(parsedData.slice(0, 5), null, 2);
+      console.log(parsedData);
 
     } catch (err) {
-      alert("❌ Invalid JSON file");
+      alert("Invalid JSON file");
     }
   };
 
   reader.readAsText(file);
 };
 
-// 🧹 CLEAN DATA
-function cleanData(item) {
-  return {
-    taskId: item.taskId || generateId(),
-    timestamp: item.timestamp || Date.now(),
-    status: item.status || "pending",
-    photos: item.photos || [],
-    createdAt: new Date().toISOString()
-  };
-}
-
-// 🔑 GENERATE ID
-function generateId() {
-  return "TASK_" + Date.now() + "_" + Math.floor(Math.random()*1000);
-}
-
-// 🚀 UPLOAD
+/* =========================
+   UPLOAD TO FIREBASE
+========================= */
 window.uploadToFirebase = async function () {
+
   if (!parsedData.length) {
     alert("No data loaded!");
     return;
@@ -138,22 +109,52 @@ window.uploadToFirebase = async function () {
   let failed = 0;
 
   for (let i = 0; i < parsedData.length; i++) {
-    try {
-      const clean = cleanData(parsedData[i]);
 
-      await addDoc(collection(db, "tasks"), clean);
+    try {
+      const item = parsedData[i];
+
+      // 🔥 GENERATE TASK KEY (same format style)
+      const taskKey =
+        item._key ||
+        `TASK_${Date.now()}_${Math.floor(Math.random()*1000)}`;
+
+      // 🔥 DATE KEY REQUIRED (same as driver logic)
+      let dateKey = item.dateKey;
+
+      if (!dateKey) {
+        const today = new Date().toISOString().slice(0,10).replace(/-/g,"");
+        dateKey = today;
+      }
+
+      const cleanData = {
+        ...item,
+        _key: taskKey,
+        dateKey: dateKey,
+        status: "PENDING",
+        createdAt: new Date().toISOString()
+      };
+
+      // =========================
+      // ✅ SAVE MAIN TASK
+      // =========================
+      await set(ref(db, `tasks/${taskKey}`), cleanData);
+
+      // =========================
+      // ✅ SAVE DATE INDEX (CRITICAL)
+      // =========================
+      await set(ref(db, `tasksByDate/${dateKey}/${taskKey}`), true);
+
       success++;
 
     } catch (err) {
-      console.error(err);
+      console.error("Upload error:", err);
       failed++;
     }
   }
 
   statusEl.innerText =
-    `✅ Done! Success: ${success}, Failed: ${failed}`;
+    `✅ Done!\nSuccess: ${success} | Failed: ${failed}`;
 };
-
 </script>
 
 </body>
