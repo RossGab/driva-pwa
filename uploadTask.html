@@ -75,7 +75,6 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebas
 import { getDatabase, ref, update, get } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-/* ✅ REAL CONFIG (REQUIRED) */
 const firebaseConfig = {
   apiKey: "AIzaSyDFW61pnwLvh6HGKWt10zLYNr860fI8vkg",
   authDomain: "driva-pwa.firebaseapp.com",
@@ -156,6 +155,7 @@ window.uploadData = async function() {
   let current = 0;
 
   let saved = 0;
+  let updated = 0;
   let skipped = 0;
   let photoSkipped = 0;
 
@@ -166,20 +166,33 @@ window.uploadData = async function() {
     current++;
     updateProgress(current, total);
 
-    log(`📄 Task: ${t._key}`);
+    log(`📄 Processing Task: ${t._key}`);
 
     try {
       const snap = await get(ref(db, `tasks/${t._key}`));
+      const existing = snap.val();
 
-      if (snap.exists()) {
+      // ✅ SKIP ONLY if already completed with photo
+      if (
+        existing &&
+        existing.status === "COMPLETED" &&
+        existing.photo1Url
+      ) {
         skipped++;
         continue;
       }
 
-      await update(ref(db, `tasks/${t._key}`), t);
-      await update(ref(db, `tasksByDate/${t.dateKey}/${t._key}`), true);
-
-      saved++;
+      // NEW
+      if (!existing) {
+        await update(ref(db, `tasks/${t._key}`), t);
+        await update(ref(db, `tasksByDate/${t.dateKey}/${t._key}`), true);
+        saved++;
+      } 
+      // UPDATE EXISTING
+      else {
+        await update(ref(db, `tasks/${t._key}`), t);
+        updated++;
+      }
 
     } catch (err) {
       console.error("Task error:", err);
@@ -191,12 +204,13 @@ window.uploadData = async function() {
     current++;
     updateProgress(current, total);
 
-    log(`📸 Photo: ${p.taskKey} (${p.photoIndex})`);
+    log(`📸 Processing Photo: ${p.taskKey} (${p.photoIndex})`);
 
     try {
       const taskSnap = await get(ref(db, `tasks/${p.taskKey}`));
       const task = taskSnap.val() || {};
 
+      // ✅ SKIP if already has this photo
       if (task[`photo${p.photoIndex}Url`]) {
         photoSkipped++;
         continue;
@@ -223,10 +237,11 @@ window.uploadData = async function() {
   }
 
   log(`
-    ✅ DONE<br>
-    Saved: ${saved}<br>
-    Skipped Tasks: ${skipped}<br>
-    Skipped Photos: ${photoSkipped}
+    ✅ DONE<br><br>
+    🆕 New Saved: ${saved}<br>
+    🔄 Updated Existing: ${updated}<br>
+    ⏭ Skipped Complete: ${skipped}<br>
+    📸 Photos Skipped: ${photoSkipped}
   `);
 };
 </script>
