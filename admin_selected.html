@@ -308,7 +308,7 @@ button {
   
   <div style="display:flex;align-items:center;gap:14px;">
     <img src="./logo.jpg" class="admin-logo" alt="Company Logo">
-    <h1>Admin Dashboard <span class="version">V4.0.3-WIP</span></h1>
+    <h1>Admin Dashboard <span class="version">V4.0.4-WIP</span></h1>
   </div>
 
   <!-- 📅 DATE FILTER -->
@@ -1391,6 +1391,40 @@ window.revertToPending = async function (taskKey) {
     hideLoader();
   }
 };
+
+window.markAsCompleted = async function (taskId) {
+  if (!confirm("Mark this task as completed?")) return;
+
+  showLoader("Completing task…");
+
+  try {
+    await update(ref(db, `tasks/${taskId}`), {
+      status: "COMPLETED",
+      finalized: true,
+      completedAt: new Date().toISOString()
+    });
+
+    // 🔄 Update local snapshot cache (optional but good)
+    if (window.__SNAPSHOT_TASKS__) {
+      const t = window.__SNAPSHOT_TASKS__.find(x => x._key === taskId);
+      if (t) {
+        t.status = "COMPLETED";
+        t.finalized = true;
+      }
+    }
+
+    alert("✅ Task marked as completed");
+
+    refreshDashboard();
+    loadTasks(CURRENT_STATUS);
+
+  } catch (err) {
+    console.error(err);
+    alert("Failed to update task");
+  } finally {
+    hideLoader();
+  }
+};
   
 window.showCompletedTasks = function () {
   // ✅ STEP 4
@@ -1634,6 +1668,12 @@ function renderAdminTasks(tasks) {
           <button class="deleteBtn"
             onclick="revertToPending('${t._key}')">
             🔁 Back to Pending (Reset)
+          </button>
+        ` : ""}
+        ${t.status !== "COMPLETED" ? `
+          <button class="doneBtn"
+            onclick="markAsCompleted('${t._key}')">
+            ✅ Set as Completed
           </button>
         ` : ""}
         <div class="form-actions">
