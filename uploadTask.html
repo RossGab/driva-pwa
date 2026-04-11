@@ -9,123 +9,128 @@
 <style>
 body {
   font-family: Arial, sans-serif;
-  background: linear-gradient(135deg, #eef2f7, #dfe6ed);
+  background: #f4f6f9;
   margin: 0;
   padding: 20px;
 }
 
+/* ===== HEADER ===== */
+.header {
+  text-align: center;
+  font-size: 26px;
+  font-weight: bold;
+  margin-bottom: 20px;
+}
+
 /* ===== BACK BUTTON ===== */
 #backBtn {
-  position: fixed;
-  top: 12px;
-  left: 12px;
-  padding: 10px 14px;
-  border-radius: 10px;
-  background: #2c3e50;
+  background: #555;
   color: #fff;
   border: none;
-  font-size: 14px;
-  z-index: 9999;
+  padding: 10px 16px;
+  border-radius: 8px;
   cursor: pointer;
+  margin-bottom: 10px;
 }
 #backBtn:hover {
-  background: #1a252f;
+  background: #333;
 }
 
-/* ===== CONTAINER ===== */
-.container {
-  max-width: 600px;
-  margin: auto;
+/* ===== CARD ===== */
+.card {
   background: #fff;
-  padding: 20px;
   border-radius: 14px;
-  box-shadow: 0 8px 25px rgba(0,0,0,0.08);
-}
-
-/* ===== HEADER ===== */
-h2 {
-  margin-top: 0;
-  text-align: center;
+  padding: 18px;
+  margin-bottom: 16px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
 }
 
 /* ===== INPUT ===== */
 input[type="file"] {
-  width: 100%;
   padding: 10px;
   border-radius: 8px;
   border: 1px solid #ccc;
 }
 
-/* ===== BUTTONS ===== */
-button {
-  width: 100%;
-  padding: 12px;
+/* ===== BUTTON GROUP ===== */
+.button-group {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
   margin-top: 10px;
-  border: none;
-  border-radius: 8px;
-  font-size: 15px;
-  font-weight: bold;
-  cursor: pointer;
-  transition: 0.2s;
 }
 
-.load { background:#3498db; color:#fff; }
-.preview { background:#f39c12; color:#fff; }
-.upload { background:#2ecc71; color:#fff; }
+/* ===== BUTTONS ===== */
+button.action {
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: none;
+  font-weight: bold;
+  cursor: pointer;
+  min-width: 140px;
+}
 
-button:hover {
+/* MATCH ADMIN COLORS */
+.load { background:#28a745; color:#fff; }
+.preview { background:#6c757d; color:#fff; }
+.upload { background:#007bff; color:#fff; }
+
+button.action:hover {
   opacity: 0.9;
-  transform: translateY(-1px);
 }
 
 /* ===== PROGRESS ===== */
 #progressBar {
   width: 100%;
-  height: 18px;
+  height: 16px;
   background: #e0e0e0;
   border-radius: 10px;
   overflow: hidden;
-  margin-top: 14px;
+  margin-top: 12px;
 }
 
 #progressFill {
   height: 100%;
   width: 0%;
-  background: linear-gradient(90deg, #2ecc71, #27ae60);
+  background: #28a745;
   transition: width 0.3s;
 }
 
 /* ===== STATUS ===== */
 #status {
-  margin-top: 12px;
-  font-size: 14px;
+  margin-top: 10px;
+  font-size: 13px;
+  color: #555;
   line-height: 1.6;
-  background: #f9f9f9;
-  padding: 10px;
-  border-radius: 8px;
 }
 </style>
 </head>
 
 <body>
 
-<!-- ✅ BACK BUTTON -->
+<div class="header">📤 Upload Extracted File</div>
+
 <button id="backBtn">← Back</button>
 
-<div class="container">
-  <h2>📤 Upload Extracted File v2.0</h2>
+<!-- ===== CARD ===== -->
+<div class="card">
+
+  <b>📁 Select Extracted JSON File</b><br><br>
 
   <input type="file" id="fileInput" accept=".json">
 
-  <button class="load" onclick="loadFile()">📂 Load File</button>
-  <button class="preview" onclick="previewData()">👁 Preview</button>
-  <button class="upload" onclick="uploadData()">🚀 Upload to Firebase</button>
+  <div class="button-group">
+    <button class="action load" onclick="loadFile()">📂 Load</button>
+    <button class="action preview" onclick="previewData()">👁 Preview</button>
+    <button class="action upload" onclick="uploadData()">🚀 Upload</button>
+  </div>
 
   <div id="progressBar">
     <div id="progressFill"></div>
   </div>
 
   <div id="status">Waiting for file...</div>
+
 </div>
 
 <script type="module">
@@ -153,14 +158,11 @@ let photos = [];
 
 /* ===== BACK BUTTON ===== */
 document.getElementById("backBtn").onclick = () => {
-  if (confirm("Go back to Assign page?")) {
-    window.location.href = "https://rossgab.github.io/driva-pwa/assign.html";
-  }
+  window.location.href = "https://rossgab.github.io/driva-pwa/assign.html";
 };
 
 /* ===== UTIL ===== */
 function log(msg) {
-  console.log(msg);
   document.getElementById("status").innerHTML = msg;
 }
 
@@ -183,7 +185,7 @@ window.loadFile = function() {
       photos = raw.photos || [];
 
       log(`✅ Loaded ${tasks.length} tasks, ${photos.length} photos`);
-    } catch (err) {
+    } catch {
       alert("Invalid JSON");
     }
   };
@@ -219,9 +221,8 @@ window.uploadData = async function() {
   let total = tasks.length + photos.length;
   let current = 0;
 
-  log("🚀 Starting upload...");
+  log("🚀 Uploading...");
 
-  /* TASKS */
   for (const t of tasks) {
     current++;
     updateProgress(current, total);
@@ -237,30 +238,11 @@ window.uploadData = async function() {
     }
   }
 
-  /* PHOTOS */
   for (const p of photos) {
     current++;
     updateProgress(current, total);
 
     const blob = base64ToBlob(p.base64);
-
     const filename = `photo_${p.photoIndex}_${Date.now()}.jpg`;
+
     const storageRef = sRef(storage, `tasks/${p.taskKey}/${filename}`);
-
-    await uploadBytes(storageRef, blob);
-    const url = await getDownloadURL(storageRef);
-
-    await update(ref(db, `tasks/${p.taskKey}`), {
-      [`photo${p.photoIndex}Url`]: url,
-      [`photo${p.photoIndex}TakenAt`]: p.takenAt,
-      ...(p.deliveryData || {}),
-      status: "COMPLETED"
-    });
-  }
-
-  log("✅ Upload Complete!");
-};
-</script>
-
-</body>
-</html>
