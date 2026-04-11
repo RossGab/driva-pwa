@@ -16,56 +16,60 @@ body {
 
 /* ===== HEADER ===== */
 .header {
-  font-size: 24px;
+  text-align: center;
+  font-size: 26px;
   font-weight: bold;
-  text-align: center;
-  margin-bottom: 16px;
+  margin-bottom: 20px;
 }
 
-/* ===== CARD ===== */
-.container {
-  max-width: 540px;
-  margin: auto;
+/* ===== BACK BUTTON ===== */
+#backBtn {
+  background: #555;
+  color: #fff;
+  border: none;
+  padding: 10px 16px;
+  border-radius: 8px;
+  cursor: pointer;
+  margin-bottom: 12px;
+}
+#backBtn:hover {
+  background: #333;
+}
+
+/* ===== CARD STYLE (MATCH ADMIN) ===== */
+.card {
   background: #fff;
-  padding: 20px;
-  border-radius: 14px;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+  border-radius: 16px;
+  padding: 16px;
+  margin-bottom: 16px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.08);
 }
 
-/* ===== FILE BOX ===== */
-.file-box {
-  border: 2px dashed #dcdcdc;
-  padding: 18px;
-  border-radius: 12px;
-  text-align: center;
-  background: #fafafa;
-  transition: 0.2s;
-}
-.file-box:hover {
-  border-color: #3498db;
-  background: #f0f8ff;
+/* ===== SECTION TITLE ===== */
+.section-title {
+  font-weight: bold;
+  font-size: 16px;
+  margin-bottom: 10px;
 }
 
-.file-name {
-  font-size: 13px;
-  color: #666;
-  margin-top: 8px;
-}
-
-/* ===== BUTTON GROUP ===== */
-.button-group {
+/* ===== FILE ROW ===== */
+.file-row {
   display: flex;
   gap: 10px;
-  margin-top: 12px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+/* ===== INPUT ===== */
+input[type="file"] {
+  padding: 8px;
 }
 
 /* ===== BUTTONS ===== */
 button {
-  flex: 1;
-  padding: 12px;
-  border: none;
+  padding: 10px 14px;
   border-radius: 10px;
-  font-size: 14px;
+  border: none;
   font-weight: bold;
   cursor: pointer;
   transition: 0.2s;
@@ -81,17 +85,17 @@ button:disabled {
 .upload { background:#007bff; color:#fff; }
 
 button:hover:not(:disabled) {
-  transform: translateY(-1px);
+  opacity: 0.9;
 }
 
 /* ===== PROGRESS ===== */
 #progressBar {
   width:100%;
-  height:16px;
-  background:#e0e0e0;
+  height:14px;
+  background:#ddd;
   border-radius:10px;
   overflow:hidden;
-  margin-top:16px;
+  margin-top:10px;
 }
 
 #progressFill {
@@ -102,13 +106,13 @@ button:hover:not(:disabled) {
 }
 
 #progressText {
-  text-align:center;
   font-size:12px;
+  text-align:center;
   margin-top:4px;
   color:#555;
 }
 
-/* ===== STATUS (TERMINAL STYLE CLEANED) ===== */
+/* ===== DEBUG TERMINAL ===== */
 #status {
   margin-top:15px;
   font-size:12px;
@@ -125,28 +129,35 @@ button:hover:not(:disabled) {
 
 <body>
 
-<div class="header">📤 Upload Extracted File</div>
+<div class="header">Upload Extracted File</div>
 
-<div class="container">
+<button id="backBtn">← Back</button>
 
-  <div class="file-box">
+<!-- ===== BULK UPLOAD CARD ===== -->
+<div class="card">
+  <div class="section-title">📥 Bulk Upload Extracted File</div>
+
+  <div class="file-row">
     <input type="file" id="fileInput" accept=".json">
-    <div id="fileName" class="file-name">No file selected</div>
+    <span id="fileName">No file chosen</span>
   </div>
 
-  <div class="button-group">
-    <button class="load" onclick="loadFile()">📂 Load</button>
-    <button class="preview" onclick="previewData()">👁 Preview</button>
-    <button class="upload" onclick="uploadData()">🚀 Upload</button>
+  <div class="file-row" style="margin-top:10px;">
+    <button class="load" onclick="loadFile()">Load</button>
+    <button class="preview" onclick="previewData()">Preview</button>
+    <button class="upload" onclick="uploadData()">Upload</button>
   </div>
 
   <div id="progressBar">
     <div id="progressFill"></div>
   </div>
   <div id="progressText">0%</div>
+</div>
 
+<!-- ===== DEBUG PANEL ===== -->
+<div class="card">
+  <div class="section-title">🧪 Upload Logs</div>
   <div id="status">Ready...</div>
-
 </div>
 
 <script type="module">
@@ -171,9 +182,13 @@ const storage = getStorage(app);
 let tasks = [];
 let photos = [];
 
-/* ========================= */
+/* BACK */
+document.getElementById("backBtn").onclick = () => {
+  window.location.href = "https://rossgab.github.io/driva-pwa/assign.html";
+};
+
+/* LOG */
 function log(msg) {
-  console.log(msg);
   const el = document.getElementById("status");
   el.innerHTML += msg + "<br>";
   el.scrollTop = el.scrollHeight;
@@ -185,14 +200,14 @@ function updateProgress(current, total) {
   document.getElementById("progressText").innerText = percent + "%";
 }
 
-/* ========================= */
+/* FILE NAME */
 document.getElementById("fileInput").addEventListener("change", e => {
   const file = e.target.files[0];
   document.getElementById("fileName").innerText =
-    file ? file.name : "No file selected";
+    file ? file.name : "No file chosen";
 });
 
-/* ========================= */
+/* LOAD */
 window.loadFile = function() {
   const file = document.getElementById("fileInput").files[0];
   if (!file) return alert("Select a file");
@@ -210,20 +225,19 @@ window.loadFile = function() {
       log(`📸 Loaded ${photos.length} photos`);
     } catch (err) {
       alert("Invalid JSON");
-      console.error(err);
     }
   };
 
   reader.readAsText(file);
 };
 
-/* ========================= */
+/* PREVIEW */
 window.previewData = function() {
   if (!tasks.length) return alert("No tasks loaded");
   alert(`Loaded ${tasks.length} tasks\n${photos.length} photos`);
 };
 
-/* ========================= */
+/* BASE64 */
 function base64ToBlob(base64) {
   const parts = base64.split(",");
   const mime = parts[0].match(/:(.*?);/)[1];
@@ -237,7 +251,7 @@ function base64ToBlob(base64) {
   return new Blob([u8arr], { type: mime });
 }
 
-/* ========================= */
+/* UPLOAD (UNCHANGED) */
 window.uploadData = async function() {
 
   if (!tasks.length) return alert("No data loaded");
@@ -253,7 +267,6 @@ window.uploadData = async function() {
   let skipped = 0;
   let photoSkipped = 0;
 
-  /* ===== TASKS ===== */
   for (const t of tasks) {
     current++;
     updateProgress(current, total);
@@ -287,7 +300,6 @@ window.uploadData = async function() {
     }
   }
 
-  /* ===== PHOTOS ===== */
   for (const p of photos) {
     current++;
     updateProgress(current, total);
