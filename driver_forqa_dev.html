@@ -261,7 +261,7 @@ import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "htt
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "v4.0.22.2-ForQATEST_dev";
+const VERSION = "v4.0.22.3-ForQATEST_dev";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -394,6 +394,24 @@ async function deleteTaskFromIndexedDB(taskKey) {
   const db = await openDB();
   const tx = db.transaction(TASK_STORE, "readwrite");
   tx.objectStore(TASK_STORE).delete(taskKey);
+}
+
+async function cleanOrphanPhotos() {
+  try {
+    const tasks = await getTasksFromIndexedDB();
+    const photos = await getAllPhotosFromDB();
+
+    const validTaskKeys = new Set(tasks.map(t => t._key));
+
+    for (const p of photos) {
+      if (!validTaskKeys.has(p.taskKey)) {
+        console.log("🧹 Deleting orphan photo:", p.id);
+        await deletePhotoFromDB(p.id);
+      }
+    }
+  } catch (e) {
+    console.warn("Orphan cleanup failed", e);
+  }
 }
 
 function hasCachedTasksForDate(tasks, selectedDate) {
@@ -1003,6 +1021,52 @@ function saveFormCache(cache) {
   localStorage.setItem(FORM_CACHE_KEY, JSON.stringify(cache));
 }
 
+let lastSentTime = 0;
+let lastSentLocation = null;
+
+const GPS_MIN_INTERVAL = 15000; // 15 sec
+const GPS_MIN_DISTANCE = 15;    // 15 meters
+const GPS_MAX_ACCURACY = 50;    // ignore bad GPS
+
+function getDistanceMeters(lat1, lon1, lat2, lon2) {
+  const R = 6371000;
+  const toRad = x => x * Math.PI / 180;
+
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+
+  const a =
+    Math.sin(dLat/2) * Math.sin(dLat/2) +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+    Math.sin(dLon/2) * Math.sin(dLon/2);
+
+  return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
+}
+
+function shouldSendGPS(pos) {
+  const now = Date.now();
+
+  // accuracy filter
+  if (pos.coords.accuracy > GPS_MAX_ACCURACY) return false;
+
+  // time throttle
+  if (now - lastSentTime < GPS_MIN_INTERVAL) return false;
+
+  // distance check
+  if (lastSentLocation) {
+    const dist = getDistanceMeters(
+      lastSentLocation.lat,
+      lastSentLocation.lng,
+      pos.coords.latitude,
+      pos.coords.longitude
+    );
+
+    if (dist < GPS_MIN_DISTANCE) return false;
+  }
+
+  return true;
+}
+
 function startGPSTracking(driverId) {
   detectGPSPermission();
   if (!navigator.geolocation) return;
@@ -1029,6 +1093,15 @@ function startGPSTracking(driverId) {
           `📡 GPS locked (±${Math.round(pos.coords.accuracy)}m)`;
       }
 
+      // 🔥 SMART FILTER
+      if (!shouldSendGPS(pos)) return;
+      
+      lastSentTime = Date.now();
+      lastSentLocation = {
+        lat: pos.coords.latitude,
+        lng: pos.coords.longitude
+      };
+      
       update(ref(db, `driverStatus/${driverId}`), {
         latitude: pos.coords.latitude,
         longitude: pos.coords.longitude,
@@ -1037,6 +1110,7 @@ function startGPSTracking(driverId) {
       });
     },
     handleGPSError,
+    
     {
       enableHighAccuracy: true,
       maximumAge: 5000,
@@ -2296,15 +2370,20 @@ setTimeout(() => {
   }
 }, 20000);
 
-// 🧹 BOOT CLEANUP — REMOVE COMPLETED TASKS FROM INDEXEDDB
+// 🧹 BOOT CLEANUP — REMOVE COMPLETED TASKS + ORPHAN PHOTOS
 (async () => {
   try {
+    // ✅ REMOVE completed tasks
     const tasks = await getTasksFromIndexedDB();
     for (const t of tasks) {
       if (t.status === "COMPLETED") {
         await deleteTaskFromIndexedDB(t._key);
       }
     }
+
+    // ✅ 🆕 REMOVE orphan photos
+    await cleanOrphanPhotos();
+
   } catch (e) {
     console.warn("Boot cleanup failed", e);
   }
