@@ -8,7 +8,7 @@
 
 <style>
 body {
-  font-family: Arial, sans-serif;
+  font-family: "Segoe UI", Arial, sans-serif;
   background: #f4f6f9;
   margin: 0;
   padding: 20px;
@@ -16,92 +16,109 @@ body {
 
 /* ===== HEADER ===== */
 .header {
-  text-align: center;
-  font-size: 26px;
+  font-size: 24px;
   font-weight: bold;
-  margin-bottom: 20px;
-}
-
-/* ===== BACK BUTTON ===== */
-#backBtn {
-  background: #555;
-  color: #fff;
-  border: none;
-  padding: 10px 16px;
-  border-radius: 8px;
-  cursor: pointer;
-  margin-bottom: 10px;
-}
-#backBtn:hover {
-  background: #333;
+  text-align: center;
+  margin-bottom: 16px;
 }
 
 /* ===== CARD ===== */
-.card {
+.container {
+  max-width: 540px;
+  margin: auto;
   background: #fff;
+  padding: 20px;
   border-radius: 14px;
-  padding: 18px;
-  margin-bottom: 16px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.08);
 }
 
-/* ===== INPUT ===== */
-input[type="file"] {
-  padding: 10px;
-  border-radius: 8px;
-  border: 1px solid #ccc;
+/* ===== FILE BOX ===== */
+.file-box {
+  border: 2px dashed #dcdcdc;
+  padding: 18px;
+  border-radius: 12px;
+  text-align: center;
+  background: #fafafa;
+  transition: 0.2s;
+}
+.file-box:hover {
+  border-color: #3498db;
+  background: #f0f8ff;
+}
+
+.file-name {
+  font-size: 13px;
+  color: #666;
+  margin-top: 8px;
 }
 
 /* ===== BUTTON GROUP ===== */
 .button-group {
   display: flex;
   gap: 10px;
-  flex-wrap: wrap;
-  margin-top: 10px;
+  margin-top: 12px;
 }
 
 /* ===== BUTTONS ===== */
-button.action {
-  padding: 12px 14px;
-  border-radius: 10px;
+button {
+  flex: 1;
+  padding: 12px;
   border: none;
+  border-radius: 10px;
+  font-size: 14px;
   font-weight: bold;
   cursor: pointer;
-  min-width: 140px;
+  transition: 0.2s;
 }
 
-/* MATCH ADMIN COLORS */
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .load { background:#28a745; color:#fff; }
 .preview { background:#6c757d; color:#fff; }
 .upload { background:#007bff; color:#fff; }
 
-button.action:hover {
-  opacity: 0.9;
+button:hover:not(:disabled) {
+  transform: translateY(-1px);
 }
 
 /* ===== PROGRESS ===== */
 #progressBar {
-  width: 100%;
-  height: 16px;
-  background: #e0e0e0;
-  border-radius: 10px;
-  overflow: hidden;
-  margin-top: 12px;
+  width:100%;
+  height:16px;
+  background:#e0e0e0;
+  border-radius:10px;
+  overflow:hidden;
+  margin-top:16px;
 }
 
 #progressFill {
-  height: 100%;
-  width: 0%;
-  background: #28a745;
-  transition: width 0.3s;
+  height:100%;
+  width:0%;
+  background:#28a745;
+  transition:width 0.3s;
 }
 
-/* ===== STATUS ===== */
+#progressText {
+  text-align:center;
+  font-size:12px;
+  margin-top:4px;
+  color:#555;
+}
+
+/* ===== STATUS (TERMINAL STYLE CLEANED) ===== */
 #status {
-  margin-top: 10px;
-  font-size: 13px;
-  color: #555;
-  line-height: 1.6;
+  margin-top:15px;
+  font-size:12px;
+  background:#111;
+  color:#00ff9c;
+  padding:12px;
+  border-radius:10px;
+  height:160px;
+  overflow:auto;
+  font-family: monospace;
 }
 </style>
 </head>
@@ -110,26 +127,25 @@ button.action:hover {
 
 <div class="header">📤 Upload Extracted File</div>
 
-<button id="backBtn">← Back</button>
+<div class="container">
 
-<!-- ===== CARD ===== -->
-<div class="card">
-
-  <b>📁 Select Extracted JSON File</b><br><br>
-
-  <input type="file" id="fileInput" accept=".json">
+  <div class="file-box">
+    <input type="file" id="fileInput" accept=".json">
+    <div id="fileName" class="file-name">No file selected</div>
+  </div>
 
   <div class="button-group">
-    <button class="action load" onclick="loadFile()">📂 Load</button>
-    <button class="action preview" onclick="previewData()">👁 Preview</button>
-    <button class="action upload" onclick="uploadData()">🚀 Upload</button>
+    <button class="load" onclick="loadFile()">📂 Load</button>
+    <button class="preview" onclick="previewData()">👁 Preview</button>
+    <button class="upload" onclick="uploadData()">🚀 Upload</button>
   </div>
 
   <div id="progressBar">
     <div id="progressFill"></div>
   </div>
+  <div id="progressText">0%</div>
 
-  <div id="status">Waiting for file...</div>
+  <div id="status">Ready...</div>
 
 </div>
 
@@ -138,7 +154,6 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebas
 import { getDatabase, ref, update, get } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-/* ===== FIREBASE ===== */
 const firebaseConfig = {
   apiKey: "AIzaSyDFW61pnwLvh6HGKWt10zLYNr860fI8vkg",
   authDomain: "driva-pwa.firebaseapp.com",
@@ -156,22 +171,28 @@ const storage = getStorage(app);
 let tasks = [];
 let photos = [];
 
-/* ===== BACK BUTTON ===== */
-document.getElementById("backBtn").onclick = () => {
-  window.location.href = "https://rossgab.github.io/driva-pwa/assign.html";
-};
-
-/* ===== UTIL ===== */
+/* ========================= */
 function log(msg) {
-  document.getElementById("status").innerHTML = msg;
+  console.log(msg);
+  const el = document.getElementById("status");
+  el.innerHTML += msg + "<br>";
+  el.scrollTop = el.scrollHeight;
 }
 
 function updateProgress(current, total) {
   const percent = Math.floor((current / total) * 100);
   document.getElementById("progressFill").style.width = percent + "%";
+  document.getElementById("progressText").innerText = percent + "%";
 }
 
-/* ===== LOAD FILE ===== */
+/* ========================= */
+document.getElementById("fileInput").addEventListener("change", e => {
+  const file = e.target.files[0];
+  document.getElementById("fileName").innerText =
+    file ? file.name : "No file selected";
+});
+
+/* ========================= */
 window.loadFile = function() {
   const file = document.getElementById("fileInput").files[0];
   if (!file) return alert("Select a file");
@@ -184,22 +205,25 @@ window.loadFile = function() {
       tasks = raw.tasks || [];
       photos = raw.photos || [];
 
-      log(`✅ Loaded ${tasks.length} tasks, ${photos.length} photos`);
-    } catch {
+      document.getElementById("status").innerHTML = "";
+      log(`✅ Loaded ${tasks.length} tasks`);
+      log(`📸 Loaded ${photos.length} photos`);
+    } catch (err) {
       alert("Invalid JSON");
+      console.error(err);
     }
   };
 
   reader.readAsText(file);
 };
 
-/* ===== PREVIEW ===== */
+/* ========================= */
 window.previewData = function() {
   if (!tasks.length) return alert("No tasks loaded");
-  alert(`Loaded ${tasks.length} tasks`);
+  alert(`Loaded ${tasks.length} tasks\n${photos.length} photos`);
 };
 
-/* ===== BASE64 ===== */
+/* ========================= */
 function base64ToBlob(base64) {
   const parts = base64.split(",");
   const mime = parts[0].match(/:(.*?);/)[1];
@@ -213,36 +237,99 @@ function base64ToBlob(base64) {
   return new Blob([u8arr], { type: mime });
 }
 
-/* ===== UPLOAD ===== */
+/* ========================= */
 window.uploadData = async function() {
 
   if (!tasks.length) return alert("No data loaded");
 
+  document.getElementById("status").innerHTML = "";
+  log("🚀 Starting upload...");
+
   let total = tasks.length + photos.length;
   let current = 0;
 
-  log("🚀 Uploading...");
+  let saved = 0;
+  let updated = 0;
+  let skipped = 0;
+  let photoSkipped = 0;
 
+  /* ===== TASKS ===== */
   for (const t of tasks) {
     current++;
     updateProgress(current, total);
 
-    const snap = await get(ref(db, `tasks/${t._key}`));
-    const existing = snap.val();
+    log(`📄 ${t._key}`);
 
-    if (!existing) {
-      await update(ref(db, `tasks/${t._key}`), t);
-      await update(ref(db, `tasksByDate/${t.dateKey}/${t._key}`), true);
-    } else {
-      await update(ref(db, `tasks/${t._key}`), t);
+    try {
+      const snap = await get(ref(db, `tasks/${t._key}`));
+      const existing = snap.val();
+
+      if (
+        existing &&
+        existing.status === "COMPLETED" &&
+        existing.photo1Url
+      ) {
+        skipped++;
+        continue;
+      }
+
+      if (!existing) {
+        await update(ref(db, `tasks/${t._key}`), t);
+        await update(ref(db, `tasksByDate/${t.dateKey}/${t._key}`), true);
+        saved++;
+      } else {
+        await update(ref(db, `tasks/${t._key}`), t);
+        updated++;
+      }
+
+    } catch (err) {
+      console.error(err);
     }
   }
 
+  /* ===== PHOTOS ===== */
   for (const p of photos) {
     current++;
     updateProgress(current, total);
 
-    const blob = base64ToBlob(p.base64);
-    const filename = `photo_${p.photoIndex}_${Date.now()}.jpg`;
+    log(`📸 ${p.taskKey} (P${p.photoIndex})`);
 
-    const storageRef = sRef(storage, `tasks/${p.taskKey}/${filename}`);
+    try {
+      const taskSnap = await get(ref(db, `tasks/${p.taskKey}`));
+      const task = taskSnap.val() || {};
+
+      if (task[`photo${p.photoIndex}Url`]) {
+        photoSkipped++;
+        continue;
+      }
+
+      const blob = base64ToBlob(p.base64);
+
+      const filename = `photo_${p.photoIndex}_${Date.now()}.jpg`;
+      const storageRef = sRef(storage, `tasks/${p.taskKey}/${filename}`);
+
+      await uploadBytes(storageRef, blob);
+      const url = await getDownloadURL(storageRef);
+
+      await update(ref(db, `tasks/${p.taskKey}`), {
+        [`photo${p.photoIndex}Url`]: url,
+        [`photo${p.photoIndex}TakenAt`]: p.takenAt,
+        ...(p.deliveryData || {}),
+        status: "COMPLETED"
+      });
+
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
+  log("<br>✅ DONE");
+  log(`🆕 Saved: ${saved}`);
+  log(`🔄 Updated: ${updated}`);
+  log(`⏭ Skipped: ${skipped}`);
+  log(`📸 Photo Skipped: ${photoSkipped}`);
+};
+</script>
+
+</body>
+</html>
