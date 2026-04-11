@@ -261,7 +261,7 @@ import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "htt
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "v4.0.22.3-ForQATEST_dev";
+const VERSION = "v4.0.22.4-ForQATEST_dev";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -2541,6 +2541,17 @@ async function exportTasksToFile() {
       exported: true
     });
   }
+  
+  // 🔥 RECALCULATE UPLOAD QUEUE AFTER EXPORT
+  const updatedTasks = await getTasksFromIndexedDB();
+  
+  UPLOAD_QUEUE_COUNT = updatedTasks.filter(t =>
+    t.status === "LOCAL_COMPLETED" &&
+    !t.exported &&
+    String(t.driverId || "").toUpperCase() === DRIVER_ID.toUpperCase()
+  ).length;
+  
+  updateUploadCounter();
 
   for (const p of photos) {
     const base64 = await blobToBase64(p.blob);
