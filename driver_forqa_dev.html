@@ -261,7 +261,7 @@ import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "htt
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "v4.0.22-ForQATEST_dev";
+const VERSION = "v4.0.22.1-ForQATEST_dev";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -1286,6 +1286,7 @@ cameraInput.onchange = async e => {
   const cached = await getTasksFromIndexedDB();
   UPLOAD_QUEUE_COUNT = cached.filter(t =>
     t.status === "LOCAL_COMPLETED" &&
+    !t.exported &&
     String(t.driverId).toUpperCase() === DRIVER_ID.toUpperCase()
   ).length;
   
@@ -1352,7 +1353,10 @@ window.CURRENT_TASK = null;
 
 function resolveStatus(task) {
   if (task.status === "COMPLETED") return "COMPLETED";
-  if (task.status === "LOCAL_COMPLETED") return "SYNC_PENDING";
+  if (task.status === "LOCAL_COMPLETED") {
+  if (task.exported) return "EXPORTED";
+    return "SYNC_PENDING";
+  }
 
   const p = PHOTO_BUFFER[task._key];
   if (p && Object.keys(p).length > 0) return "READY";
@@ -1475,7 +1479,8 @@ async function loadTasks() {
     UPLOAD_QUEUE_COUNT = cached.filter(t =>
       String(t.driverId || "").trim().toUpperCase() ===
       String(DRIVER_ID).trim().toUpperCase() &&
-      t.status === "LOCAL_COMPLETED"
+      t.status === "LOCAL_COMPLETED" &&
+      !t.exported
     ).length;
     updateUploadCounter();
 
@@ -1573,12 +1578,24 @@ async function loadTasks() {
       ) return null;
       
       // 🔒 Skip tasks already completed locally
+      // 🔒 Skip tasks already completed locally
       const local = cached.find(t => t._key === id);
-      if (local?.status === "LOCAL_COMPLETED") {
-        // If server is NOT completed yet → ignore (keep local)
-        if (task.status !== "COMPLETED") return null;
       
-        // If server IS completed → allow it (so it can sync + cleanup)
+      if (local?.status === "LOCAL_COMPLETED") {
+      
+        // 🧹 CLEANUP: exported + already completed in Firebase
+        if (local.exported && task.status === "COMPLETED") {
+          await deleteTaskFromIndexedDB(local._key);
+          return null;
+        }
+      
+        // ✅ if exported → DO NOT override
+        if (local.exported) {
+          return null;
+        }
+      
+        // ⛔ still local and not completed in Firebase
+        if (task.status !== "COMPLETED") return null;
       }
       
       if (task.status === "COMPLETED") return null;
@@ -1672,9 +1689,15 @@ async function loadTasks() {
 document.getElementById("refreshTasksBtn").onclick = async () => {
 
   // 🔒 BLOCK if there are pending uploads
-  if (UPLOAD_QUEUE_COUNT > 0) {
+  const pendingUpload = (await getTasksFromIndexedDB()).filter(t =>
+    t.status === "LOCAL_COMPLETED" &&
+    !t.exported &&
+    t.driverId === DRIVER_ID
+  ).length;
+  
+  if (pendingUpload > 0) {
     alert(
-      `⚠ You have ${UPLOAD_QUEUE_COUNT} task(s) waiting for upload.\n\n` +
+      `⚠ You have ${pendingUpload} task(s) waiting for upload.\n\n` +
       "Please press 'Sync Completed Tasks' first before downloading new tasks."
     );
     return;
@@ -1945,6 +1968,13 @@ function renderOneTask(t) {
     html += `
       <div class="uploading">
         📦 Saved locally — press “Sync Completed Tasks” to upload
+      </div>
+    `;
+  }
+  if (status === "EXPORTED") {
+    html += `
+      <div class="uploading" style="color:#2980b9;">
+        📦 Exported — waiting for admin upload
       </div>
     `;
   }
@@ -2393,6 +2423,7 @@ async function exportTasksToFile() {
 
   const completed = tasks.filter(t =>
     t.status === "LOCAL_COMPLETED" &&
+    !t.exported &&
     t.driverId === DRIVER_ID
   );
 
@@ -2410,7 +2441,15 @@ async function exportTasksToFile() {
   };
 
   for (const t of completed) {
-    exportData.tasks.push(t);
+    await saveTasksToIndexedDB([{
+      ...t,
+      exported: true
+    }]);
+  
+    exportData.tasks.push({
+      ...t,
+      exported: true
+    });
   }
 
   for (const p of photos) {
