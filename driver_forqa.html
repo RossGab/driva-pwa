@@ -285,7 +285,7 @@ import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "htt
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "v4.0.22-ForQATEST";
+const VERSION = "v4.0.22.1-ForQATEST";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -1383,8 +1383,16 @@ function compressImage(file, gps, takenAt) {
 let CURRENT_PHOTO_INDEX = null;
 let BOOT_WATCHDOG_FIRED = false;
 
+// window.startPhoto = async function(index, taskKey) {
+//   if (!(await validateDynamic(taskKey))) return;
+
+//   CURRENT_TASK = taskKey;
+//   CURRENT_PHOTO_INDEX = index;
+
+//   cameraInput.value = "";
+//   cameraInput.click();
+// };
 window.startPhoto = async function(index, taskKey) {
-  if (!(await validateDynamic(taskKey))) return;
 
   CURRENT_TASK = taskKey;
   CURRENT_PHOTO_INDEX = index;
@@ -1392,6 +1400,7 @@ window.startPhoto = async function(index, taskKey) {
   cameraInput.value = "";
   cameraInput.click();
 };
+
 
 cameraInput.onchange = async e => {
   try {
