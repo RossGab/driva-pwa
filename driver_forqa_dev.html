@@ -285,7 +285,7 @@ import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "htt
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "v4.0.22.7-ForQATEST_dev";
+const VERSION = "v4.0.22.8-ForQATEST_dev";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -403,49 +403,109 @@ async function getTasksFromIndexedDB() {
 // =============================
 let qrScanner = null;
 
-document.getElementById("scanQRBtn").onclick = startQRScanner;
+document.getElementById("scanQRBtn").onclick = toggleQRScanner;
 
-function startQRScanner() {
+async function toggleQRScanner() {
+
+  const box = document.getElementById("qrReader");
+  const btn = document.getElementById("scanQRBtn");
+
+  // 🔴 IF SCANNER IS RUNNING → STOP IT
+  if (qrScanner) {
+    try {
+      await qrScanner.stop();
+    } catch {}
+    try {
+      await qrScanner.clear();
+    } catch {}
+
+    qrScanner = null;
+
+    box.style.display = "none";
+    btn.innerText = "📷"; // reset icon
+
+    return;
+  }
+
+  // 🟢 START SCANNER
+  box.style.display = "block";
+  btn.innerText = "❌"; // show close icon
+
+  qrScanner = new Html5Qrcode("qrReader");
+
+  try {
+    await qrScanner.start(
+      { facingMode: "environment" },
+      {
+        fps: 10,
+        qrbox: 220
+      },
+      onScanSuccess,
+      () => {}
+    );
+  } catch (err) {
+    console.error("QR start error:", err);
+    alert("Camera failed to start. Try again.");
+
+    qrScanner = null;
+    box.style.display = "none";
+    btn.innerText = "📷";
+  }
+}
+
+async function startQRScanner() {
 
   const box = document.getElementById("qrReader");
   box.style.display = "block";
 
+  // 🔥 FULL RESET (important)
   if (qrScanner) {
-    qrScanner.stop().catch(()=>{});
+    try {
+      await qrScanner.stop();
+    } catch {}
+    try {
+      await qrScanner.clear();
+    } catch {}
+    qrScanner = null; // ✅ VERY IMPORTANT
   }
 
+  // 🔥 CREATE NEW INSTANCE EVERY TIME
   qrScanner = new Html5Qrcode("qrReader");
 
-  qrScanner.start(
-    { facingMode: "environment" },
-    {
-      fps: 10,
-      qrbox: 220
-    },
-    onScanSuccess,
-    err => {}
-  );
+  try {
+    await qrScanner.start(
+      { facingMode: "environment" },
+      {
+        fps: 10,
+        qrbox: 220
+      },
+      onScanSuccess,
+      () => {}
+    );
+  } catch (err) {
+    console.error("QR start error:", err);
+    alert("Camera failed to start. Try again.");
+  }
 }
 
 async function onScanSuccess(decodedText) {
 
-  // 🔥 STOP CAMERA ASAP
+  const btn = document.getElementById("scanQRBtn");
+
   try {
     if (qrScanner) {
       await qrScanner.stop();
-      qrScanner.clear();
+      await qrScanner.clear();
+      qrScanner = null;
     }
   } catch {}
 
   document.getElementById("qrReader").style.display = "none";
+  if (btn) btn.innerText = "📷"; // ✅ reset button
 
-  // 🔊 feedback
   navigator.vibrate?.(150);
 
-  // 🧠 Extract meter number (robust)
   let scannedMeter = decodedText.trim();
-
-  // optional: clean if QR has text like "METER:26272"
   scannedMeter = scannedMeter.replace(/[^\d]/g, "");
 
   if (!scannedMeter) {
@@ -453,7 +513,6 @@ async function onScanSuccess(decodedText) {
     return;
   }
 
-  // 🔍 FIND TASK
   const task = TASKS_CACHE.find(t =>
     String(t.METERNUMBER || "").trim() === scannedMeter
   );
@@ -463,13 +522,9 @@ async function onScanSuccess(decodedText) {
     return;
   }
 
-  // 🎯 FOCUS MODE (reuse your logic)
   ACTIVE_CAPTURE_TASK = task._key;
-
-  // 🔄 render only that task
   applyFiltersOnly();
 
-  // ⬆️ scroll to top
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
