@@ -261,7 +261,7 @@ import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "htt
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "v4.0.22.4-ForQATEST_dev";
+const VERSION = "v4.0.22.5-ForQATEST_dev";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -969,7 +969,7 @@ async function pruneOldTasks() {
         const diffDays =
           (nowPH - createdPH) / (1000 * 60 * 60 * 24);
 
-        if (diffDays >= 2) {
+        if (diffDays >= 3) {
           store.delete(t._key);
         }
       }
