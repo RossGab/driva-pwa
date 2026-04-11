@@ -285,7 +285,7 @@ import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "htt
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "v4.0.22.8-ForQATEST_dev";
+const VERSION = "v4.0.22.9-ForQATEST_dev";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -2241,8 +2241,7 @@ taskList.appendChild(div);
 // ✅ NOW the container exists
 if (
   (status === "PENDING" || status === "CAPTURING" || status === "READY") &&
-  !t.finalized &&
-  ACTIVE_CAPTURE_TASK !== t._key
+  !t.finalized
 ) {
   renderDynamicDelivery(t).then(h => {
     if (!document.body.contains(div)) return;
