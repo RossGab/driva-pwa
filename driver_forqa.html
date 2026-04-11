@@ -236,7 +236,30 @@ img { width:100%;margin-top:8px;border-radius:6px; }
   <b>Job Type</b>
   <div id="jobTypeOptions"></div>
 </div>
-<input id="searchBox" placeholder="Search tasks">
+<div style="display:flex;gap:6px;margin-bottom:10px;">
+  <input id="searchBox" placeholder="Search tasks" style="flex:1;">
+  
+  <button id="scanQRBtn"
+    style="
+      width:60px;
+      border-radius:6px;
+      border:none;
+      background:#8e44ad;
+      color:#fff;
+      font-size:18px;
+    ">
+    📷
+  </button>
+</div>
+<div id="qrReader"
+  style="
+    display:none;
+    background:#000;
+    padding:10px;
+    border-radius:6px;
+    margin-bottom:10px;
+  ">
+</div>
 <div id="fatalErrorBox"
   style="
     display:none;
@@ -254,6 +277,7 @@ img { width:100%;margin-top:8px;border-radius:6px; }
   <div id="scrollSentinel"></div>
 </div>
 <input type="file" id="cameraInput" accept="image/*" capture="environment" hidden>
+<script src="https://unpkg.com/html5-qrcode"></script>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
@@ -261,7 +285,7 @@ import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "htt
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "v4.0.21-ForQATEST";
+const VERSION = "v4.0.22-ForQATEST";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -374,6 +398,136 @@ async function getTasksFromIndexedDB() {
   });
 }
 
+// =============================
+// 📷 QR SCANNER
+// =============================
+let qrScanner = null;
+
+document.getElementById("scanQRBtn").onclick = toggleQRScanner;
+
+async function toggleQRScanner() {
+
+  const box = document.getElementById("qrReader");
+  const btn = document.getElementById("scanQRBtn");
+
+  // 🔴 IF SCANNER IS RUNNING → STOP IT
+  if (qrScanner) {
+    try {
+      await qrScanner.stop();
+    } catch {}
+    try {
+      await qrScanner.clear();
+    } catch {}
+
+    qrScanner = null;
+
+    box.style.display = "none";
+    btn.innerText = "📷"; // reset icon
+
+    return;
+  }
+
+  // 🟢 START SCANNER
+  box.style.display = "block";
+  btn.innerText = "❌"; // show close icon
+
+  qrScanner = new Html5Qrcode("qrReader");
+
+  try {
+    await qrScanner.start(
+      { facingMode: "environment" },
+      {
+        fps: 10,
+        qrbox: 220
+      },
+      onScanSuccess,
+      () => {}
+    );
+  } catch (err) {
+    console.error("QR start error:", err);
+    alert("Camera failed to start. Try again.");
+
+    qrScanner = null;
+    box.style.display = "none";
+    btn.innerText = "📷";
+  }
+}
+
+async function startQRScanner() {
+
+  const box = document.getElementById("qrReader");
+  box.style.display = "block";
+
+  // 🔥 FULL RESET (important)
+  if (qrScanner) {
+    try {
+      await qrScanner.stop();
+    } catch {}
+    try {
+      await qrScanner.clear();
+    } catch {}
+    qrScanner = null; // ✅ VERY IMPORTANT
+  }
+
+  // 🔥 CREATE NEW INSTANCE EVERY TIME
+  qrScanner = new Html5Qrcode("qrReader");
+
+  try {
+    await qrScanner.start(
+      { facingMode: "environment" },
+      {
+        fps: 10,
+        qrbox: 220
+      },
+      onScanSuccess,
+      () => {}
+    );
+  } catch (err) {
+    console.error("QR start error:", err);
+    alert("Camera failed to start. Try again.");
+  }
+}
+
+async function onScanSuccess(decodedText) {
+
+  const btn = document.getElementById("scanQRBtn");
+
+  try {
+    if (qrScanner) {
+      await qrScanner.stop();
+      await qrScanner.clear();
+      qrScanner = null;
+    }
+  } catch {}
+
+  document.getElementById("qrReader").style.display = "none";
+  if (btn) btn.innerText = "📷"; // ✅ reset button
+
+  navigator.vibrate?.(150);
+
+  let scannedMeter = decodedText.trim();
+  scannedMeter = scannedMeter.replace(/[^\d]/g, "");
+
+  if (!scannedMeter) {
+    alert("Invalid QR code");
+    return;
+  }
+
+  const task = TASKS_CACHE.find(t =>
+    String(t.METERNUMBER || "").trim() === scannedMeter
+  );
+
+  if (!task) {
+    alert("❌ No task found for meter: " + scannedMeter);
+    return;
+  }
+
+  ACTIVE_CAPTURE_TASK = task._key;
+  applyFiltersOnly();
+
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
 async function getWithRetry(dbRef, retries = 1, delay = 400) {
   try {
     const snap = await get(dbRef);
@@ -394,6 +548,24 @@ async function deleteTaskFromIndexedDB(taskKey) {
   const db = await openDB();
   const tx = db.transaction(TASK_STORE, "readwrite");
   tx.objectStore(TASK_STORE).delete(taskKey);
+}
+
+async function cleanOrphanPhotos() {
+  try {
+    const tasks = await getTasksFromIndexedDB();
+    const photos = await getAllPhotosFromDB();
+
+    const validTaskKeys = new Set(tasks.map(t => t._key));
+
+    for (const p of photos) {
+      if (!validTaskKeys.has(p.taskKey)) {
+        console.log("🧹 Deleting orphan photo:", p.id);
+        await deletePhotoFromDB(p.id);
+      }
+    }
+  } catch (e) {
+    console.warn("Orphan cleanup failed", e);
+  }
 }
 
 function hasCachedTasksForDate(tasks, selectedDate) {
@@ -816,6 +988,33 @@ if (allUploaded) {
   loadTasks();
 };
 
+// 🔒 SAFE WRAPPER (DO NOT MODIFY ORIGINAL LOGIC)
+const originalSyncHandler = document.getElementById("syncBtn").onclick;
+
+document.getElementById("syncBtn").onclick = async () => {
+
+  const choice = prompt(
+`Choose action:
+
+1 - Upload now
+2 - Export completed tasks
+
+Enter 1 or 2`
+  );
+
+  if (!choice) return;
+
+  if (choice === "2") {
+    await exportTasksToFile();
+    return;
+  }
+
+  if (choice === "1") {
+    return originalSyncHandler(); // ✅ your original logic
+  }
+
+  alert("Invalid choice.");
+};
   
 function toggleJobTypeFilter(show) {
   const box = document.getElementById("jobTypeFilter");
@@ -924,7 +1123,7 @@ async function pruneOldTasks() {
         const diffDays =
           (nowPH - createdPH) / (1000 * 60 * 60 * 24);
 
-        if (diffDays >= 2) {
+        if (diffDays >= 3) {
           store.delete(t._key);
         }
       }
@@ -976,6 +1175,52 @@ function saveFormCache(cache) {
   localStorage.setItem(FORM_CACHE_KEY, JSON.stringify(cache));
 }
 
+let lastSentTime = 0;
+let lastSentLocation = null;
+
+const GPS_MIN_INTERVAL = 60000; // 15 sec
+const GPS_MIN_DISTANCE = 15;    // 15 meters
+const GPS_MAX_ACCURACY = 50;    // ignore bad GPS
+
+function getDistanceMeters(lat1, lon1, lat2, lon2) {
+  const R = 6371000;
+  const toRad = x => x * Math.PI / 180;
+
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+
+  const a =
+    Math.sin(dLat/2) * Math.sin(dLat/2) +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+    Math.sin(dLon/2) * Math.sin(dLon/2);
+
+  return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
+}
+
+function shouldSendGPS(pos) {
+  const now = Date.now();
+
+  // accuracy filter
+  if (pos.coords.accuracy > GPS_MAX_ACCURACY) return false;
+
+  // time throttle
+  if (now - lastSentTime < GPS_MIN_INTERVAL) return false;
+
+  // distance check
+  if (lastSentLocation) {
+    const dist = getDistanceMeters(
+      lastSentLocation.lat,
+      lastSentLocation.lng,
+      pos.coords.latitude,
+      pos.coords.longitude
+    );
+
+    if (dist < GPS_MIN_DISTANCE) return false;
+  }
+
+  return true;
+}
+
 function startGPSTracking(driverId) {
   detectGPSPermission();
   if (!navigator.geolocation) return;
@@ -1002,6 +1247,15 @@ function startGPSTracking(driverId) {
           `📡 GPS locked (±${Math.round(pos.coords.accuracy)}m)`;
       }
 
+      // 🔥 SMART FILTER
+      if (!shouldSendGPS(pos)) return;
+      
+      lastSentTime = Date.now();
+      lastSentLocation = {
+        lat: pos.coords.latitude,
+        lng: pos.coords.longitude
+      };
+      
       update(ref(db, `driverStatus/${driverId}`), {
         latitude: pos.coords.latitude,
         longitude: pos.coords.longitude,
@@ -1010,6 +1264,7 @@ function startGPSTracking(driverId) {
       });
     },
     handleGPSError,
+    
     {
       enableHighAccuracy: true,
       maximumAge: 5000,
@@ -1259,6 +1514,7 @@ cameraInput.onchange = async e => {
   const cached = await getTasksFromIndexedDB();
   UPLOAD_QUEUE_COUNT = cached.filter(t =>
     t.status === "LOCAL_COMPLETED" &&
+    !t.exported &&
     String(t.driverId).toUpperCase() === DRIVER_ID.toUpperCase()
   ).length;
   
@@ -1325,7 +1581,10 @@ window.CURRENT_TASK = null;
 
 function resolveStatus(task) {
   if (task.status === "COMPLETED") return "COMPLETED";
-  if (task.status === "LOCAL_COMPLETED") return "SYNC_PENDING";
+  if (task.status === "LOCAL_COMPLETED") {
+  if (task.exported) return "EXPORTED";
+    return "SYNC_PENDING";
+  }
 
   const p = PHOTO_BUFFER[task._key];
   if (p && Object.keys(p).length > 0) return "READY";
@@ -1448,7 +1707,8 @@ async function loadTasks() {
     UPLOAD_QUEUE_COUNT = cached.filter(t =>
       String(t.driverId || "").trim().toUpperCase() ===
       String(DRIVER_ID).trim().toUpperCase() &&
-      t.status === "LOCAL_COMPLETED"
+      t.status === "LOCAL_COMPLETED" &&
+      !t.exported
     ).length;
     updateUploadCounter();
 
@@ -1546,12 +1806,35 @@ async function loadTasks() {
       ) return null;
       
       // 🔒 Skip tasks already completed locally
+      // 🔒 Skip tasks already completed locally
       const local = cached.find(t => t._key === id);
-      if (local?.status === "LOCAL_COMPLETED") {
-        // If server is NOT completed yet → ignore (keep local)
-        if (task.status !== "COMPLETED") return null;
       
-        // If server IS completed → allow it (so it can sync + cleanup)
+      if (local?.status === "LOCAL_COMPLETED") {
+      
+        // 🧹 CLEANUP: exported + already completed in Firebase
+        if (local.exported && task.status === "COMPLETED") {
+
+          // 🔥 DELETE RELATED PHOTOS FIRST
+          const photos = await getAllPhotosFromDB();
+          const related = photos.filter(p => p.taskKey === local._key);
+        
+          for (const p of related) {
+            await deletePhotoFromDB(p.id);
+          }
+        
+          // 🔥 THEN DELETE TASK
+          await deleteTaskFromIndexedDB(local._key);
+        
+          return null;
+        }
+      
+        // ✅ if exported → DO NOT override
+        if (local.exported) {
+          return null;
+        }
+      
+        // ⛔ still local and not completed in Firebase
+        if (task.status !== "COMPLETED") return null;
       }
       
       if (task.status === "COMPLETED") return null;
@@ -1645,9 +1928,15 @@ async function loadTasks() {
 document.getElementById("refreshTasksBtn").onclick = async () => {
 
   // 🔒 BLOCK if there are pending uploads
-  if (UPLOAD_QUEUE_COUNT > 0) {
+  const pendingUpload = (await getTasksFromIndexedDB()).filter(t =>
+    t.status === "LOCAL_COMPLETED" &&
+    !t.exported &&
+    t.driverId === DRIVER_ID
+  ).length;
+  
+  if (pendingUpload > 0) {
     alert(
-      `⚠ You have ${UPLOAD_QUEUE_COUNT} task(s) waiting for upload.\n\n` +
+      `⚠ You have ${pendingUpload} task(s) waiting for upload.\n\n` +
       "Please press 'Sync Completed Tasks' first before downloading new tasks."
     );
     return;
@@ -1921,6 +2210,13 @@ function renderOneTask(t) {
       </div>
     `;
   }
+  if (status === "EXPORTED") {
+    html += `
+      <div class="uploading" style="color:#2980b9;">
+        📦 Exported — waiting for admin upload
+      </div>
+    `;
+  }
 
   if (status === "COMPLETED") {
     html += `
@@ -1945,8 +2241,7 @@ taskList.appendChild(div);
 // ✅ NOW the container exists
 if (
   (status === "PENDING" || status === "CAPTURING" || status === "READY") &&
-  !t.finalized &&
-  ACTIVE_CAPTURE_TASK !== t._key
+  !t.finalized
 ) {
   renderDynamicDelivery(t).then(h => {
     if (!document.body.contains(div)) return;
@@ -2228,15 +2523,20 @@ setTimeout(() => {
   }
 }, 20000);
 
-// 🧹 BOOT CLEANUP — REMOVE COMPLETED TASKS FROM INDEXEDDB
+// 🧹 BOOT CLEANUP — REMOVE COMPLETED TASKS + ORPHAN PHOTOS
 (async () => {
   try {
+    // ✅ REMOVE completed tasks
     const tasks = await getTasksFromIndexedDB();
     for (const t of tasks) {
       if (t.status === "COMPLETED") {
         await deleteTaskFromIndexedDB(t._key);
       }
     }
+
+    // ✅ 🆕 REMOVE orphan photos
+    await cleanOrphanPhotos();
+
   } catch (e) {
     console.warn("Boot cleanup failed", e);
   }
@@ -2358,6 +2658,96 @@ window.handleRadioTrigger = async function(taskKey, jobType, method, radioKey) {
   html += `</div>`;
   box.innerHTML = html;
 };
+
+async function exportTasksToFile() {
+
+  const tasks = await getTasksFromIndexedDB();
+  const photos = await getAllPhotosFromDB();
+
+  const completed = tasks.filter(t =>
+    t.status === "LOCAL_COMPLETED" &&
+    !t.exported &&
+    t.driverId === DRIVER_ID
+  );
+
+  if (!completed.length) {
+    alert("No completed tasks to export.");
+    return;
+  }
+
+  const exportData = {
+    exportedAt: new Date().toISOString(),
+    driverId: DRIVER_ID,
+    totalTasks: completed.length,
+    tasks: [],
+    photos: []
+  };
+
+  for (const t of completed) {
+    await saveTasksToIndexedDB([{
+      ...t,
+      exported: true
+    }]);
+  
+    exportData.tasks.push({
+      ...t,
+      exported: true
+    });
+  }
+  
+  // 🔥 RECALCULATE UPLOAD QUEUE AFTER EXPORT
+  const updatedTasks = await getTasksFromIndexedDB();
+  
+  UPLOAD_QUEUE_COUNT = updatedTasks.filter(t =>
+    t.status === "LOCAL_COMPLETED" &&
+    !t.exported &&
+    String(t.driverId || "").toUpperCase() === DRIVER_ID.toUpperCase()
+  ).length;
+  
+  updateUploadCounter();
+
+  for (const p of photos) {
+    const base64 = await blobToBase64(p.blob);
+
+    exportData.photos.push({
+      id: p.id,
+      taskKey: p.taskKey,
+      photoIndex: p.photoIndex,
+      takenAt: p.takenAt,
+      gps: p.gps,
+      deliveryData: p.deliveryData || {},
+      base64
+    });
+  }
+
+  const blob = new Blob(
+    [JSON.stringify(exportData, null, 2)],
+    { type: "application/json" }
+  );
+
+  const url = URL.createObjectURL(blob);
+
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `tasks_export_${Date.now()}.json`;
+
+  document.body.appendChild(a);
+  a.click();
+
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+
+  alert("✅ Export complete");
+}
+
+function blobToBase64(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
   
 </script>
 
@@ -2416,6 +2806,7 @@ window.addEventListener("beforeinstallprompt", e => {
   document.body.appendChild(btn);
 });
 </script>
+
 
 <script>
 window.addEventListener("appinstalled", () => {
