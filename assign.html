@@ -81,15 +81,54 @@ select, input[type="date"] {
 
 <body>
 
-<h2>Manage Tasks V4.6.1.24-WIP</h2>
+<h2>Manage Tasks V4.6.2-WIP</h2>
 
 <button onclick="location.href='admin.html'" class="small-btn">⬅ Back</button>
 
 <!-- BULK UPLOAD -->
 <div class="panel">
   <b>📤 Bulk Upload Tasks</b><br>
-  <input type="file" id="csvFile" accept=".csv">
-  <button onclick="uploadCSV(this)" style="margin-top:6px;">Upload CSV</button>
+
+  <div style="
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    gap:10px;
+    flex-wrap:wrap;
+    margin-top:6px;
+  ">
+
+    <!-- LEFT SIDE -->
+    <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+      <input type="file" id="csvFile" accept=".csv">
+
+      <button onclick="uploadCSV(this)" style="
+        padding:8px 12px;
+        border-radius:6px;
+        border:1px solid #ccc;
+        background:#f5f5f5;
+        cursor:pointer;
+      ">
+        Upload CSV
+      </button>
+    </div>
+
+    <!-- RIGHT SIDE (NEW BUTTON) -->
+    <button onclick="location.href='https://rossgab.github.io/driva-pwa/uploadTask.html'" style="
+      background:#007bff;
+      color:#fff;
+      border:none;
+      border-radius:8px;
+      padding:10px 14px;
+      font-weight:bold;
+      cursor:pointer;
+      white-space:nowrap;
+    ">
+      📦 Upload Exported Tasks
+    </button>
+
+  </div>
+
   <div id="uploadStatus" style="font-size:13px;margin-top:6px;"></div>
 </div>
 
