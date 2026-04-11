@@ -285,7 +285,7 @@ import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "htt
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "v4.0.22.1-ForQATEST";
+const VERSION = "v4.0.22.2-ForQATEST";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -1484,6 +1484,8 @@ cameraInput.onchange = async e => {
   };
   
   window.submitTask = async function(taskKey) {
+
+  if (!(await validateDynamic(taskKey))) return;
 
   if (submitLock[taskKey]) return;
   submitLock[taskKey] = true;
