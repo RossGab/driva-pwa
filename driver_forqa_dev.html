@@ -261,7 +261,7 @@ import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "htt
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "v4.0.22.5-ForQATEST_dev";
+const VERSION = "v4.0.22.6-ForQATEST_dev";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -1024,7 +1024,7 @@ function saveFormCache(cache) {
 let lastSentTime = 0;
 let lastSentLocation = null;
 
-const GPS_MIN_INTERVAL = 15000; // 15 sec
+const GPS_MIN_INTERVAL = 60000; // 15 sec
 const GPS_MIN_DISTANCE = 15;    // 15 meters
 const GPS_MAX_ACCURACY = 50;    // ignore bad GPS
 
