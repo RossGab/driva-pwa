@@ -1,3 +1,11 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>Upload Extracted File</title>
+
 <style>
 body {
   font-family: "Segoe UI", Arial, sans-serif;
@@ -91,8 +99,216 @@ button:hover:not(:disabled) {
   color:#0f0;
   padding:10px;
   border-radius:8px;
-  height:140px;
+  height:160px;
   overflow:auto;
   font-family: monospace;
 }
 </style>
+</head>
+
+<body>
+
+<div class="container">
+  <h2>📤 Upload Extracted File</h2>
+
+  <div class="file-box">
+    <input type="file" id="fileInput" accept=".json">
+    <div id="fileName" class="file-name">No file selected</div>
+  </div>
+
+  <button class="load" onclick="loadFile()">📂 Load File</button>
+  <button class="preview" onclick="previewData()">👁 Preview Data</button>
+  <button class="upload" onclick="uploadData()">🚀 Upload to Firebase</button>
+
+  <div id="progressBar">
+    <div id="progressFill"></div>
+  </div>
+  <div id="progressText">0%</div>
+
+  <div id="status">Ready...</div>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import { getDatabase, ref, update, get } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyDFW61pnwLvh6HGKWt10zLYNr860fI8vkg",
+  authDomain: "driva-pwa.firebaseapp.com",
+  databaseURL: "https://driva-pwa-default-rtdb.firebaseio.com",
+  projectId: "driva-pwa",
+  storageBucket: "driva-pwa.firebasestorage.app",
+  messagingSenderId: "299138219722",
+  appId: "1:299138219722:web:623ff6b0a067ea822dfe33"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
+const storage = getStorage(app);
+
+let tasks = [];
+let photos = [];
+
+/* ========================= */
+function log(msg) {
+  console.log(msg);
+  const el = document.getElementById("status");
+  el.innerHTML += msg + "<br>";
+  el.scrollTop = el.scrollHeight;
+}
+
+function updateProgress(current, total) {
+  const percent = Math.floor((current / total) * 100);
+  document.getElementById("progressFill").style.width = percent + "%";
+  document.getElementById("progressText").innerText = percent + "%";
+}
+
+/* ========================= */
+document.getElementById("fileInput").addEventListener("change", e => {
+  const file = e.target.files[0];
+  document.getElementById("fileName").innerText =
+    file ? file.name : "No file selected";
+});
+
+/* ========================= */
+window.loadFile = function() {
+  const file = document.getElementById("fileInput").files[0];
+  if (!file) return alert("Select a file");
+
+  const reader = new FileReader();
+
+  reader.onload = e => {
+    try {
+      const raw = JSON.parse(e.target.result);
+      tasks = raw.tasks || [];
+      photos = raw.photos || [];
+
+      document.getElementById("status").innerHTML = "";
+      log(`✅ Loaded ${tasks.length} tasks`);
+      log(`📸 Loaded ${photos.length} photos`);
+    } catch (err) {
+      alert("Invalid JSON");
+      console.error(err);
+    }
+  };
+
+  reader.readAsText(file);
+};
+
+/* ========================= */
+window.previewData = function() {
+  if (!tasks.length) return alert("No tasks loaded");
+  alert(`Loaded ${tasks.length} tasks\n${photos.length} photos`);
+};
+
+/* ========================= */
+function base64ToBlob(base64) {
+  const parts = base64.split(",");
+  const mime = parts[0].match(/:(.*?);/)[1];
+  const bstr = atob(parts[1]);
+  const u8arr = new Uint8Array(bstr.length);
+
+  for (let i = 0; i < bstr.length; i++) {
+    u8arr[i] = bstr.charCodeAt(i);
+  }
+
+  return new Blob([u8arr], { type: mime });
+}
+
+/* ========================= */
+window.uploadData = async function() {
+
+  if (!tasks.length) return alert("No data loaded");
+
+  document.getElementById("status").innerHTML = "";
+  log("🚀 Starting upload...");
+
+  let total = tasks.length + photos.length;
+  let current = 0;
+
+  let saved = 0;
+  let updated = 0;
+  let skipped = 0;
+  let photoSkipped = 0;
+
+  /* ===== TASKS ===== */
+  for (const t of tasks) {
+    current++;
+    updateProgress(current, total);
+
+    log(`📄 ${t._key}`);
+
+    try {
+      const snap = await get(ref(db, `tasks/${t._key}`));
+      const existing = snap.val();
+
+      if (
+        existing &&
+        existing.status === "COMPLETED" &&
+        existing.photo1Url
+      ) {
+        skipped++;
+        continue;
+      }
+
+      if (!existing) {
+        await update(ref(db, `tasks/${t._key}`), t);
+        await update(ref(db, `tasksByDate/${t.dateKey}/${t._key}`), true);
+        saved++;
+      } else {
+        await update(ref(db, `tasks/${t._key}`), t);
+        updated++;
+      }
+
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
+  /* ===== PHOTOS ===== */
+  for (const p of photos) {
+    current++;
+    updateProgress(current, total);
+
+    log(`📸 ${p.taskKey} (P${p.photoIndex})`);
+
+    try {
+      const taskSnap = await get(ref(db, `tasks/${p.taskKey}`));
+      const task = taskSnap.val() || {};
+
+      if (task[`photo${p.photoIndex}Url`]) {
+        photoSkipped++;
+        continue;
+      }
+
+      const blob = base64ToBlob(p.base64);
+
+      const filename = `photo_${p.photoIndex}_${Date.now()}.jpg`;
+      const storageRef = sRef(storage, `tasks/${p.taskKey}/${filename}`);
+
+      await uploadBytes(storageRef, blob);
+      const url = await getDownloadURL(storageRef);
+
+      await update(ref(db, `tasks/${p.taskKey}`), {
+        [`photo${p.photoIndex}Url`]: url,
+        [`photo${p.photoIndex}TakenAt`]: p.takenAt,
+        ...(p.deliveryData || {}),
+        status: "COMPLETED"
+      });
+
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
+  log("<br>✅ DONE");
+  log(`🆕 Saved: ${saved}`);
+  log(`🔄 Updated: ${updated}`);
+  log(`⏭ Skipped: ${skipped}`);
+  log(`📸 Photo Skipped: ${photoSkipped}`);
+};
+</script>
+
+</body>
+</html>
