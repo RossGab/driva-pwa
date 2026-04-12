@@ -73,7 +73,7 @@ body {
 
   <div class="admin-header">
   <img src="./logo.jpg" class="admin-logo">
-  <h2>Tasks Viewer v1.1.0.1</h2>
+  <h2>Tasks Viewer v1.1.0.2</h2>
 
   <div>
     <input type="date" id="from">
@@ -268,7 +268,7 @@ async function loadTasks(){
   res.forEach(r=>{
     if(r.status==="fulfilled" && r.value){
       Object.entries(r.value).forEach(([id,t])=>{
-        if(t.status==="COMPLETED"){
+        if(t.status==="COMPLETED" && t.BA !== "test"){
           all.push({_key:id,...t});
         }
       });
@@ -294,26 +294,30 @@ searchBox.oninput = e=>{
 /* BA FILTER */
 function buildBAFilters(){
   const container = document.getElementById("baFilters");
-  container.innerHTML="";
+  container.innerHTML = "";
 
-  let bas = new Set(TASKS.map(t=>t.BA).filter(Boolean));
+  let bas = new Set(
+    TASKS
+      .map(t => t.BA)
+      .filter(ba => ba && ba !== "test") // 🔥 REMOVE TEST BA
+  );
 
-    // 🔥 restrict BA filters for viewer
-    if (window.USER_ROLE !== "admin" && window.USER_BA?.length) {
-      bas = new Set([...bas].filter(ba => window.USER_BA.includes(ba)));
-    }
+  // 🔥 restrict BA filters for viewer
+  if (window.USER_ROLE !== "admin" && window.USER_BA?.length) {
+    bas = new Set([...bas].filter(ba => window.USER_BA.includes(ba)));
+  }
 
-  bas.forEach(ba=>{
-    const label=document.createElement("label");
-    label.style.marginRight="10px";
+  [...bas].sort().forEach(ba => {
+    const label = document.createElement("label");
+    label.style.marginRight = "10px";
 
-    label.innerHTML=`
+    label.innerHTML = `
       <input type="checkbox" value="${ba}">
       ${ba}
     `;
 
-    label.querySelector("input").onchange = e=>{
-      if(e.target.checked) FILTER_BA.add(ba);
+    label.querySelector("input").onchange = e => {
+      if (e.target.checked) FILTER_BA.add(ba);
       else FILTER_BA.delete(ba);
 
       ADMIN_CURRENT_PAGE = 0;
@@ -328,6 +332,9 @@ function buildBAFilters(){
 function render(){
 
   let tasks = TASKS;
+
+  // 🔥 REMOVE TEST BA FROM DATA
+  tasks = tasks.filter(t => t.BA !== "test");
 
   // 🔥 APPLY USER BA FILTER
   if (window.USER_ROLE !== "admin" && window.USER_BA?.length) {
