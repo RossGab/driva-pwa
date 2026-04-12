@@ -81,7 +81,7 @@ select, input[type="date"] {
 
 <body>
 
-<h2>Manage Tasks V4.6.2-forchecking-WIP</h2>
+<h2>Manage Tasks V4.6.2-WIP</h2>
 
 <button onclick="location.href='admin.html'" class="small-btn">⬅ Back</button>
 
@@ -395,23 +395,45 @@ async function processSnapshots(snapshotResults, allTasks) {
 
 async function loadLiveTasksFromFirebase(dateKey, onProgress) {
   try {
-    // 🚀 ONLY use pending (full data, no extra reads)
-    const snap = await get(ref(db, `tasksByDate/${dateKey}/pending`));
+    const idsSnap = await get(ref(db, `tasksByDate/${dateKey}`));
+    if (!idsSnap.exists()) return [];
 
-    if (!snap.exists()) return [];
+    const ids = Object.keys(idsSnap.val());
 
-    const data = snap.val();
+    const total = ids.length;
+    let loaded = 0;
 
-    const tasks = Object.entries(data).map(([id, task]) => ({
-      _key: id,
-      ...task
-    }));
+    const BATCH_SIZE = 50;
+    let results = [];
 
-    if (onProgress) {
-      onProgress(100, tasks.length, tasks.length);
+    for (let i = 0; i < ids.length; i += BATCH_SIZE) {
+      const batch = ids.slice(i, i + BATCH_SIZE);
+
+      const snaps = await Promise.all(
+        batch.map(id => get(ref(db, `tasks/${id}`)))
+      );
+
+      const parsed = snaps
+        .map((snap, idx) => {
+          if (!snap.exists()) return null;
+          return {
+            _key: batch[idx],
+            ...snap.val()
+          };
+        })
+        .filter(Boolean);
+
+      results.push(...parsed);
+
+      loaded += parsed.length;
+
+      if (onProgress) {
+        const percent = (loaded / total) * 100;
+        onProgress(percent, loaded, total);
+      }
     }
 
-    return tasks;
+    return results;
 
   } catch (e) {
     console.error("🔥 Live load failed:", e);
@@ -1077,15 +1099,6 @@ window.uploadCSV = async function(btn){
           };
 
           updates[`tasksByDate/${dateKey}/${taskId}`] = true;
-
-          updates[`tasksByDate/${dateKey}/pending/${taskId}`] = {
-            ...task,
-            driverId: task.AGENTID || "",
-            status: "PENDING",
-            rowIndex: index + 1,
-            uploadBatch: base,
-            createdAt: now
-          };
         });
 
         await update(ref(db), updates);
