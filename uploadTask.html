@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-<title>Upload Extracted File V1.0.1</title>
+<title>Upload Extracted File V1.0.2</title>
 
 <style>
 body {
@@ -319,19 +319,17 @@ window.uploadData = async function() {
 
       const filename = `photo_${p.photoIndex}_${Date.now()}.jpg`;
       const storageRef = sRef(storage, `tasks/${p.taskKey}/${filename}`);
-
+      
       await uploadBytes(storageRef, blob);
       const url = await getDownloadURL(storageRef);
-
-      const filename = `photo_${p.photoIndex}_${Date.now()}.jpg`;
-
+      
       await update(ref(db, `tasks/${p.taskKey}`), {
         [`photo${p.photoIndex}Url`]: url,
         [`photo${p.photoIndex}TakenAt`]: p.takenAt,
-        [`photo${p.photoIndex}Filename`]: filename, // ✅ added
+        [`photo${p.photoIndex}Filename`]: filename,
         ...(p.deliveryData || {}),
         status: "COMPLETED",
-        uploadedAt: new Date().toISOString() // ✅ added
+        uploadedAt: new Date().toISOString()
       });
 
     } catch (err) {
