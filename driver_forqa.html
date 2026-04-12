@@ -285,7 +285,7 @@ import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "htt
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "v4.0.22.3-ForQATEST";
+const VERSION = "v4.0.22.4-ForQATEST";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -906,7 +906,7 @@ for (const task of completed) {
 
       try {
 
-        const latestData = loadFormCache()[p.taskKey] || BILLING_CACHE[p.taskKey] || {};
+        const latestData = task.deliveryData || {};
 
         const success = await uploadNow(
           p.taskKey,
@@ -1167,6 +1167,18 @@ function syncDynamicFields(taskKey) {
   const all = loadFormCache();
   all[taskKey] = BILLING_CACHE[taskKey];
   saveFormCache(all);
+
+  // 🔥 SAVE TO INDEXEDDB (SOURCE OF TRUTH)
+  (async () => {
+    const tasks = await getTasksFromIndexedDB();
+    const existing = tasks.find(t => t._key === taskKey) || {};
+  
+    await saveTasksToIndexedDB([{
+      ...existing,
+      _key: taskKey,
+      deliveryData: BILLING_CACHE[taskKey] || {}
+    }]);
+  })();
 }
 
 function loadFormCache() {
@@ -1445,6 +1457,11 @@ cameraInput.onchange = async e => {
 
   const takenAt = new Date().toISOString();
 
+  const latestData =
+    loadFormCache()[taskKey] ||
+    BILLING_CACHE[taskKey] ||
+    {};
+  
   await savePhotoToDB({
     id: `${taskKey}_${photoIndex}`,
     taskKey,
@@ -1519,11 +1536,15 @@ cameraInput.onchange = async e => {
   // ✅ ALWAYS QUEUE (ONLINE OR OFFLINE)
   // ==============================
 
+  const latestData =
+  BILLING_CACHE[taskKey] || {};
+
   await saveTasksToIndexedDB([{
     _key: taskKey,
     status: "LOCAL_COMPLETED",
     driverId: DRIVER_ID,
-    dateKey: dateFilter.value.replace(/-/g, "")
+    dateKey: dateFilter.value.replace(/-/g, ""),
+    deliveryData: latestData // 🔥 IMPORTANT
   }]);
     
   const cached = await getTasksFromIndexedDB();
@@ -2721,16 +2742,20 @@ async function exportTasksToFile() {
   
   updateUploadCounter();
 
-  for (const p of photos) {
-    const base64 = await blobToBase64(p.blob);
+  const completedKeys = new Set(completed.map(t => t._key));
 
+  for (const p of photos) {
+    if (!completedKeys.has(p.taskKey)) continue; // ✅ CRITICAL FIX
+  
+    const base64 = await blobToBase64(p.blob);
+    const taskData = completed.find(t => t._key === p.taskKey);
     exportData.photos.push({
       id: p.id,
       taskKey: p.taskKey,
       photoIndex: p.photoIndex,
       takenAt: p.takenAt,
       gps: p.gps,
-      deliveryData: p.deliveryData || {},
+      deliveryData: taskData?.deliveryData || {},
       base64
     });
   }
