@@ -57,7 +57,7 @@ button:hover {
 
 <body>
 
-<h2>📊 Task Report V3.5.3</h2>
+<h2>📊 Task Report V4</h2>
 
 <button
   onclick="location.href='admin.html'"
@@ -293,21 +293,42 @@ window.generateReport = async function () {
   const ba = document.getElementById("baFilter").value;
   const dmz = document.getElementById("dmzFilter").value;
 
-  const wb = XLSX.utils.book_new();
-  const ws = XLSX.utils.aoa_to_sheet([]);
+  // =========================
+  // 🔄 PROGRESS UI
+  // =========================
+  let progress = document.getElementById("progressBox");
+  if (!progress) {
+    progress = document.createElement("div");
+    progress.id = "progressBox";
+    progress.style = `
+      background:#fff;
+      padding:10px;
+      margin-bottom:10px;
+      border-radius:6px;
+      text-align:center;
+      font-size:13px;
+      font-weight:bold;
+    `;
+    document.body.insertBefore(progress, document.body.children[2]);
+  }
 
+  let totalRows = 0;
   let headerSet = new Set();
-  let bufferRows = [];
+  let rows = [];
+
+  progress.innerText = "🔍 Scanning data...";
 
   // =========================
-  // 1️⃣ FIRST PASS → COLLECT HEADERS
+  // 1️⃣ LOAD + FILTER
   // =========================
-  for (const key of keys) {
+  for (let i = 0; i < keys.length; i++) {
+
+    const key = keys[i];
+
+    progress.innerText = `📥 Loading ${i+1}/${keys.length} days...`;
+
     try {
-      const res = await fetch(`${SNAPSHOT_BASE}/${key}.json`, {
-        cache: "no-store"
-      });
-
+      const res = await fetch(`${SNAPSHOT_BASE}/${key}.json`, { cache:"no-store" });
       if (!res.ok) continue;
 
       const data = await res.json();
@@ -321,44 +342,60 @@ window.generateReport = async function () {
           (dmz && task.DMZ !== dmz)
         ) continue;
 
-        const row = flattenTaskForReport({ _key: id, ...task });
+        const row = flattenTaskForReport({ _key:id, ...task });
 
         Object.keys(row).forEach(k => headerSet.add(k));
+        rows.push(row);
 
-        bufferRows.push(row);
+        totalRows++;
       }
 
     } catch {}
+
+    // yield UI
+    await new Promise(r => setTimeout(r, 0));
   }
 
-  if (!bufferRows.length) {
+  if (!rows.length) {
     alert("No data found.");
+    progress.remove();
     return;
   }
 
   // =========================
-  // 2️⃣ BUILD HEADER
+  // 🚀 AUTO MODE DECISION
   // =========================
   const headers = Array.from(headerSet).sort();
 
-  // write header row
-  XLSX.utils.sheet_add_aoa(ws, [headers], { origin: "A1" });
+  if (totalRows > 100000) {
+    progress.innerText = "⚡ Large data detected → Exporting CSV...";
+
+    exportCSV(headers, rows, from, to);
+
+    progress.remove();
+    return;
+  }
 
   // =========================
-  // 3️⃣ WRITE DATA (ALIGNED)
+  // 📊 XLSX MODE
   // =========================
-  let rowIndex = 0;
+  progress.innerText = "📊 Generating Excel...";
 
-  for (const row of bufferRows) {
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet([]);
 
-    const aligned = headers.map(h => row[h] ?? "");
+  // header
+  XLSX.utils.sheet_add_aoa(ws, [headers], { origin:"A1" });
 
-    XLSX.utils.sheet_add_aoa(ws, [aligned], { origin: -1 });
+  // data (chunked)
+  for (let i = 0; i < rows.length; i++) {
 
-    rowIndex++;
+    const aligned = headers.map(h => rows[i][h] ?? "");
 
-    // prevent freeze
-    if (rowIndex % 500 === 0) {
+    XLSX.utils.sheet_add_aoa(ws, [aligned], { origin:-1 });
+
+    if (i % 500 === 0) {
+      progress.innerText = `📊 Writing Excel... ${i}/${rows.length}`;
       await new Promise(r => setTimeout(r, 0));
     }
   }
@@ -366,7 +403,29 @@ window.generateReport = async function () {
   XLSX.utils.book_append_sheet(wb, ws, "Tasks");
 
   XLSX.writeFile(wb, `Task_Report_${from}_to_${to}.xlsx`);
+
+  progress.remove();
 };
+
+function exportCSV(headers, rows, from, to) {
+
+  const escape = v =>
+    `"${String(v ?? "").replace(/"/g,'""')}"`;
+
+  let csv = headers.join(",") + "\n";
+
+  for (let i = 0; i < rows.length; i++) {
+    const line = headers.map(h => escape(rows[i][h])).join(",");
+    csv += line + "\n";
+  }
+
+  const blob = new Blob([csv], { type:"text/csv" });
+
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `Task_Report_${from}_to_${to}.csv`;
+  a.click();
+}
 
 /* ===============================
    INIT
