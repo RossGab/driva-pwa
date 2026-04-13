@@ -57,7 +57,7 @@ button:hover {
 
 <body>
 
-<h2>📊 Task Report V3.5.2</h2>
+<h2>📊 Task Report V3.5.3</h2>
 
 <button
   onclick="location.href='admin.html'"
@@ -297,10 +297,12 @@ window.generateReport = async function () {
   const ws = XLSX.utils.aoa_to_sheet([]);
 
   let headerSet = new Set();
-  let rowIndex = 0;
+  let bufferRows = [];
 
+  // =========================
+  // 1️⃣ FIRST PASS → COLLECT HEADERS
+  // =========================
   for (const key of keys) {
-
     try {
       const res = await fetch(`${SNAPSHOT_BASE}/${key}.json`, {
         cache: "no-store"
@@ -323,20 +325,41 @@ window.generateReport = async function () {
 
         Object.keys(row).forEach(k => headerSet.add(k));
 
-        const values = Object.values(row);
-
-        XLSX.utils.sheet_add_aoa(ws, [values], { origin: -1 });
-
-        rowIndex++;
-
-        // 🔥 prevent UI freeze
-        if (rowIndex % 500 === 0) {
-          await new Promise(r => setTimeout(r, 0));
-        }
+        bufferRows.push(row);
       }
 
-    } catch {
-      console.warn("Skip:", key);
+    } catch {}
+  }
+
+  if (!bufferRows.length) {
+    alert("No data found.");
+    return;
+  }
+
+  // =========================
+  // 2️⃣ BUILD HEADER
+  // =========================
+  const headers = Array.from(headerSet).sort();
+
+  // write header row
+  XLSX.utils.sheet_add_aoa(ws, [headers], { origin: "A1" });
+
+  // =========================
+  // 3️⃣ WRITE DATA (ALIGNED)
+  // =========================
+  let rowIndex = 0;
+
+  for (const row of bufferRows) {
+
+    const aligned = headers.map(h => row[h] ?? "");
+
+    XLSX.utils.sheet_add_aoa(ws, [aligned], { origin: -1 });
+
+    rowIndex++;
+
+    // prevent freeze
+    if (rowIndex % 500 === 0) {
+      await new Promise(r => setTimeout(r, 0));
     }
   }
 
