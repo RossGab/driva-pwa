@@ -57,7 +57,7 @@ button:hover {
 
 <body>
 
-<h2>📊 Task Report V3.5.1</h2>
+<h2>📊 Task Report V3.5.2</h2>
 
 <button
   onclick="location.href='admin.html'"
@@ -286,55 +286,63 @@ window.generateReport = async function () {
   const from = document.getElementById("dateFrom").value;
   const to   = document.getElementById("dateTo").value;
 
-  await loadTasksByDateRange(from, to);
+  const keys = getDateRangeKeys(from, to);
 
   const status = document.getElementById("statusFilter").value;
   const jobType = document.getElementById("jobTypeFilter").value;
   const ba = document.getElementById("baFilter").value;
   const dmz = document.getElementById("dmzFilter").value;
 
-  let rows = ALL_TASKS.filter(t =>
-    (!status || t.status === status) &&
-    (!jobType || t.JOBTYPE === jobType) &&
-    (!ba || t.BA === ba) &&
-    (!dmz || t.DMZ === dmz)
-  );
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet([]);
 
-  if (!rows.length) {
-    alert("No data found for selected filters.");
-    return;
+  let headerSet = new Set();
+  let rowIndex = 0;
+
+  for (const key of keys) {
+
+    try {
+      const res = await fetch(`${SNAPSHOT_BASE}/${key}.json`, {
+        cache: "no-store"
+      });
+
+      if (!res.ok) continue;
+
+      const data = await res.json();
+
+      for (const [id, task] of Object.entries(data)) {
+
+        if (
+          (status && task.status !== status) ||
+          (jobType && task.JOBTYPE !== jobType) ||
+          (ba && task.BA !== ba) ||
+          (dmz && task.DMZ !== dmz)
+        ) continue;
+
+        const row = flattenTaskForReport({ _key: id, ...task });
+
+        Object.keys(row).forEach(k => headerSet.add(k));
+
+        const values = Object.values(row);
+
+        XLSX.utils.sheet_add_aoa(ws, [values], { origin: -1 });
+
+        rowIndex++;
+
+        // 🔥 prevent UI freeze
+        if (rowIndex % 500 === 0) {
+          await new Promise(r => setTimeout(r, 0));
+        }
+      }
+
+    } catch {
+      console.warn("Skip:", key);
+    }
   }
 
-  const data = rows.map(t => flattenTaskForReport(t));
-
-/* collect ALL columns across all tasks */
-const headers = new Set();
-
-data.forEach(row => {
-  Object.keys(row).forEach(k => headers.add(k));
-});
-
-const headerArray = Array.from(headers).sort();
-
-/* normalize rows so every column exists */
-const normalized = data.map(row => {
-  const r = {};
-  headerArray.forEach(h => {
-    r[h] = row[h] ?? "";
-  });
-  return r;
-});
-
-const ws = XLSX.utils.json_to_sheet(normalized, {
-  header: headerArray
-});
-  const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "Tasks");
 
-  XLSX.writeFile(
-    wb,
-    `Task_Report_${from}_to_${to}.xlsx`
-  );
+  XLSX.writeFile(wb, `Task_Report_${from}_to_${to}.xlsx`);
 };
 
 /* ===============================
