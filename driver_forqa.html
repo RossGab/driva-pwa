@@ -285,7 +285,7 @@ import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "htt
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "v4.0.22.4.1-ForQATEST";
+const VERSION = "v4.0.22.5-ForQATEST";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -2169,7 +2169,7 @@ function renderOneTask(t) {
     if (count > 0) {
       html += `
         <div class="uploading" style="color:green;">
-          📸 Photos taken: ${count} — you may submit
+          📸 Photos taken: ${count}
         </div>
       `;
     }
