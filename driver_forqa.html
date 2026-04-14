@@ -285,7 +285,7 @@ import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "htt
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "v4.0.22.11-ForQATEST";
+const VERSION = "v4.0.22.4.1-ForQATEST";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -354,25 +354,6 @@ async function savePhotoToDB(record) {
   const db = await openDB();
   const tx = db.transaction(STORE, "readwrite");
   tx.objectStore(STORE).put(record);
-}
-
-function restoreDynamicValues(taskKey) {
-  const data = BILLING_CACHE[taskKey];
-  if (!data) return;
-
-  const box = document.getElementById(`dyn_${taskKey}`);
-  if (!box) return;
-
-  const inputs = box.querySelectorAll("input, textarea");
-
-  inputs.forEach(el => {
-    const key = el.getAttribute("data-key");
-    if (!key) return;
-
-    if (data[key] !== undefined) {
-      el.value = data[key];
-    }
-  });
 }
 
 async function getAllPhotosFromDB() {
@@ -1168,15 +1149,10 @@ function syncDynamicFields(taskKey) {
     if (k) allowedKeys.add(k);
   });
 
-  // 🔒 DO NOT DELETE DATA DURING RENDER
-  if (allowedKeys.size > 0) {
-    for (const k of Object.keys(BILLING_CACHE[taskKey])) {
-      if (
-        k !== "deliveryType" &&
-        k !== "deliverytype_2nd" &&
-        !allowedKeys.has(k)
-      ) {
-      }
+  // Purge stale keys
+  for (const k of Object.keys(BILLING_CACHE[taskKey])) {
+    if (k !== "deliveryType" && k !== "deliverytype_2nd" && !allowedKeys.has(k)) {
+      delete BILLING_CACHE[taskKey][k];
     }
   }
 
@@ -2137,14 +2113,9 @@ function renderOneTask(t) {
   const p = PHOTO_BUFFER[t._key] || {};
   // ✅ RESTORE FORM STATE IF EXISTS
   const savedForms = loadFormCache();
-
-  if (savedForms[t._key]) {
-    BILLING_CACHE[t._key] = {
-      ...savedForms[t._key],
-      ...BILLING_CACHE[t._key]
-    };
+  if (savedForms[t._key] && !BILLING_CACHE[t._key]) {
+    BILLING_CACHE[t._key] = savedForms[t._key];
   }
-  
   if (!BILLING_CACHE[t._key]) {
     BILLING_CACHE[t._key] = {};
   }
@@ -2182,7 +2153,6 @@ function renderOneTask(t) {
     <div class="small"><b>Job Type:</b> ${t.JOBTYPE || "—"}</div>
     <div class="small"><b>Status:</b> ${status}</div>
   `;
-  html += `<div id="delivery_${t._key}"></div>`;
   if (t.lastUploadAttemptAt) {
     html += `
       <div class="small" style="color:#888">
@@ -2244,32 +2214,32 @@ function renderOneTask(t) {
     const disableSubmit = Object.keys(p).length === 0;
 
     /* ===== PHOTO BUTTONS ===== */
-    html += `
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-top:8px;">
-        <button ${disable1 ? "disabled" : ""}
-          onclick="startPhoto(1,'${t._key}')">
-          📸 Photo 1
+      html += `
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-top:8px;">
+          <button ${disable1 ? "disabled" : ""}
+            onclick="startPhoto(1,'${t._key}')">
+            📸 Photo 1
+          </button>
+      
+          <button ${disable2 ? "disabled" : ""}
+            onclick="startPhoto(2,'${t._key}')">
+            📸 Photo 2
+          </button>
+      
+          <button ${disable3 ? "disabled" : ""}
+            onclick="startPhoto(3,'${t._key}')">
+            📸 Photo 3
+          </button>
+        </div>
+      
+        <!-- 🔥 DELIVERY METHOD HERE -->
+        <div id="delivery_${t._key}" style="margin-top:10px;"></div>
+      
+        <button ${disableSubmit ? "disabled" : ""}
+          onclick="submitTask('${t._key}')">
+          ✅ Submit Task
         </button>
-    
-        <button ${disable2 ? "disabled" : ""}
-          onclick="startPhoto(2,'${t._key}')">
-          📸 Photo 2
-        </button>
-    
-        <button ${disable3 ? "disabled" : ""}
-          onclick="startPhoto(3,'${t._key}')">
-          📸 Photo 3
-        </button>
-      </div>
-    
-      <!-- 🔥 DELIVERY METHOD HERE -->
-      <div id="delivery_${t._key}" style="margin-top:10px;"></div>
-    
-      <button ${disableSubmit ? "disabled" : ""}
-        onclick="submitTask('${t._key}')">
-        ✅ Submit Task
-      </button>
-    `;
+      `;
   }
 
   if (status === "SYNC_PENDING") {
@@ -2405,54 +2375,31 @@ async function renderDynamicDelivery(t) {
   html += `</div><div id="dyn_${t._key}"></div>`;
   // 🔁 Restore selected delivery method UI
   const saved = BILLING_CACHE[t._key];
-
-if (saved?.deliveryType) {
-  setTimeout(() => {
-    const radio = document.querySelector(
-      `input[name="delivery_${t._key}"][value="${saved.deliveryType}"]`
-    );
-    if (radio) radio.checked = true;
-  }, 0);
-}
-
-// ✅ CASE 1: with radio child
+  if (saved?.deliveryType) {
+    setTimeout(() => {
+      const radio = document.querySelector(
+        `input[name="delivery_${t._key}"][value="${saved.deliveryType}"]`
+      );
+      if (radio) radio.checked = true;
+    }, 0);
+  }
+  // 🔁 Auto-rebuild child fields if previously selected
 if (saved?.deliveryType && saved?.deliverytype_2nd) {
-  setTimeout(async () => {
-
-    await handleDeliveryMethod(
+  setTimeout(() => {
+    handleDeliveryMethod(
       t._key,
       t.JOBTYPE,
       saved.deliveryType
     );
 
-    await new Promise(r => setTimeout(r, 0));
-
-    await handleRadioTrigger(
-      t._key,
-      t.JOBTYPE,
-      saved.deliveryType,
-      saved.deliverytype_2nd
-    );
-
-    await new Promise(r => setTimeout(r, 0));
-    restoreDynamicValues(t._key);
-
-  }, 0);
-}
-
-// ✅ CASE 2: NO radio child  ← 🔥 ADD THIS
-if (saved?.deliveryType && !saved?.deliverytype_2nd) {
-  setTimeout(async () => {
-
-    await handleDeliveryMethod(
-      t._key,
-      t.JOBTYPE,
-      saved.deliveryType
-    );
-
-    await new Promise(r => setTimeout(r, 0));
-    restoreDynamicValues(t._key);
-
+    setTimeout(() => {
+      handleRadioTrigger(
+        t._key,
+        t.JOBTYPE,
+        saved.deliveryType,
+        saved.deliverytype_2nd
+      );
+    }, 0);
   }, 0);
 }
   return html;
@@ -2722,6 +2669,9 @@ window.handleRadioTrigger = async function(taskKey, jobType, method, radioKey) {
   // 🔥 CLEAR OLD CHILD UI
   box.innerHTML = "";
 
+  // 🔥 REMOVE OLD CHILD DATA
+  syncDynamicFields(taskKey);
+
   // ❌ No children → STOP
   if (!radioBlock?.fields?._order?.length) return;
 
@@ -2746,7 +2696,6 @@ window.handleRadioTrigger = async function(taskKey, jobType, method, radioKey) {
 
   html += `</div>`;
   box.innerHTML = html;
-  restoreDynamicValues(taskKey);
 };
 
 async function exportTasksToFile() {
