@@ -285,7 +285,7 @@ import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "htt
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "v4.0.22.6-ForQATEST";
+const VERSION = "v4.0.22.7-ForQATEST";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -2693,9 +2693,6 @@ window.handleRadioTrigger = async function(taskKey, jobType, method, radioKey) {
   // 🔥 CLEAR OLD CHILD UI
   box.innerHTML = "";
 
-  // 🔥 REMOVE OLD CHILD DATA
-  syncDynamicFields(taskKey);
-
   // ❌ No children → STOP
   if (!radioBlock?.fields?._order?.length) return;
 
@@ -2720,6 +2717,7 @@ window.handleRadioTrigger = async function(taskKey, jobType, method, radioKey) {
 
   html += `</div>`;
   box.innerHTML = html;
+  restoreDynamicValues(taskKey);
 };
 
 async function exportTasksToFile() {
