@@ -285,7 +285,7 @@ import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "htt
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "v4.0.22.10-ForQATEST";
+const VERSION = "v4.0.22.11-ForQATEST";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -2243,24 +2243,28 @@ function renderOneTask(t) {
     const disable3 = !p[2] || !!p[3];
     const disableSubmit = Object.keys(p).length === 0;
 
+    /* ===== PHOTO BUTTONS ===== */
     html += `
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-top:8px;">
         <button ${disable1 ? "disabled" : ""}
           onclick="startPhoto(1,'${t._key}')">
           📸 Photo 1
         </button>
-
+    
         <button ${disable2 ? "disabled" : ""}
           onclick="startPhoto(2,'${t._key}')">
           📸 Photo 2
         </button>
-
+    
         <button ${disable3 ? "disabled" : ""}
           onclick="startPhoto(3,'${t._key}')">
           📸 Photo 3
         </button>
       </div>
-
+    
+      <!-- 🔥 DELIVERY METHOD HERE -->
+      <div id="delivery_${t._key}" style="margin-top:10px;"></div>
+    
       <button ${disableSubmit ? "disabled" : ""}
         onclick="submitTask('${t._key}')">
         ✅ Submit Task
