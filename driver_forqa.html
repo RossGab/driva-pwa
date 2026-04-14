@@ -285,7 +285,7 @@ import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "htt
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "v4.0.22.7-ForQATEST";
+const VERSION = "v4.0.22.8-ForQATEST";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -2138,9 +2138,14 @@ function renderOneTask(t) {
   const p = PHOTO_BUFFER[t._key] || {};
   // ✅ RESTORE FORM STATE IF EXISTS
   const savedForms = loadFormCache();
-  if (savedForms[t._key] && !BILLING_CACHE[t._key]) {
-    BILLING_CACHE[t._key] = savedForms[t._key];
+
+  if (savedForms[t._key]) {
+    BILLING_CACHE[t._key] = {
+      ...savedForms[t._key],
+      ...BILLING_CACHE[t._key]
+    };
   }
+  
   if (!BILLING_CACHE[t._key]) {
     BILLING_CACHE[t._key] = {};
   }
@@ -2628,7 +2633,6 @@ window.handleDeliveryMethod = async function(taskKey, jobType, method) {
 
   if (!box || !block) return;
   box.innerHTML = "";
-  restoreDynamicValues(taskKey);
 
   let html = "";
 
@@ -2675,7 +2679,7 @@ window.handleDeliveryMethod = async function(taskKey, jobType, method) {
 
   html += `<div id="sub_${taskKey}"></div>`;
   box.innerHTML = html;
-  restoreDynamicValues(taskKey);
+  restoreDynamicValues(taskKey); // ✅ keep this
   saveFormCache({
   ...loadFormCache(),
   [taskKey]: BILLING_CACHE[taskKey]
