@@ -285,7 +285,7 @@ import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "htt
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "v4.0.22.6-ForQATEST";
+const VERSION = "v4.0.22.4-ForQATEST";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -1408,9 +1408,6 @@ let BOOT_WATCHDOG_FIRED = false;
 // };
 window.startPhoto = async function(index, taskKey) {
 
-  // 🔥 SAVE CURRENT INPUTS FIRST
-  syncDynamicFields(taskKey);
-
   CURRENT_TASK = taskKey;
   CURRENT_PHOTO_INDEX = index;
 
@@ -1489,13 +1486,8 @@ cameraInput.onchange = async e => {
   setTimeout(() => {
     cameraInput.value = "";
   }, 150);
-  // 🔥 SAVE FORM BEFORE UI RE-RENDER
-  if (taskKey) {
-    syncDynamicFields(taskKey);
-  }
-  
   // ✅ LOCAL UI UPDATE ONLY — NO FULL RELOAD
-  applyFiltersOnly();
+    applyFiltersOnly();
     
     // ⬇️ Auto scroll to bottom of page after render
     requestAnimationFrame(() => {
@@ -2378,7 +2370,6 @@ async function renderDynamicDelivery(t) {
   }
 
   html += `</div><div id="dyn_${t._key}"></div>`;
-
   // 🔁 Restore selected delivery method UI
   const saved = BILLING_CACHE[t._key];
   if (saved?.deliveryType) {
@@ -2389,44 +2380,25 @@ async function renderDynamicDelivery(t) {
       if (radio) radio.checked = true;
     }, 0);
   }
-  
   // 🔁 Auto-rebuild child fields if previously selected
-  if (saved?.deliveryType && saved?.deliverytype_2nd) {
+if (saved?.deliveryType && saved?.deliverytype_2nd) {
+  setTimeout(() => {
+    handleDeliveryMethod(
+      t._key,
+      t.JOBTYPE,
+      saved.deliveryType
+    );
+
     setTimeout(() => {
-      handleDeliveryMethod(
+      handleRadioTrigger(
         t._key,
         t.JOBTYPE,
-        saved.deliveryType
+        saved.deliveryType,
+        saved.deliverytype_2nd
       );
-  
-      setTimeout(() => {
-        handleRadioTrigger(
-          t._key,
-          t.JOBTYPE,
-          saved.deliveryType,
-          saved.deliverytype_2nd
-        );
-  
-        // 🔥 MOVE RESTORE HERE (AFTER EVERYTHING)
-        setTimeout(() => {
-          const saved = BILLING_CACHE[t._key];
-          if (!saved) return;
-  
-          const box = document.getElementById(`dyn_${t._key}`);
-          if (!box) return;
-  
-          box.querySelectorAll("input, textarea").forEach(el => {
-            const key = el.getAttribute("data-key");
-            if (key && saved[key] !== undefined) {
-              el.value = saved[key];
-            }
-          });
-        }, 0);
-  
-      }, 0);
     }, 0);
-  }
-    
+  }, 0);
+}
   return html;
 }
 
