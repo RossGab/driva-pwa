@@ -285,7 +285,7 @@ import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "htt
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "v4.0.22.4-ForQATEST";
+const VERSION = "v4.0.22.5-ForQATEST";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -354,6 +354,25 @@ async function savePhotoToDB(record) {
   const db = await openDB();
   const tx = db.transaction(STORE, "readwrite");
   tx.objectStore(STORE).put(record);
+}
+
+function restoreDynamicValues(taskKey) {
+  const data = BILLING_CACHE[taskKey];
+  if (!data) return;
+
+  const box = document.getElementById(`dyn_${taskKey}`);
+  if (!box) return;
+
+  const inputs = box.querySelectorAll("input, textarea");
+
+  inputs.forEach(el => {
+    const key = el.getAttribute("data-key");
+    if (!key) return;
+
+    if (data[key] !== undefined) {
+      el.value = data[key];
+    }
+  });
 }
 
 async function getAllPhotosFromDB() {
@@ -2603,6 +2622,7 @@ window.handleDeliveryMethod = async function(taskKey, jobType, method) {
 
   if (!box || !block) return;
   box.innerHTML = "";
+  restoreDynamicValues(taskKey);
 
   let html = "";
 
@@ -2649,6 +2669,7 @@ window.handleDeliveryMethod = async function(taskKey, jobType, method) {
 
   html += `<div id="sub_${taskKey}"></div>`;
   box.innerHTML = html;
+  restoreDynamicValues(taskKey);
   saveFormCache({
   ...loadFormCache(),
   [taskKey]: BILLING_CACHE[taskKey]
