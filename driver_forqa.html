@@ -285,7 +285,7 @@ import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "htt
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "v4.0.22.5-ForQATEST";
+const VERSION = "v4.0.22.6-ForQATEST";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -2406,26 +2406,27 @@ async function renderDynamicDelivery(t) {
           saved.deliveryType,
           saved.deliverytype_2nd
         );
+  
+        // 🔥 MOVE RESTORE HERE (AFTER EVERYTHING)
+        setTimeout(() => {
+          const saved = BILLING_CACHE[t._key];
+          if (!saved) return;
+  
+          const box = document.getElementById(`dyn_${t._key}`);
+          if (!box) return;
+  
+          box.querySelectorAll("input, textarea").forEach(el => {
+            const key = el.getAttribute("data-key");
+            if (key && saved[key] !== undefined) {
+              el.value = saved[key];
+            }
+          });
+        }, 0);
+  
       }, 0);
     }, 0);
   }
-  
-  // 🔥 ADD THIS BLOCK HERE 👇👇👇
-  setTimeout(() => {
-    const saved = BILLING_CACHE[t._key];
-    if (!saved) return;
-  
-    const box = document.getElementById(`dyn_${t._key}`);
-    if (!box) return;
-  
-    box.querySelectorAll("input, textarea").forEach(el => {
-      const key = el.getAttribute("data-key");
-      if (key && saved[key] !== undefined) {
-        el.value = saved[key];
-      }
-    });
-  }, 0);
-  
+    
   return html;
 }
 
