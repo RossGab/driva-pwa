@@ -73,7 +73,7 @@ body {
 
   <div class="admin-header">
   <img src="./logo.jpg" class="admin-logo">
-  <h2>Tasks Viewer v1.1.0.1.1</h2>
+  <h2>Tasks Viewer v1.1.0.1.2</h2>
 
   <div>
     <input type="date" id="from">
@@ -296,15 +296,42 @@ async function loadTasks(){
   const keys = getKeys(from.value,to.value);
   let all = [];
 
+  // =========================
+  // STEP 1: LOAD FROM CACHE FIRST
+  // =========================
   for (const k of keys) {
+    const cacheKey = `snapshot_${k}`;
+    const cached = await idbGet(cacheKey);
 
+    if (cached?.data) {
+      console.log(`⚡ ${k} from cache`);
+      mergeTasks(cached.data, all);
+    }
+  }
+
+  // ✅ render immediately
+  TASKS = all;
+  buildBAFilters();
+  ADMIN_CURRENT_PAGE = 0;
+  render();
+  hideLoader();
+
+  // =========================
+  // STEP 2: BACKGROUND VALIDATION
+  // =========================
+  backgroundValidate(keys);
+}
+
+async function backgroundValidate(keys){
+  console.log("🔄 Background validation started");
+
+  for (const k of keys) {
     const cacheKey = `snapshot_${k}`;
 
     try {
-      // 🔍 Check IndexedDB
       const cached = await idbGet(cacheKey);
 
-      // 🔍 Get GitHub HEAD (lightweight check)
+      // 🔍 HEAD request (still used, but now NON-BLOCKING)
       const head = await fetch(`${BASE}/${k}.json`, {
         method: "HEAD"
       });
@@ -313,45 +340,37 @@ async function loadTasks(){
 
       const remoteETag = head.headers.get("etag");
 
-      // ✅ USE CACHE if same version
+      // ✅ if same → skip
       if (cached && cached.etag === remoteETag) {
-        console.log(`✅ ${k} from cache`);
-        mergeTasks(cached.data, all);
         continue;
       }
 
-      // ⬇️ FETCH FULL DATA
-      console.log(`⬇️ ${k} downloading`);
-      const res = await fetch(`${BASE}/${k}.json`, { cache:"no-store" });
+      // ⬇️ changed → fetch full
+      console.log(`⬇️ ${k} updated`);
+
+      const res = await fetch(`${BASE}/${k}.json`, {
+        cache: "no-store"
+      });
 
       if (!res.ok) continue;
 
       const data = await res.json();
 
-      // 💾 SAVE TO IndexedDB
       await idbSet(cacheKey, {
         etag: remoteETag,
         data: data
       });
 
-      mergeTasks(data, all);
+      // 🔥 update UI live
+      mergeTasks(data, TASKS);
+      render();
 
     } catch (err) {
-      console.warn(`⚠️ ${k} fallback`, err);
-
-      // fallback to cache
-      const cached = await idbGet(cacheKey);
-      if (cached) mergeTasks(cached.data, all);
+      console.warn(`⚠️ background fail ${k}`, err);
     }
   }
 
-  TASKS = all;
-
-  buildBAFilters();
-  ADMIN_CURRENT_PAGE = 0;
-  render();
-
-  hideLoader();
+  console.log("✅ Background validation done");
 }
 
 /* SEARCH */
