@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
+<meta charset="UTFp-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <title>Task Viewer 1.0</title>
@@ -73,7 +73,7 @@ body {
 
   <div class="admin-header">
   <img src="./logo.jpg" class="admin-logo">
-  <h2>Tasks Viewer v1.1.0.1</h2>
+  <h2>Tasks Viewer v1.1.0.1.1</h2>
 
   <div>
     <input type="date" id="from">
@@ -250,30 +250,100 @@ async function loadConfig(){
   DRIVER_UI_CONFIG = snap.val() || {};
 }
 
+// =====================
+// IndexedDB
+// =====================
+const DB_NAME = "taskViewerDB";
+const STORE = "snapshots";
+
+function openDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, 1);
+
+    req.onupgradeneeded = e => {
+      e.target.result.createObjectStore(STORE);
+    };
+
+    req.onsuccess = e => resolve(e.target.result);
+    req.onerror = reject;
+  });
+}
+
+async function idbGet(key) {
+  const db = await openDB();
+  return new Promise(res => {
+    const tx = db.transaction(STORE, "readonly");
+    const store = tx.objectStore(STORE);
+    const req = store.get(key);
+    req.onsuccess = () => res(req.result);
+  });
+}
+
+async function idbSet(key, val) {
+  const db = await openDB();
+  return new Promise(res => {
+    const tx = db.transaction(STORE, "readwrite");
+    const store = tx.objectStore(STORE);
+    store.put(val, key);
+    tx.oncomplete = res;
+  });
+}
+
 /* LOAD TASKS */
 async function loadTasks(){
   showLoader();
 
   const keys = getKeys(from.value,to.value);
+  let all = [];
 
-  let all=[];
+  for (const k of keys) {
 
-  const res = await Promise.allSettled(
-    keys.map(k =>
-      fetch(`${BASE}/${k}.json`,{cache:"no-store"})
-        .then(r=>r.ok?r.json():null)
-    )
-  );
+    const cacheKey = `snapshot_${k}`;
 
-  res.forEach(r=>{
-    if(r.status==="fulfilled" && r.value){
-      Object.entries(r.value).forEach(([id,t])=>{
-        if(t.status==="COMPLETED" && t.BA !== "Test"){
-          all.push({_key:id,...t});
-        }
+    try {
+      // 🔍 Check IndexedDB
+      const cached = await idbGet(cacheKey);
+
+      // 🔍 Get GitHub HEAD (lightweight check)
+      const head = await fetch(`${BASE}/${k}.json`, {
+        method: "HEAD"
       });
+
+      if (!head.ok) continue;
+
+      const remoteETag = head.headers.get("etag");
+
+      // ✅ USE CACHE if same version
+      if (cached && cached.etag === remoteETag) {
+        console.log(`✅ ${k} from cache`);
+        mergeTasks(cached.data, all);
+        continue;
+      }
+
+      // ⬇️ FETCH FULL DATA
+      console.log(`⬇️ ${k} downloading`);
+      const res = await fetch(`${BASE}/${k}.json`, { cache:"no-store" });
+
+      if (!res.ok) continue;
+
+      const data = await res.json();
+
+      // 💾 SAVE TO IndexedDB
+      await idbSet(cacheKey, {
+        etag: remoteETag,
+        data: data
+      });
+
+      mergeTasks(data, all);
+
+    } catch (err) {
+      console.warn(`⚠️ ${k} fallback`, err);
+
+      // fallback to cache
+      const cached = await idbGet(cacheKey);
+      if (cached) mergeTasks(cached.data, all);
     }
-  });
+  }
 
   TASKS = all;
 
@@ -438,6 +508,14 @@ window.nextPage = function(){
     render();
   }
 };
+
+function mergeTasks(data, all){
+  Object.entries(data).forEach(([id,t])=>{
+    if(t.status==="COMPLETED" && t.BA !== "Test"){
+      all.push({_key:id,...t});
+    }
+  });
+}
 
 /* DETAILS */
 function renderDetails(t){
