@@ -285,7 +285,7 @@ import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "htt
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "v4.0.22.5-ForQATEST";
+const VERSION = "v4.0.23.0-ForQATEST";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -735,24 +735,111 @@ searchBox.addEventListener("input", e => {
 });
 
 let DRIVER_ID = localStorage.getItem("driverId");
-while (!DRIVER_ID) DRIVER_ID = prompt("Enter Driver ID");
-localStorage.setItem("driverId", DRIVER_ID);
 
-document.getElementById("settingsBtn").onclick = () => {
-  const current = localStorage.getItem("driverId") || "";
+async function loginDriver() {
 
-  const next = prompt("Enter new Driver ID", current);
-  if (!next) return;
-  if (next === current) return;
+  // already logged in
+  if (DRIVER_ID) return DRIVER_ID;
 
-  localStorage.setItem("driverId", next);
-  alert("Driver ID changed. Reloading…");
-  location.reload();
+  while (true) {
+
+    const username = prompt("Enter Username");
+    if (!username) continue;
+
+    const password = prompt("Enter Password");
+    if (password === null) continue;
+
+    try {
+
+      const snap = await get(ref(db, "drivers"));
+
+      const drivers = snap.val() || {};
+
+      const found = Object.values(drivers).find(d =>
+        String(d.username || "").trim().toLowerCase() ===
+        username.trim().toLowerCase()
+      );
+
+      if (!found) {
+        alert("User not found");
+        continue;
+      }
+
+      if (String(found.password || "") !== String(password)) {
+        alert("Incorrect password");
+        continue;
+      }
+
+      DRIVER_ID = found.driverCode;
+
+      localStorage.setItem("driverId", DRIVER_ID);
+      localStorage.setItem("driverUsername", found.username || "");
+
+      alert(`Welcome ${found.name || DRIVER_ID}`);
+
+      return DRIVER_ID;
+
+    } catch (err) {
+
+      console.error(err);
+      alert("Login failed");
+
+    }
+  }
+}
+
+await loginDriver();
+
+document.getElementById("settingsBtn").onclick = async () => {
+
+  const choice = prompt(
+`Settings
+
+1 - Change Account
+2 - Logout
+
+Enter 1 or 2`
+  );
+
+  if (!choice) return;
+
+  // CHANGE ACCOUNT
+  if (choice === "1") {
+
+    localStorage.removeItem("driverId");
+    localStorage.removeItem("driverUsername");
+
+    DRIVER_ID = null;
+
+    await loginDriver();
+
+    alert("Account changed.");
+    location.reload();
+
+    return;
+  }
+
+  // LOGOUT
+  if (choice === "2") {
+
+    if (!confirm("Logout?")) return;
+
+    localStorage.removeItem("driverId");
+    localStorage.removeItem("driverUsername");
+
+    location.reload();
+
+    return;
+  }
 };
 
 let gpsWatchId = null;
 
-appVersion.innerText = `Driver: ${DRIVER_ID} | ${VERSION}`;
+const DRIVER_USERNAME =
+  localStorage.getItem("driverUsername") || DRIVER_ID;
+
+appVersion.innerText =
+  `Driver: ${DRIVER_USERNAME} | ${VERSION}`;
 startGPSTracking(DRIVER_ID);
 
 async function loadDriverUI(jobType) {
