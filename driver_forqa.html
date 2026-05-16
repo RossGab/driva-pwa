@@ -285,7 +285,7 @@ import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "htt
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "v4.0.23.0-ForQATEST";
+const VERSION = "v4.0.23.1-ForQATEST";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -797,13 +797,16 @@ document.getElementById("settingsBtn").onclick = async () => {
 
 1 - Change Account
 2 - Logout
+3 - Change Password
 
-Enter 1 or 2`
+Enter 1, 2 or 3`
   );
 
   if (!choice) return;
 
-  // CHANGE ACCOUNT
+  // =========================
+  // 1️⃣ CHANGE ACCOUNT
+  // =========================
   if (choice === "1") {
 
     localStorage.removeItem("driverId");
@@ -819,7 +822,9 @@ Enter 1 or 2`
     return;
   }
 
-  // LOGOUT
+  // =========================
+  // 2️⃣ LOGOUT
+  // =========================
   if (choice === "2") {
 
     if (!confirm("Logout?")) return;
@@ -831,6 +836,94 @@ Enter 1 or 2`
 
     return;
   }
+
+  // =========================
+  // 3️⃣ CHANGE PASSWORD
+  // =========================
+  if (choice === "3") {
+
+    const username =
+      localStorage.getItem("driverUsername");
+
+    if (!username) {
+      alert("No logged in user.");
+      return;
+    }
+
+    const currentPassword = prompt(
+      "Enter current password"
+    );
+
+    if (currentPassword === null) return;
+
+    const newPassword = prompt(
+      "Enter new password"
+    );
+
+    if (!newPassword) {
+      alert("New password required.");
+      return;
+    }
+
+    const confirmPassword = prompt(
+      "Confirm new password"
+    );
+
+    if (newPassword !== confirmPassword) {
+      alert("Passwords do not match.");
+      return;
+    }
+
+    try {
+
+      const snap = await get(ref(db, "drivers"));
+
+      const drivers = snap.val() || {};
+
+      const entry = Object.entries(drivers).find(
+        ([k, d]) =>
+          String(d.username || "")
+            .trim()
+            .toLowerCase() ===
+          username.trim().toLowerCase()
+      );
+
+      if (!entry) {
+        alert("Driver not found.");
+        return;
+      }
+
+      const driverKey = entry[0];
+      const driverData = entry[1];
+
+      if (
+        String(driverData.password || "") !==
+        String(currentPassword)
+      ) {
+        alert("Current password incorrect.");
+        return;
+      }
+
+      await update(
+        ref(db, `drivers/${driverKey}`),
+        {
+          password: newPassword
+        }
+      );
+
+      alert("✅ Password changed successfully.");
+
+    } catch (err) {
+
+      console.error(err);
+
+      alert("Failed to change password.");
+    }
+
+    return;
+  }
+
+  alert("Invalid choice.");
 };
 
 let gpsWatchId = null;
