@@ -81,7 +81,7 @@ select, input[type="date"] {
 
 <body>
 
-<h2>Manage Tasks V_R_1.0.4-WIP</h2>
+<h2>Manage Tasks V_R_1.0.5-WIP</h2>
 
 <button onclick="location.href='admin.html'" class="small-btn">⬅ Back</button>
 
@@ -248,7 +248,8 @@ const firebaseConfig = {
 
 
 const app = initializeApp(firebaseConfig);
-const db = getFirestore(app, "driver-task");
+const db = getFirestore(app, "driver-task");'
+console.log("Firestore database initialized:", db);
 
 const bulkBtn = document.getElementById("bulkBtn");
 
@@ -1158,7 +1159,11 @@ window.uploadCSV = async function(btn){
               updatedAt: serverTimestamp()
             };
         
-            batch.set(taskRef, taskData);
+            console.log("ABOUT TO COMMIT BATCH");
+
+            await batch.commit();
+            
+            console.log("BATCH COMMITTED SUCCESSFULLY");
           }
         
           await batch.commit();
