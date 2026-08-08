@@ -81,7 +81,7 @@ select, input[type="date"] {
 
 <body>
 
-<h2>Manage Tasks V_R_1.0.6.1-WIP</h2>
+<h2>Manage Tasks V_R_1.0.6.2-WIP</h2>
 
 <button onclick="location.href='admin.html'" class="small-btn">⬅ Back</button>
 
@@ -1085,8 +1085,9 @@ window.uploadCSV = async function(btn){
         }
 
         /* ===== BUILD UPDATES ===== */
-        const base = Date.now();
 
+        const base = Date.now();
+        
         const now = new Date().toLocaleString("sv-SE", {
           timeZone: "Asia/Manila"
         }).replace(" ", "T");
@@ -1095,36 +1096,42 @@ window.uploadCSV = async function(btn){
         
         // ==========================================
         // FIRESTORE BULK WRITE
-        // Firestore limit: 500 writes per batch
+        // Firestore maximum = 500 writes per batch
         // ==========================================
         
         const BATCH_SIZE = 500;
         
-        for (let start = 0; start < rows.length; start += BATCH_SIZE) {
+        for (
+          let start = 0;
+          start < rows.length;
+          start += BATCH_SIZE
+        ) {
         
           const end = Math.min(
             start + BATCH_SIZE,
             rows.length
           );
         
-          // Create a NEW batch for each group of up to 500 tasks
+          // NEW batch for every 500 tasks
           const batch = writeBatch(db);
         
           console.log(
             `Creating Firestore batch: ${start + 1}-${end}`
           );
         
-          for (let index = start; index < end; index++) {
+          for (
+            let index = start;
+            index < end;
+            index++
+          ) {
         
             const task = rows[index];
         
-            const taskId = `TASK_${base}_${index}`;
+            const taskId =
+              `TASK_${base}_${index}`;
         
-            const taskRef = doc(
-              db,
-              "TASK",
-              taskId
-            );
+            const taskRef =
+              doc(db, "TASK", taskId);
         
             const taskData = {
         
@@ -1168,33 +1175,22 @@ window.uploadCSV = async function(btn){
               updatedAt: serverTimestamp()
             };
         
-            // Add task to batch
-            batch.set(taskRef, taskData);
+            // Add task to the current batch
+            batch.set(
+              taskRef,
+              taskData
+            );
           }
         
-          // IMPORTANT:
-          // Commit ONLY AFTER all tasks in this batch are added
+          // Commit AFTER all tasks have been added
           console.log(
-            "ABOUT TO COMMIT BATCH:",
-            start + 1,
-            "-",
-            end
+            `ABOUT TO COMMIT BATCH: ${start + 1}-${end}`
           );
         
           await batch.commit();
         
           console.log(
-            "BATCH COMMITTED SUCCESSFULLY:",
-            start + 1,
-            "-",
-            end
-          );
-        }
-        
-          await batch.commit();
-        
-          console.log(
-            `✅ Firestore batch uploaded: ${start + 1}-${end}`
+            `BATCH COMMITTED SUCCESSFULLY: ${start + 1}-${end}`
           );
         }
 
@@ -1270,7 +1266,6 @@ window.uploadCSV = async function(btn){
 // 🔥 EXPOSE FUNCTIONS TO HTML BUTTONS
 window.loadTasks = loadTasks;
 window.openBulkActions = openBulkActions;
-window.uploadCSV = uploadCSV;
 window.toggleSelect = toggleSelect;
 
 </script>
