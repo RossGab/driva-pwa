@@ -81,7 +81,7 @@ select, input[type="date"] {
 
 <body>
 
-<h2>Manage Tasks V_R_1.0.9-WIP</h2>
+<h2>Manage Tasks V_R_1.0.10-WIP</h2>
 
 <button onclick="location.href='admin.html'" class="small-btn">⬅ Back</button>
 
@@ -234,6 +234,7 @@ import {
   where,
   orderBy,
   limit,
+  startAfter,
   writeBatch,
   setDoc,
   updateDoc,
@@ -326,7 +327,13 @@ searchBox.addEventListener("input", e => {
 
 let TASKS = []; // (optional cache for uploads)
 window.__SNAPSHOT_TASKS__ = [];
-const PAGE_SIZE = 100;   // ✅ adjust: 50 / 100 / 200
+const FIRESTORE_PAGE_SIZE = 100;
+
+let FIRESTORE_LAST_DOC = null;
+let FIRESTORE_HAS_MORE = false;
+let FIRESTORE_CURRENT_DATE = null;
+let FIRESTORE_PAGE = 0;
+let FIRESTORE_LOADING = false;
 let CURRENT_PAGE = 0;
 let FILTERED_TASKS = [];
 
@@ -459,26 +466,55 @@ async function processSnapshots(snapshotResults, allTasks) {
   });
 }
 
-async function loadLiveTasksFromFirebase(dateKey, onProgress) {
-  try {
+async function loadLiveTasksFromFirebase(
+  dateKey,
+  onProgress,
+  direction = "first"
+) {
 
-    // dateKey comes in as YYYYMMDD
-    // Firestore assignedDate is stored as YYYY-MM-DD
+  if (FIRESTORE_LOADING) {
+    console.log("🔥 Firestore load already running");
+    return [];
+  }
+
+  FIRESTORE_LOADING = true;
+
+  try {
 
     const firestoreDate =
       `${dateKey.slice(0, 4)}-${dateKey.slice(4, 6)}-${dateKey.slice(6, 8)}`;
 
     console.log(
-      "🔥 Firestore loading assignedDate:",
-      firestoreDate
+      `🔥 Firestore ${direction}: ${firestoreDate}`
     );
 
     const tasksRef = collection(db, "TASK");
 
-    const q = query(
-      tasksRef,
-      where("assignedDate", "==", firestoreDate)
-    );
+    let q;
+
+    if (
+      direction === "first" ||
+      !FIRESTORE_LAST_DOC
+    ) {
+
+      q = query(
+        tasksRef,
+        where("assignedDate", "==", firestoreDate),
+        orderBy("createdAt"),
+        limit(FIRESTORE_PAGE_SIZE)
+      );
+
+    } else {
+
+      q = query(
+        tasksRef,
+        where("assignedDate", "==", firestoreDate),
+        orderBy("createdAt"),
+        startAfter(FIRESTORE_LAST_DOC),
+        limit(FIRESTORE_PAGE_SIZE)
+      );
+
+    }
 
     const snapshot = await getDocs(q);
 
@@ -486,17 +522,29 @@ async function loadLiveTasksFromFirebase(dateKey, onProgress) {
 
     snapshot.forEach(docSnap => {
 
-      const task = docSnap.data();
-
       results.push({
         _key: docSnap.id,
-        ...task
+        ...docSnap.data()
       });
 
     });
 
+    if (snapshot.docs.length > 0) {
+      FIRESTORE_LAST_DOC =
+        snapshot.docs[snapshot.docs.length - 1];
+    }
+
+    FIRESTORE_HAS_MORE =
+      snapshot.docs.length === FIRESTORE_PAGE_SIZE;
+
+    FIRESTORE_CURRENT_DATE = dateKey;
+
     console.log(
-      `🔥 Firestore returned ${results.length} tasks for ${firestoreDate}`
+      `🔥 Firestore returned ${results.length} tasks`
+    );
+
+    console.log(
+      `🔥 Has more: ${FIRESTORE_HAS_MORE}`
     );
 
     if (onProgress) {
@@ -517,6 +565,10 @@ async function loadLiveTasksFromFirebase(dateKey, onProgress) {
     );
 
     return [];
+
+  } finally {
+
+    FIRESTORE_LOADING = false;
 
   }
 }
@@ -603,10 +655,11 @@ for (const key of liveKeys) {
   });
 }
   window.__SNAPSHOT_TASKS__ = allTasks;
-    applyFilters(); // 🔥 THIS IS WHAT YOU ARE MISSING
-  buildFilterLists(); // 🔥 move it here (immediate)
 
-  // 🔥 INIT INDEXES
+applyFilters();
+buildFilterLists();
+
+// 🔥 INIT INDEXES
 window.__TASKS_BY_DATE__ = {};
 window.__TASKS_BY_DRIVER__ = {};
 window.__TASKS_BY_JOB__ = {};
@@ -653,26 +706,28 @@ t._search = Object.values(t)
     window.__TASKS_BY_JOB__[t.jobType].push(t);
   }
 
-  applyFilters(); // ✅ AFTER indexes are ready
 
   // 🔥 RESET SELECTION STATE
   SELECTED_IDS.clear();
   checkAll.checked = false;
-
-  LAST_FILTER_HASH = "";
-
   
-
-  // ✅ ADD THIS HERE
+  LAST_FILTER_HASH = "";
+  
+  buildFilterLists();
+  
+  applyFilters();
+  
   loadingText.innerText =
     `Done (${allTasks.length} tasks loaded)`;
   
-  // optional: small delay so user can SEE it
   setTimeout(() => {
-  loadingBar.style.display = "none";
-}, 500);
+    loadingBar.style.display = "none";
+  }, 500);
+  
 
-  } catch (err) {
+  } 
+                 
+    catch (err) {
     console.error("❌ loadTasks failed:", err);
     alert("Something went wrong while loading tasks");
 
@@ -722,7 +777,7 @@ function buildFilterLists() {
     const t = data[i];
 
     if (t.agentId) drivers.add(t.agentId);
-    iif (t.jobType) jobs.add(t.jobType);
+    if (t.jobType) jobs.add(t.jobType);
     if (t.ba) bas.add(t.ba);
     if (t.dmz) dmzs.add(t.dmz);
     if (t.mru) mrus.add(t.mru);
