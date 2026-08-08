@@ -81,7 +81,7 @@ select, input[type="date"] {
 
 <body>
 
-<h2>Manage Tasks V_R_1.0.2-WIP</h2>
+<h2>Manage Tasks V_R_1.0.3-WIP</h2>
 
 <button onclick="location.href='admin.html'" class="small-btn">⬅ Back</button>
 
@@ -228,21 +228,16 @@ import {
   getFirestore,
   collection,
   doc,
-  getDoc,
   getDocs,
   query,
   where,
-  orderBy,
-  limit,
   writeBatch,
-  updateDoc,
-  deleteDoc,
   serverTimestamp
 } from
   "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyDFW61pnwLvh6HGKWmport { initializeApp } fromt10zLYNr860fI8vkg",
+  apiKey: "AIzaSyDFW61pnwLvh6HGKWt10zLYNr860fI8vkg",
   authDomain: "driva-pwa.firebaseapp.com",
   databaseURL: "https://driva-pwa-default-rtdb.firebaseio.com",
   projectId: "driva-pwa",
@@ -250,6 +245,7 @@ const firebaseConfig = {
   messagingSenderId: "299138219722",
   appId: "1:299138219722:web:623ff6b0a067ea822dfe33"
 };
+
 
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
