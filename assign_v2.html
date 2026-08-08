@@ -81,7 +81,7 @@ select, input[type="date"] {
 
 <body>
 
-<h2>Manage Tasks V_R_1.0.7-WIP</h2>
+<h2>Manage Tasks V_R_1.0.8-WIP</h2>
 
 <button onclick="location.href='admin.html'" class="small-btn">⬅ Back</button>
 
@@ -435,66 +435,6 @@ async function processSnapshots(snapshotResults, allTasks) {
 }
 
 async function loadLiveTasksFromFirebase(dateKey, onProgress) {
-  try {
-
-    // dateKey comes in as YYYYMMDD
-    // Firestore assignedDate is stored as YYYY-MM-DD
-
-    const firestoreDate =
-      `${dateKey.slice(0, 4)}-${dateKey.slice(4, 6)}-${dateKey.slice(6, 8)}`;
-
-    console.log(
-      "🔥 Firestore loading assignedDate:",
-      firestoreDate
-    );
-
-    const tasksRef = collection(db, "TASK");
-
-    const q = query(
-      tasksRef,
-      where("assignedDate", "==", firestoreDate)
-    );
-
-    const snapshot = await getDocs(q);
-
-    const results = [];
-
-    snapshot.forEach(docSnap => {
-
-      const task = docSnap.data();
-
-      results.push({
-        _key: docSnap.id,
-        ...task
-      });
-
-    });
-
-    console.log(
-      `🔥 Firestore returned ${results.length} tasks for ${firestoreDate}`
-    );
-
-    if (onProgress) {
-      onProgress(
-        100,
-        results.length,
-        results.length
-      );
-    }
-
-    return results;
-
-  } catch (e) {
-
-    console.error(
-      "🔥 Firestore load failed:",
-      e
-    );
-
-    return [];
-
-  }
-}async function loadLiveTasksFromFirebase(dateKey, onProgress) {
   try {
 
     // dateKey comes in as YYYYMMDD
