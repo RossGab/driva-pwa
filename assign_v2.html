@@ -81,7 +81,7 @@ select, input[type="date"] {
 
 <body>
 
-<h2>Manage Tasks V_R_1.0.12.1-WIP</h2>
+<h2>Manage Tasks V_R_1.0.12.2-WIP</h2>
 
 <button onclick="location.href='admin.html'" class="small-btn">⬅ Back</button>
 
@@ -713,44 +713,6 @@ allTasks.forEach(t => {
   }
 
 }); // CLOSE allTasks.forEach()
-
-// 🔥 fallback to filter date if missing
-if (!d) {
-  d = filterDateFrom.value;
-}
-
-t._date = d;
-
-if (!window.__TASKS_BY_DATE__[d]) {
-  window.__TASKS_BY_DATE__[d] = [];
-}
-window.__TASKS_BY_DATE__[d].push(t);
-
-t._search = Object.values(t)
-  .map(v => (v || "").toString().toLowerCase())
-  .join(" ");
-
-  // ===== DRIVER INDEX =====
-  if (t.agentId) {
-  
-    if (!window.__TASKS_BY_DRIVER__[t.agentId]) {
-      window.__TASKS_BY_DRIVER__[t.agentId] = [];
-    }
-  
-    window.__TASKS_BY_DRIVER__[t.agentId].push(t);
-  }
-
-    // ===== JOB INDEX =====
-  if (t.jobType) {
-
-    if (!window.__TASKS_BY_JOB__[t.jobType]) {
-      window.__TASKS_BY_JOB__[t.jobType] = [];
-    }
-
-    window.__TASKS_BY_JOB__[t.jobType].push(t);
-  }
-
-}); // ✅ CLOSE allTasks.forEach()
 
 
 // 🔥 RESET SELECTION STATE
