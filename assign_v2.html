@@ -81,7 +81,7 @@ select, input[type="date"] {
 
 <body>
 
-<h2>Manage Tasks V_R_1.0.11.1-WIP</h2>
+<h2>Manage Tasks V_R_1.0.12-WIP</h2>
 
 <button onclick="location.href='admin.html'" class="small-btn">⬅ Back</button>
 
@@ -325,8 +325,11 @@ searchBox.addEventListener("input", e => {
   }, 300);
 });
 
-let TASKS = []; // (optional cache for uploads)
+let TASKS = [];
+
 window.__SNAPSHOT_TASKS__ = [];
+
+const PAGE_SIZE = 100;
 const FIRESTORE_PAGE_SIZE = 100;
 
 let FIRESTORE_LAST_DOC = null;
@@ -334,6 +337,7 @@ let FIRESTORE_HAS_MORE = false;
 let FIRESTORE_CURRENT_DATE = null;
 let FIRESTORE_PAGE = 0;
 let FIRESTORE_LOADING = false;
+
 let CURRENT_PAGE = 0;
 let FILTERED_TASKS = [];
 
@@ -654,10 +658,7 @@ for (const key of liveKeys) {
     }
   });
 }
-  window.__SNAPSHOT_TASKS__ = allTasks;
-
-applyFilters();
-buildFilterLists();
+window.__SNAPSHOT_TASKS__ = allTasks;
 
 // 🔥 INIT INDEXES
 window.__TASKS_BY_DATE__ = {};
@@ -665,9 +666,6 @@ window.__TASKS_BY_DRIVER__ = {};
 window.__TASKS_BY_JOB__ = {};
 
 TASK_MAP = {};
-
-allTasks.forEach(t => {
-  TASK_MAP[t._key] = t;
 
   // ===== CACHE =====
   let d = normalizeDate(t.createdAt);
@@ -689,11 +687,13 @@ t._search = Object.values(t)
   .join(" ");
 
   // ===== DRIVER INDEX =====
-  if (t.driverId) {
-    if (!window.__TASKS_BY_DRIVER__[t.driverId]) {
-      window.__TASKS_BY_DRIVER__[t.driverId] = [];
+  if (t.agentId) {
+  
+    if (!window.__TASKS_BY_DRIVER__[t.agentId]) {
+      window.__TASKS_BY_DRIVER__[t.agentId] = [];
     }
-    window.__TASKS_BY_DRIVER__[t.driverId].push(t);
+  
+    window.__TASKS_BY_DRIVER__[t.agentId].push(t);
   }
 
     // ===== JOB INDEX =====
