@@ -81,7 +81,7 @@ select, input[type="date"] {
 
 <body>
 
-<h2>Manage Tasks V_R_1.0.5-WIP</h2>
+<h2>Manage Tasks V_R_1.0.6-WIP</h2>
 
 <button onclick="location.href='admin.html'" class="small-btn">⬅ Back</button>
 
@@ -1102,11 +1102,16 @@ window.uploadCSV = async function(btn){
         
         for (let start = 0; start < rows.length; start += BATCH_SIZE) {
         
-          const batch = writeBatch(db);
-        
           const end = Math.min(
             start + BATCH_SIZE,
             rows.length
+          );
+        
+          // Create a NEW batch for each group of up to 500 tasks
+          const batch = writeBatch(db);
+        
+          console.log(
+            `Creating Firestore batch: ${start + 1}-${end}`
           );
         
           for (let index = start; index < end; index++) {
@@ -1115,9 +1120,14 @@ window.uploadCSV = async function(btn){
         
             const taskId = `TASK_${base}_${index}`;
         
-            const taskRef = doc(db, "TASK", taskId);
+            const taskRef = doc(
+              db,
+              "TASK",
+              taskId
+            );
         
             const taskData = {
+        
               taskId: taskId,
         
               jobType: task.JOBTYPE || "",
@@ -1148,7 +1158,6 @@ window.uploadCSV = async function(btn){
         
               assignedDate: assignedDate,
         
-              // NEW TASK
               workStatus: "fordownload",
         
               rowIndex: index + 1,
@@ -1159,12 +1168,28 @@ window.uploadCSV = async function(btn){
               updatedAt: serverTimestamp()
             };
         
-            console.log("ABOUT TO COMMIT BATCH");
-
-            await batch.commit();
-            
-            console.log("BATCH COMMITTED SUCCESSFULLY");
+            // Add task to batch
+            batch.set(taskRef, taskData);
           }
+        
+          // IMPORTANT:
+          // Commit ONLY AFTER all tasks in this batch are added
+          console.log(
+            "ABOUT TO COMMIT BATCH:",
+            start + 1,
+            "-",
+            end
+          );
+        
+          await batch.commit();
+        
+          console.log(
+            "BATCH COMMITTED SUCCESSFULLY:",
+            start + 1,
+            "-",
+            end
+          );
+        }
         
           await batch.commit();
         
