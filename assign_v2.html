@@ -1,0 +1,1166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Manage Tasks</title>
+
+<style>
+body {
+  font-family: Arial, sans-serif;
+  background:#f3f3f3;
+  padding:10px;
+}
+
+h2 { text-align:center; }
+
+.panel {
+  background:#fff;
+  padding:14px;
+  border-radius:10px;
+  box-shadow:0 0 4px rgba(0,0,0,.1);
+  margin-bottom:12px;
+}
+
+.blue { border-left:5px solid #007bff; }
+
+.small-btn {
+  background:#444;
+  color:#fff;
+  padding:6px 10px;
+  border:none;
+  border-radius:6px;
+  font-size:13px;
+}
+
+table {
+  width:100%;
+  border-collapse:collapse;
+  font-size:12px;
+}
+
+th, td {
+  border-bottom:1px solid #eee;
+  padding:6px;
+  text-align:left;
+  white-space:nowrap;
+}
+
+th {
+  background:#f5f5f5;
+  font-weight:bold;
+}
+
+tr:hover { background:#f9f9f9; }
+
+#bulkBtn {
+  background:#007bff;
+  color:#fff;
+  border:none;
+  border-radius:6px;
+  padding:10px 14px;
+  font-weight:bold;
+}
+
+#bulkBtn:disabled { background:#aaa; }
+
+.actions {
+  display:flex;
+  gap:6px;
+  flex-wrap:wrap;
+}
+
+select, input[type="date"] {
+  padding:8px;
+  border-radius:6px;
+  border:1px solid #ccc;
+  font-size:13px;
+}
+</style>
+</head>
+
+<body>
+
+<h2>Manage Tasks V4.6.2-WIP</h2>
+
+<button onclick="location.href='admin.html'" class="small-btn">⬅ Back</button>
+
+<!-- BULK UPLOAD -->
+<div class="panel">
+  <b>📤 Bulk Upload Tasks</b><br>
+
+  <div style="
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    gap:10px;
+    flex-wrap:wrap;
+    margin-top:6px;
+  ">
+
+    <!-- LEFT SIDE -->
+    <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+      <input type="file" id="csvFile" accept=".csv">
+
+      <button onclick="uploadCSV(this)" style="
+        padding:8px 12px;
+        border-radius:6px;
+        border:1px solid #ccc;
+        background:#f5f5f5;
+        cursor:pointer;
+      ">
+        Upload CSV
+      </button>
+    </div>
+
+    <!-- RIGHT SIDE (NEW BUTTON) -->
+    <button onclick="location.href='https://rossgab.github.io/driva-pwa/uploadTask.html'" style="
+      background:#007bff;
+      color:#fff;
+      border:none;
+      border-radius:8px;
+      padding:10px 14px;
+      font-weight:bold;
+      cursor:pointer;
+      white-space:nowrap;
+    ">
+      📦 Upload Exported Tasks
+    </button>
+
+  </div>
+
+  <div id="uploadStatus" style="font-size:13px;margin-top:6px;"></div>
+</div>
+
+<!-- FILTERS + BULK ACTION -->
+<div class="panel blue">
+  <div class="actions">
+    <input type="date" id="filterDateFrom">
+    <input type="date" id="filterDateTo">
+    <button id="loadBtn" onclick="loadTasks()" style="
+  background:#28a745;
+  color:#fff;
+  border:none;
+  border-radius:6px;
+  padding:8px 12px;
+  font-weight:bold;
+">
+  🔄 Load Tasks
+</button>
+    <select id="filterDriver"><option value="">All Drivers</option></select>
+    <select id="filterJob"><option value="">All Job Types</option></select>
+    <select id="filterBA"><option value="">All BA</option></select>
+    <select id="filterDMZ"><option value="">All DMZ</option></select>
+    <select id="filterMRU"><option value="">All MRU</option></select>
+    <button id="bulkBtn" disabled onclick="openBulkActions()">Bulk Action</button>
+    <span id="selectedCount" style="font-size:12px;color:#555;"></span>
+    <input
+  type="text"
+  id="searchBox"
+  placeholder="Search customer, address, account, meter…"
+  style="min-width:220px;"
+>
+  </div>
+</div>
+
+<!-- TASK TABLE -->
+  <div style="font-size:12px;color:#777;text-align:center;">
+  Bulk actions apply to ALL selected rows
+</div>
+  <div id="paginationControls"
+     style="margin-top:10px;text-align:center;"></div>
+<div class="panel">
+  <div style="display:flex;align-items:center;gap:10px;">
+  <input type="checkbox" id="checkAll">
+  <b>📝Open Tasks</b>
+</div>
+
+<div id="loadingBar" style="display:none;margin-bottom:10px;">
+
+  <div style="
+    position:relative;
+    height:20px;
+    background:#eee;
+    border-radius:6px;
+    overflow:hidden;
+  ">
+
+    <!-- progress -->
+    <div id="loadingProgress" style="
+      height:100%;
+      width:0%;
+      background:#007bff;
+      transition:width 0.3s;
+    "></div>
+
+    <!-- text overlay -->
+    <div id="loadingText" style="
+      position:absolute;
+      top:0;
+      left:0;
+      width:100%;
+      height:100%;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      font-size:12px;
+      color:#fff;
+      font-weight:bold;
+      pointer-events:none;
+    ">
+      Loading tasks...
+    </div>
+
+  </div>
+
+</div>
+  
+<div id="taskList" style="margin-top:6px;"></div>
+
+
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+
+<script type="module">
+import { initializeApp } from
+  "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import {
+  getDatabase, ref, get, update
+} from
+  "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyDFW61pnwLvh6HGKWt10zLYNr860fI8vkg",
+  authDomain: "driva-pwa.firebaseapp.com",
+  databaseURL: "https://driva-pwa-default-rtdb.firebaseio.com",
+  projectId: "driva-pwa",
+  storageBucket: "driva-pwa.firebasestorage.app",
+  messagingSenderId: "299138219722",
+  appId: "1:299138219722:web:623ff6b0a067ea822dfe33"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
+
+const bulkBtn = document.getElementById("bulkBtn");
+
+const filterDateFrom = document.getElementById("filterDateFrom");
+const filterDateTo = document.getElementById("filterDateTo");
+const filterDriver = document.getElementById("filterDriver");
+const filterJob = document.getElementById("filterJob");
+const filterBA = document.getElementById("filterBA");
+const filterDMZ = document.getElementById("filterDMZ");
+const filterMRU = document.getElementById("filterMRU");
+
+const checkAll = document.getElementById("checkAll");
+
+const searchBox = document.getElementById("searchBox");
+let SEARCH_TERM = "";
+
+const ROW_HEIGHT = 42;   // adjust if row height changes
+const BUFFER = 10;
+
+const loadingBar = document.getElementById("loadingBar");
+const loadingProgress = document.getElementById("loadingProgress");
+const loadingText = document.getElementById("loadingText");
+const loadBtn = document.getElementById("loadBtn");
+  
+let TASK_MAP = {};
+let LAST_FILTER_HASH = "";
+let VISIBLE_START = 0;
+let VISIBLE_END = 0;
+
+  
+let SELECTED_IDS = new Set();
+
+let SEARCH_TIMER;
+
+searchBox.addEventListener("input", e => {
+  clearTimeout(SEARCH_TIMER);
+
+  SEARCH_TIMER = setTimeout(() => {
+    SEARCH_TERM = e.target.value.toLowerCase().trim();
+    applyFilters();
+  }, 300);
+});
+
+let TASKS = []; // (optional cache for uploads)
+window.__SNAPSHOT_TASKS__ = [];
+const PAGE_SIZE = 100;   // ✅ adjust: 50 / 100 / 200
+let CURRENT_PAGE = 0;
+let FILTERED_TASKS = [];
+
+const today = getTodayPH();
+filterDateFrom.value = today;
+filterDateTo.value = today;
+// Manual load only (via button)
+filterDateFrom.onchange = null;
+filterDateTo.onchange = null;
+filterDriver.onchange =
+filterJob.onchange =
+filterBA.onchange =
+filterDMZ.onchange =
+filterMRU.onchange = applyFilters;
+
+function getTodayPH() {
+  return new Date().toLocaleDateString("en-CA", {
+    timeZone: "Asia/Manila"
+  });
+}
+
+function normalizeDate(dateStr) {
+  if (!dateStr || typeof dateStr !== "string") return null;
+
+  // 🔥 FAST PATH: already YYYY-MM-DD or ISO
+  if (dateStr.length >= 10) {
+    const part = dateStr.slice(0, 10);
+
+    // quick validation: YYYY-MM-DD
+    if (/^\d{4}-\d{2}-\d{2}$/.test(part)) {
+      return part;
+    }
+  }
+
+  // ❌ skip expensive parsing for bad data
+  return null;
+}
+
+/* ===== PH TIME ===== */
+function toPHTime(ts) {
+  return new Date(ts).toLocaleString("en-PH", {
+    timeZone: "Asia/Manila",
+    year:"numeric",
+    month:"2-digit",
+    day:"2-digit",
+    hour:"2-digit",
+    minute:"2-digit",
+    second:"2-digit"
+  });
+}
+
+async function loadSnapshotTasks(dateKey, retries = 2) {
+  try {
+    const res = await fetch(
+      `https://raw.githubusercontent.com/RossGab/driva-task-snapshots/main/snapshots/${dateKey}.json`,
+      { cache: "no-store" }
+    );
+
+    if (!res.ok) throw new Error("Fetch failed");
+
+    const data = await res.json();
+
+    return Object.entries(data).map(([id, task]) => ({
+      _key: id,
+      ...task
+    }));
+
+  } catch (e) {
+    if (retries > 0) {
+      return await loadSnapshotTasks(dateKey, retries - 1);
+    }
+
+    console.warn("Snapshot failed:", dateKey);
+    return [];
+  }
+}
+
+async function processSnapshots(snapshotResults, allTasks) {
+  const flat = snapshotResults.flat();
+
+  let i = 0;
+  const CHUNK = 800;
+
+  return new Promise(resolve => {
+
+    function processChunk() {
+      const end = Math.min(i + CHUNK, flat.length);
+
+      for (; i < end; i++) {
+        const t = flat[i];
+
+        if (t.status !== "COMPLETED") {
+          allTasks.push(t);
+        }
+      }
+
+      if (i < flat.length) {
+        setTimeout(processChunk, 0); // 🔥 prevents freeze
+      } else {
+        resolve();
+      }
+    }
+
+    processChunk();
+  });
+}
+
+async function loadLiveTasksFromFirebase(dateKey, onProgress) {
+  try {
+    const idsSnap = await get(ref(db, `tasksByDate/${dateKey}`));
+    if (!idsSnap.exists()) return [];
+
+    const ids = Object.keys(idsSnap.val());
+
+    const total = ids.length;
+    let loaded = 0;
+
+    const BATCH_SIZE = 50;
+    let results = [];
+
+    for (let i = 0; i < ids.length; i += BATCH_SIZE) {
+      const batch = ids.slice(i, i + BATCH_SIZE);
+
+      const snaps = await Promise.all(
+        batch.map(id => get(ref(db, `tasks/${id}`)))
+      );
+
+      const parsed = snaps
+        .map((snap, idx) => {
+          if (!snap.exists()) return null;
+          return {
+            _key: batch[idx],
+            ...snap.val()
+          };
+        })
+        .filter(Boolean);
+
+      results.push(...parsed);
+
+      loaded += parsed.length;
+
+      if (onProgress) {
+        const percent = (loaded / total) * 100;
+        onProgress(percent, loaded, total);
+      }
+    }
+
+    return results;
+
+  } catch (e) {
+    console.error("🔥 Live load failed:", e);
+    return [];
+  }
+}
+
+function isTodayKey(dateKey) {
+  return dateKey === getTodayPH().replace(/-/g, "");
+}
+
+/* ===== LOAD TASKS ===== */
+async function loadTasks() {
+  if (loadBtn.disabled) return;
+
+  loadBtn.disabled = true;
+  loadBtn.innerText = "Loading...";
+
+  try {
+
+const from = filterDateFrom.value;
+const to   = filterDateTo.value;
+
+if (!from || !to) {
+  alert("Select date range");
+
+  loadBtn.disabled = false;
+  loadBtn.innerText = "🔄 Load Tasks";
+
+  return;
+}
+    
+document.getElementById("taskList").innerHTML = "";
+loadingBar.style.display = "block";
+loadingProgress.style.width = "0%";
+loadingText.innerText = "Starting...";
+  const dateKeys = [];
+  
+
+  for (let d = new Date(from); d <= new Date(to); d.setDate(d.getDate() + 1)) {
+    dateKeys.push(
+      d.toLocaleDateString("en-CA", { timeZone: "Asia/Manila" })
+       .replace(/-/g, "")
+    );
+  }
+
+  const hasLive = dateKeys.some(k => isTodayKey(k));
+
+  let allTasks = [];
+
+ const snapshotKeys = dateKeys.filter(k => !isTodayKey(k));
+const liveKeys = dateKeys.filter(k => isTodayKey(k));
+
+// 🚀 LOAD SNAPSHOTS IN PARALLEL
+const snapshotResults = [];
+
+for (let i = 0; i < snapshotKeys.length; i++) {
+  loadingText.innerText =
+    `Loading snapshot ${i + 1} / ${snapshotKeys.length}`;
+
+  const res = await loadSnapshotTasks(snapshotKeys[i]);
+  snapshotResults.push(res);
+
+  const progress = (i + 1) / snapshotKeys.length * 50;
+  loadingProgress.style.width = progress + "%";
+}
+
+await processSnapshots(snapshotResults, allTasks);
+
+// 🔥 LOAD LIVE (still sequential for progress)
+for (const key of liveKeys) {
+  const result = await loadLiveTasksFromFirebase(
+    key,
+    (p, loaded, total) => {
+      const mapped = 50 + (p * 0.5);
+      loadingProgress.style.width = mapped + "%";
+
+      loadingText.innerText =
+        `Loading live tasks... (${loaded}/${total})`;
+    }
+  );
+
+  result.forEach(t => {
+    if (t.status !== "COMPLETED") {
+      allTasks.push(t);
+    }
+  });
+}
+  window.__SNAPSHOT_TASKS__ = allTasks;
+    applyFilters(); // 🔥 THIS IS WHAT YOU ARE MISSING
+  buildFilterLists(); // 🔥 move it here (immediate)
+
+  // 🔥 INIT INDEXES
+window.__TASKS_BY_DATE__ = {};
+window.__TASKS_BY_DRIVER__ = {};
+window.__TASKS_BY_JOB__ = {};
+
+TASK_MAP = {};
+
+allTasks.forEach(t => {
+  TASK_MAP[t._key] = t;
+
+  // ===== CACHE =====
+  let d = normalizeDate(t.createdAt);
+
+// 🔥 fallback to filter date if missing
+if (!d) {
+  d = filterDateFrom.value;
+}
+
+t._date = d;
+
+if (!window.__TASKS_BY_DATE__[d]) {
+  window.__TASKS_BY_DATE__[d] = [];
+}
+window.__TASKS_BY_DATE__[d].push(t);
+
+t._search = Object.values(t)
+  .map(v => (v || "").toString().toLowerCase())
+  .join(" ");
+
+  // ===== DRIVER INDEX =====
+  if (t.driverId) {
+    if (!window.__TASKS_BY_DRIVER__[t.driverId]) {
+      window.__TASKS_BY_DRIVER__[t.driverId] = [];
+    }
+    window.__TASKS_BY_DRIVER__[t.driverId].push(t);
+  }
+
+  // ===== JOB INDEX =====
+  if (t.JOBTYPE) {
+    if (!window.__TASKS_BY_JOB__[t.JOBTYPE]) {
+      window.__TASKS_BY_JOB__[t.JOBTYPE] = [];
+    }
+    window.__TASKS_BY_JOB__[t.JOBTYPE].push(t);
+  }
+});
+
+  applyFilters(); // ✅ AFTER indexes are ready
+
+  // 🔥 RESET SELECTION STATE
+  SELECTED_IDS.clear();
+  checkAll.checked = false;
+
+  LAST_FILTER_HASH = "";
+
+  
+
+  // ✅ ADD THIS HERE
+  loadingText.innerText =
+    `Done (${allTasks.length} tasks loaded)`;
+  
+  // optional: small delay so user can SEE it
+  setTimeout(() => {
+  loadingBar.style.display = "none";
+}, 500);
+
+  } catch (err) {
+    console.error("❌ loadTasks failed:", err);
+    alert("Something went wrong while loading tasks");
+
+  } finally {
+    loadBtn.disabled = false;
+    loadBtn.innerText = "🔄 Load Tasks";
+  }
+}
+
+
+checkAll.onchange = () => {
+  const start = CURRENT_PAGE * PAGE_SIZE;
+  const end = start + PAGE_SIZE;
+
+  const pageData = FILTERED_TASKS.slice(start, end);
+
+  if (checkAll.checked) {
+    pageData.forEach(t => SELECTED_IDS.add(t._key));
+  } else {
+    pageData.forEach(t => SELECTED_IDS.delete(t._key));
+  }
+
+  renderCurrentPage();
+};
+
+function renderCurrentPage() {
+  const start = CURRENT_PAGE * PAGE_SIZE;
+  const end = start + PAGE_SIZE;
+
+  const pageData = FILTERED_TASKS.slice(start, end);
+
+  renderTasks(pageData);
+  renderPaginationControls();
+}
+
+function buildFilterLists() {
+  const drivers = new Set();
+  const jobs = new Set();
+  const bas = new Set();
+  const dmzs = new Set();
+  const mrus = new Set();
+
+  const data = window.__SNAPSHOT_TASKS__ || [];
+
+  // ✅ FIX: LOOP WITH BODY
+  for (let i = 0; i < data.length; i++) {
+    const t = data[i];
+
+    if (t.driverId) drivers.add(t.driverId);
+    if (t.JOBTYPE) jobs.add(t.JOBTYPE);
+    if (t.BA) bas.add(t.BA);
+    if (t.DMZ) dmzs.add(t.DMZ);
+    if (t.MRU) mrus.add(t.MRU);
+  }
+
+  // ✅ populate dropdowns
+  filterDriver.innerHTML = `<option value="">All Drivers</option>`;
+  filterJob.innerHTML = `<option value="">All Job Types</option>`;
+  filterBA.innerHTML = `<option value="">All BA</option>`;
+  filterDMZ.innerHTML = `<option value="">All DMZ</option>`;
+  filterMRU.innerHTML = `<option value="">All MRU</option>`;
+
+  drivers.forEach(v => filterDriver.innerHTML += `<option>${v}</option>`);
+  jobs.forEach(v => filterJob.innerHTML += `<option>${v}</option>`);
+  bas.forEach(v => filterBA.innerHTML += `<option>${v}</option>`);
+  dmzs.forEach(v => filterDMZ.innerHTML += `<option>${v}</option>`);
+  mrus.forEach(v => filterMRU.innerHTML += `<option>${v}</option>`);
+}
+
+function renderPaginationControls() {
+  const el = document.getElementById("paginationControls");
+  if (!el) return;
+
+  const totalPages = Math.ceil(FILTERED_TASKS.length / PAGE_SIZE);
+
+  if (totalPages <= 1) {
+    el.innerHTML = "";
+    return;
+  }
+
+  el.innerHTML = `
+    <button ${CURRENT_PAGE === 0 ? "disabled" : ""}
+      onclick="prevPage()">⬅ Prev</button>
+
+    <span style="margin:0 12px;">
+      Page ${CURRENT_PAGE + 1} of ${totalPages}
+      (${FILTERED_TASKS.length} tasks)
+    </span>
+
+    <button ${CURRENT_PAGE >= totalPages - 1 ? "disabled" : ""}
+      onclick="nextPage()">Next ➡</button>
+  `;
+}
+
+window.prevPage = function () {
+  if (CURRENT_PAGE > 0) {
+    CURRENT_PAGE--;
+    renderCurrentPage();
+  }
+};
+
+window.nextPage = function () {
+  const totalPages = Math.ceil(FILTERED_TASKS.length / PAGE_SIZE);
+  if (CURRENT_PAGE < totalPages - 1) {
+    CURRENT_PAGE++;
+    renderCurrentPage();
+  }
+};
+  
+function applyFilters() {
+
+  const filterHash = JSON.stringify({
+    from: filterDateFrom.value,
+    to: filterDateTo.value,
+    driver: filterDriver.value,
+    job: filterJob.value,
+    ba: filterBA.value,
+    dmz: filterDMZ.value,
+    mru: filterMRU.value,
+    search: SEARCH_TERM
+  });
+
+  const prevPage = CURRENT_PAGE;
+
+  const isSame = filterHash === LAST_FILTER_HASH;
+
+    LAST_FILTER_HASH = filterHash;
+    
+    if (!isSame) {
+      CURRENT_PAGE = 0;
+    }
+
+  let base = [];
+
+// 🔥 PRIORITY: DRIVER → JOB → DATE → ALL
+
+if (filterDriver.value && window.__TASKS_BY_DRIVER__[filterDriver.value]) {
+  base = window.__TASKS_BY_DRIVER__[filterDriver.value];
+}
+else if (filterJob.value && window.__TASKS_BY_JOB__[filterJob.value]) {
+  base = window.__TASKS_BY_JOB__[filterJob.value];
+}
+else {
+  // fallback to date filter
+  const from = filterDateFrom.value;
+  const to   = filterDateTo.value;
+
+  if (from || to) {
+    const start = from || "0000-00-00";
+    const end   = to   || "9999-99-99";
+
+    const map = window.__TASKS_BY_DATE__ || {};
+
+    for (const d in map) {
+      if (d >= start && d <= end) {
+        base.push(...map[d]);
+      }
+    }
+  } else {
+    base = window.__SNAPSHOT_TASKS__ || [];
+  }
+}
+
+
+
+const hasSearch = !!SEARCH_TERM;
+let result = [];
+
+for (let i = 0; i < base.length; i++) {
+  const t = base[i];
+
+  // DATE
+  if (filterDateFrom.value || filterDateTo.value) {
+    const from = filterDateFrom.value || "0000-00-00";
+    const to   = filterDateTo.value   || "9999-99-99";
+
+    const d = t._date;
+    if (d && (d < from || d > to)) continue;
+  }
+
+  // OTHER FILTERS
+  if (filterDriver.value && t.driverId !== filterDriver.value) continue;
+  if (filterJob.value && t.JOBTYPE !== filterJob.value) continue;
+  if (filterBA.value && t.BA !== filterBA.value) continue;
+  if (filterDMZ.value && t.DMZ !== filterDMZ.value) continue;
+  if (filterMRU.value && t.MRU !== filterMRU.value) continue;
+
+  // SEARCH
+ if (hasSearch && (!t._search || !t._search.includes(SEARCH_TERM))) continue;
+
+  result.push(t);
+}
+
+  FILTERED_TASKS = result;
+
+  const totalPages = Math.ceil(FILTERED_TASKS.length / PAGE_SIZE);
+
+  // 🔥 KEEP PAGE IF STILL VALID
+  if (prevPage < totalPages) {
+    CURRENT_PAGE = prevPage;
+  } else {
+    CURRENT_PAGE = Math.max(0, totalPages - 1);
+  }
+
+  renderCurrentPage();
+}
+
+window.toggleSelect = function (el) {
+  const id = el.dataset.id;
+
+  if (el.checked) {
+    SELECTED_IDS.add(id);
+  } else {
+    SELECTED_IDS.delete(id);
+  }
+
+  checkSelection();
+};
+
+/* ===== RENDER ===== */
+function renderTasks(data) {
+  const container = document.getElementById("taskList");
+  container.textContent = "";
+
+  if (!data.length) {
+    container.innerHTML = `<div>No matching tasks</div>`;
+    return;
+  }
+
+  const frag = document.createDocumentFragment();
+
+  data.forEach(t => {
+    const div = document.createElement("div");
+
+    div.style.cssText = `
+      background:#fff;
+      padding:10px;
+      margin-bottom:8px;
+      border-radius:8px;
+      box-shadow:0 0 4px rgba(0,0,0,.1);
+      border-left:4px solid orange;
+    `;
+
+    div.innerHTML = `
+      <div style="display:flex;justify-content:space-between;">
+        <input type="checkbox"
+          data-id="${t._key}"
+          onchange="toggleSelect(this)">
+        
+        <div style="font-size:11px;color:#777;">
+          ${t.status || "PENDING"}
+        </div>
+      </div>
+
+      <div><b>${t.CUSTOMERNAME || ""}</b></div>
+      <div style="font-size:12px;color:#555;">${t.ADDRESS || ""}</div>
+      <div style="font-size:12px;">
+        🚗 ${t.driverId || "—"} | ${t.JOBTYPE || ""}
+      </div>
+      <div style="font-size:11px;color:#777;">
+        ${toPHTime(t.createdAt)}
+      </div>
+    `;
+
+    frag.appendChild(div);
+  });
+
+  container.appendChild(frag);
+
+  // 🔥 sync checkbox state (FAST)
+const checkboxes = container.querySelectorAll("input[type=checkbox]");
+checkboxes.forEach(cb => {
+  cb.checked = SELECTED_IDS.has(cb.dataset.id);
+});
+  // sync header checkbox
+  const pageIds = data.map(t => t._key);
+  
+  checkAll.checked =
+    pageIds.length > 0 &&
+    pageIds.every(id => SELECTED_IDS.has(id));
+  checkSelection();
+}
+
+/* ===== SELECTION ===== */
+
+const selectedCountEl = document.getElementById("selectedCount");
+
+window.checkSelection = function () {
+  const count = SELECTED_IDS.size;
+
+  bulkBtn.disabled = count === 0;
+
+  selectedCountEl.innerText =
+  count > 0 ? `${count} selected (ALL FILTERED)` : "";
+};
+
+/* ===== BULK ACTION ===== */
+window.openBulkActions = function () {
+  
+  const ids = [...SELECTED_IDS];
+
+  console.log("Selected IDs:", ids);
+  
+  if (!ids.length) return;
+
+  const action = prompt("Type: TRANSFER or DELETE");
+
+  if (!action) return;
+
+  const cmd = action.toUpperCase().trim();
+
+  if (cmd === "DELETE") bulkDelete(ids);
+  else if (cmd === "TRANSFER") bulkTransfer(ids);
+  else alert("Invalid action. Use TRANSFER or DELETE.");
+};
+
+async function bulkDelete(ids) {
+  if (!confirm(`Delete ${ids.length} tasks?`)) return;
+
+  const updates = {};
+  const statsDelta = {}; // per dateKey
+
+  ids.forEach(id => {
+    const task = TASK_MAP[id];
+    if (!task || !task.createdAt) return;
+
+    const dateKey = normalizeDate(task.createdAt)?.replace(/-/g, "");
+    if (!dateKey) return;
+
+    // 1️⃣ Remove task
+    updates[`tasks/${id}`] = null;
+    updates[`tasksByDate/${dateKey}/${id}`] = null;
+
+    // 2️⃣ Track adminStats delta
+    if (!statsDelta[dateKey]) {
+      statsDelta[dateKey] = { open: 0, done: 0 };
+    }
+
+    if (task.status === "COMPLETED") {
+      statsDelta[dateKey].done += 1;
+    } else {
+      statsDelta[dateKey].open += 1;
+    }
+  });
+
+  // 3️⃣ Apply deletions
+  await update(ref(db), updates);
+
+  // 4️⃣ Apply adminStats corrections
+  for (const dateKey of Object.keys(statsDelta)) {
+    const statsRef = ref(db, `adminStats/${dateKey}`);
+    const snap = await get(statsRef);
+    const current = snap.val();
+
+    if (!current) continue;
+
+    await update(statsRef, {
+      open: Math.max(0, (current.open || 0) - statsDelta[dateKey].open),
+      done: Math.max(0, (current.done || 0) - statsDelta[dateKey].done)
+    });
+  }
+
+  // 🔥 LOCAL DELETE (instant UI)
+
+  ids.forEach(id => {
+    delete TASK_MAP[id];
+  });
+  
+  window.__SNAPSHOT_TASKS__ =
+    window.__SNAPSHOT_TASKS__.filter(t => !ids.includes(t._key));
+  
+  SELECTED_IDS.clear();
+  
+  applyFilters();
+  
+}
+
+async function bulkTransfer(ids) {
+  const newDriver = prompt("Enter NEW DRIVER ID:");
+  if(!newDriver) return;
+
+  const updates = {};
+  ids.forEach(id => updates[`tasks/${id}/driverId`] = newDriver);
+
+  await update(ref(db), updates);
+
+  // 🔥 LOCAL UPDATE (instant UI)
+  ids.forEach(id => {
+    if (TASK_MAP[id]) {
+      TASK_MAP[id].driverId = newDriver;
+    }
+  });
+
+  SELECTED_IDS.clear();
+
+  applyFilters();
+}
+
+
+/* ===== BULK UPLOAD ===== */
+const REQUIRED_HEADERS = [
+  "JOBTYPE",
+  "BA",
+  "DMZ",
+  "MRU",
+  "SEQUENCE",
+  "METERNUMBER",
+  "ACCOUNTNUMBER",
+  "CUSTOMERNAME",
+  "ADDRESS",
+  "ZIPCODE",
+  "LATITUDE",
+  "LONGITUDE",
+  "AGENTID",
+  "AGENTNAME"
+];
+
+function appendTasksToLocalState(newTasks) {
+  const existing = new Set(
+    (window.__SNAPSHOT_TASKS__ || []).map(t => t._key)
+  );
+
+  const unique = newTasks.filter(t => !existing.has(t._key));
+
+  // 🔥 inject into main dataset
+  window.__SNAPSHOT_TASKS__.push(...unique);
+
+  // 🔥 update TASK_MAP too (important for delete/transfer)
+  unique.forEach(t => {
+    TASK_MAP[t._key] = t;
+  });
+
+  // rebuild filters (so new drivers/jobtypes appear)
+  window.__FILTER_BUILT__ = false;
+  buildFilterLists();
+  window.__FILTER_BUILT__ = true;
+
+  applyFilters();
+}
+
+window.uploadCSV = async function(btn){
+  const file = document.getElementById("csvFile").files[0];
+
+  if (!file) {
+    alert("❌ Please select a CSV file");
+    return;
+  }
+
+  btn.disabled = true;
+  btn.innerText = "Uploading…";
+
+  try {
+    Papa.parse(file, {
+      header: true,
+      skipEmptyLines: true,
+      complete: async function(results) {
+
+        const rows = results.data;
+
+        if (!rows.length) {
+          alert("❌ CSV has no data rows");
+          btn.disabled = false;
+          btn.innerText = "Upload CSV";
+          return;
+        }
+
+        /* ===== VALIDATE HEADERS ===== */
+        const headers = Object.keys(rows[0] || {});
+        const missing = REQUIRED_HEADERS.filter(h => !headers.includes(h));
+        const extra = headers.filter(h => !REQUIRED_HEADERS.includes(h));
+
+        if (missing.length) {
+          alert("❌ Missing required columns:\n\n" + missing.join(", "));
+          btn.disabled = false;
+          btn.innerText = "Upload CSV";
+          return;
+        }
+
+        if (extra.length) {
+          alert("❌ Extra columns not allowed:\n\n" + extra.join(", "));
+          btn.disabled = false;
+          btn.innerText = "Upload CSV";
+          return;
+        }
+
+        /* ===== BUILD UPDATES ===== */
+        const updates = {};
+        const base = Date.now();
+        const now = new Date().toLocaleString("sv-SE", {
+          timeZone: "Asia/Manila"
+        }).replace(" ", "T");
+
+        const dateKey = now.slice(0, 10).replace(/-/g, "")// example: "20260122"
+
+        rows.forEach((task, index) => {
+          const taskId = `TASK_${base}_${index}`;
+
+          updates[`tasks/${taskId}`] = {
+            ...task,
+            driverId: task.AGENTID || "",
+            status: "PENDING",
+            rowIndex: index + 1,
+            uploadBatch: base,
+            createdAt: now
+          };
+
+          updates[`tasksByDate/${dateKey}/${taskId}`] = true;
+        });
+
+        await update(ref(db), updates);
+
+        // ===== UPDATE adminStats (CHEAP + CORRECT) =====
+        const statsRef = ref(db, `adminStats/${dateKey}`);
+        
+        const statsSnap = await get(statsRef);
+        const current = statsSnap.val() || {
+          open: 0,
+          done: 0,
+          sla: { ok: 0, warn: 0, breach: 0 }
+        };
+        
+        const added = rows.length;
+        
+        await update(statsRef, {
+          open: (current.open || 0) + added,
+          sla: {
+            ok: (current.sla?.ok || 0) + added,
+            warn: current.sla?.warn || 0,
+            breach: current.sla?.breach || 0
+          }
+        });
+
+        // ✅ Build local task objects (NO DB READ)
+        const newTasks = rows.map((task, index) => ({
+          _key: `TASK_${base}_${index}`,
+          ...task,
+          driverId: task.AGENTID || "",
+          status: "PENDING",
+          rowIndex: index + 1,
+          uploadBatch: base,
+          createdAt: now
+        }));
+        
+        // ✅ Inject directly into UI state
+        appendTasksToLocalState(newTasks);
+
+        // 🔁 Ensure filters include upload date
+        filterDateFrom.value = now.slice(0, 10);
+        filterDateTo.value   = now.slice(0, 10);
+        
+        alert(`✅ Upload successful!\n\n${rows.length} tasks added.`);
+        btn.innerText = "✔ Done";
+      }
+    });
+
+  } catch (err) {
+    console.error(err);
+    alert("❌ Upload failed. Check console for details.");
+    btn.disabled = false;
+    btn.innerText = "Upload CSV";
+  }
+};
+
+// 🔥 EXPOSE FUNCTIONS TO HTML BUTTONS
+window.loadTasks = loadTasks;
+window.openBulkActions = openBulkActions;
+window.uploadCSV = uploadCSV;
+window.toggleSelect = toggleSelect;
+
+</script>
+</body>
+</html>
