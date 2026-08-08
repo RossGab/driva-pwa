@@ -223,13 +223,26 @@ select, input[type="date"] {
 <script type="module">
 import { initializeApp } from
   "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+
 import {
-  getDatabase, ref, get, update
+  getFirestore,
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  query,
+  where,
+  orderBy,
+  limit,
+  writeBatch,
+  updateDoc,
+  deleteDoc,
+  serverTimestamp
 } from
-  "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+  "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyDFW61pnwLvh6HGKWt10zLYNr860fI8vkg",
+  apiKey: "AIzaSyDFW61pnwLvh6HGKWmport { initializeApp } fromt10zLYNr860fI8vkg",
   authDomain: "driva-pwa.firebaseapp.com",
   databaseURL: "https://driva-pwa-default-rtdb.firebaseio.com",
   projectId: "driva-pwa",
@@ -239,7 +252,7 @@ const firebaseConfig = {
 };
 
 const app = initializeApp(firebaseConfig);
-const db = getDatabase(app);
+const db = getFirestore(app);
 
 const bulkBtn = document.getElementById("bulkBtn");
 
@@ -395,48 +408,33 @@ async function processSnapshots(snapshotResults, allTasks) {
 
 async function loadLiveTasksFromFirebase(dateKey, onProgress) {
   try {
-    const idsSnap = await get(ref(db, `tasksByDate/${dateKey}`));
-    if (!idsSnap.exists()) return [];
 
-    const ids = Object.keys(idsSnap.val());
+    const tasksRef = collection(db, "tasks");
 
-    const total = ids.length;
-    let loaded = 0;
+    const q = query(
+      tasksRef,
+      where("assignedDate", "==", dateKey)
+    );
 
-    const BATCH_SIZE = 50;
-    let results = [];
+    const snapshot = await getDocs(q);
 
-    for (let i = 0; i < ids.length; i += BATCH_SIZE) {
-      const batch = ids.slice(i, i + BATCH_SIZE);
+    const results = [];
 
-      const snaps = await Promise.all(
-        batch.map(id => get(ref(db, `tasks/${id}`)))
-      );
+    snapshot.forEach(docSnap => {
+      results.push({
+        _key: docSnap.id,
+        ...docSnap.data()
+      });
+    });
 
-      const parsed = snaps
-        .map((snap, idx) => {
-          if (!snap.exists()) return null;
-          return {
-            _key: batch[idx],
-            ...snap.val()
-          };
-        })
-        .filter(Boolean);
-
-      results.push(...parsed);
-
-      loaded += parsed.length;
-
-      if (onProgress) {
-        const percent = (loaded / total) * 100;
-        onProgress(percent, loaded, total);
-      }
+    if (onProgress) {
+      onProgress(100, results.length, results.length);
     }
 
     return results;
 
   } catch (e) {
-    console.error("🔥 Live load failed:", e);
+    console.error("🔥 Firestore load failed:", e);
     return [];
   }
 }
@@ -640,7 +638,7 @@ function buildFilterLists() {
   for (let i = 0; i < data.length; i++) {
     const t = data[i];
 
-    if (t.driverId) drivers.add(t.driverId);
+    if (t.agentId) drivers.add(t.agentId);
     if (t.JOBTYPE) jobs.add(t.JOBTYPE);
     if (t.BA) bas.add(t.BA);
     if (t.DMZ) dmzs.add(t.DMZ);
@@ -773,7 +771,7 @@ for (let i = 0; i < base.length; i++) {
   }
 
   // OTHER FILTERS
-  if (filterDriver.value && t.driverId !== filterDriver.value) continue;
+  if (filterDriver.value && t.agentId !== filterDriver.value) continue;
   if (filterJob.value && t.JOBTYPE !== filterJob.value) continue;
   if (filterBA.value && t.BA !== filterBA.value) continue;
   if (filterDMZ.value && t.DMZ !== filterDMZ.value) continue;
@@ -842,14 +840,14 @@ function renderTasks(data) {
           onchange="toggleSelect(this)">
         
         <div style="font-size:11px;color:#777;">
-          ${t.status || "PENDING"}
+          ${t.workStatus || "fordownload"}
         </div>
       </div>
 
       <div><b>${t.CUSTOMERNAME || ""}</b></div>
       <div style="font-size:12px;color:#555;">${t.ADDRESS || ""}</div>
       <div style="font-size:12px;">
-        🚗 ${t.driverId || "—"} | ${t.JOBTYPE || ""}
+        🚗 ${t.agentId || "—"} | ${t.jobType || ""}
       </div>
       <div style="font-size:11px;color:#777;">
         ${toPHTime(t.createdAt)}
@@ -909,85 +907,97 @@ window.openBulkActions = function () {
 };
 
 async function bulkDelete(ids) {
+
   if (!confirm(`Delete ${ids.length} tasks?`)) return;
 
-  const updates = {};
-  const statsDelta = {}; // per dateKey
+  try {
 
-  ids.forEach(id => {
-    const task = TASK_MAP[id];
-    if (!task || !task.createdAt) return;
+    const batch = writeBatch(db);
 
-    const dateKey = normalizeDate(task.createdAt)?.replace(/-/g, "");
-    if (!dateKey) return;
+    ids.forEach(id => {
 
-    // 1️⃣ Remove task
-    updates[`tasks/${id}`] = null;
-    updates[`tasksByDate/${dateKey}/${id}`] = null;
+      const taskRef = doc(db, "tasks", id);
 
-    // 2️⃣ Track adminStats delta
-    if (!statsDelta[dateKey]) {
-      statsDelta[dateKey] = { open: 0, done: 0 };
-    }
-
-    if (task.status === "COMPLETED") {
-      statsDelta[dateKey].done += 1;
-    } else {
-      statsDelta[dateKey].open += 1;
-    }
-  });
-
-  // 3️⃣ Apply deletions
-  await update(ref(db), updates);
-
-  // 4️⃣ Apply adminStats corrections
-  for (const dateKey of Object.keys(statsDelta)) {
-    const statsRef = ref(db, `adminStats/${dateKey}`);
-    const snap = await get(statsRef);
-    const current = snap.val();
-
-    if (!current) continue;
-
-    await update(statsRef, {
-      open: Math.max(0, (current.open || 0) - statsDelta[dateKey].open),
-      done: Math.max(0, (current.done || 0) - statsDelta[dateKey].done)
+      batch.delete(taskRef);
     });
+
+    await batch.commit();
+
+    // Remove from local UI
+    ids.forEach(id => {
+      delete TASK_MAP[id];
+    });
+
+    window.__SNAPSHOT_TASKS__ =
+      window.__SNAPSHOT_TASKS__.filter(
+        t => !ids.includes(t._key)
+      );
+
+    SELECTED_IDS.clear();
+
+    applyFilters();
+
+    alert(`✅ ${ids.length} tasks deleted.`);
+
+  } catch (error) {
+
+    console.error("❌ Firestore delete failed:", error);
+
+    alert("❌ Failed to delete tasks.");
+
   }
-
-  // 🔥 LOCAL DELETE (instant UI)
-
-  ids.forEach(id => {
-    delete TASK_MAP[id];
-  });
-  
-  window.__SNAPSHOT_TASKS__ =
-    window.__SNAPSHOT_TASKS__.filter(t => !ids.includes(t._key));
-  
-  SELECTED_IDS.clear();
-  
-  applyFilters();
-  
 }
 
 async function bulkTransfer(ids) {
+
   const newDriver = prompt("Enter NEW DRIVER ID:");
-  if(!newDriver) return;
 
-  const updates = {};
-  ids.forEach(id => updates[`tasks/${id}/driverId`] = newDriver);
+  if (!newDriver) return;
 
-  await update(ref(db), updates);
+  try {
 
-  // 🔥 LOCAL UPDATE (instant UI)
-  ids.forEach(id => {
-    if (TASK_MAP[id]) {
-      TASK_MAP[id].driverId = newDriver;
-    }
-  });
+    const batch = writeBatch(db);
 
-  SELECTED_IDS.clear();
+    ids.forEach(id => {
 
-  applyFilters();
+      const taskRef = doc(db, "tasks", id);
+
+      batch.update(taskRef, {
+        agentId: newDriver,
+        updatedAt: serverTimestamp()
+      });
+
+    });
+
+    await batch.commit();
+
+    // Local update
+    ids.forEach(id => {
+
+      if (TASK_MAP[id]) {
+
+        TASK_MAP[id].agentId = newDriver;
+
+        // Keep compatibility with existing UI
+        TASK_MAP[id].driverId = newDriver;
+
+      }
+
+    });
+
+    SELECTED_IDS.clear();
+
+    applyFilters();
+
+    alert(`✅ ${ids.length} tasks transferred.`);
+
+  } catch (error) {
+
+    console.error("❌ Firestore transfer failed:", error);
+
+    alert("❌ Failed to transfer tasks.");
+
+  }
 }
 
 
@@ -1078,30 +1088,66 @@ window.uploadCSV = async function(btn){
         }
 
         /* ===== BUILD UPDATES ===== */
-        const updates = {};
         const base = Date.now();
+
         const now = new Date().toLocaleString("sv-SE", {
           timeZone: "Asia/Manila"
         }).replace(" ", "T");
-
-        const dateKey = now.slice(0, 10).replace(/-/g, "")// example: "20260122"
-
+        
+        const assignedDate = now.slice(0, 10);
+        
+        // Firestore batch
+        const batch = writeBatch(db);
+        
         rows.forEach((task, index) => {
+        
           const taskId = `TASK_${base}_${index}`;
-
-          updates[`tasks/${taskId}`] = {
-            ...task,
-            driverId: task.AGENTID || "",
-            status: "PENDING",
+        
+          const taskRef = doc(db, "tasks", taskId);
+        
+          const taskData = {
+            taskId: taskId,
+        
+            jobType: task.JOBTYPE || "",
+            ba: task.BA || "",
+            dmz: task.DMZ || "",
+            mru: task.MRU || "",
+        
+            sequence: task.SEQUENCE || "",
+            meterNumber: task.METERNUMBER || "",
+            accountNumber: task.ACCOUNTNUMBER || "",
+        
+            customerName: task.CUSTOMERNAME || "",
+            address: task.ADDRESS || "",
+            zipCode: task.ZIPCODE || "",
+        
+            latitude: task.LATITUDE === ""
+              ? null
+              : Number(task.LATITUDE),
+        
+            longitude: task.LONGITUDE === ""
+              ? null
+              : Number(task.LONGITUDE),
+        
+            agentId: task.AGENTID || "",
+            agentName: task.AGENTNAME || "",
+        
+            assignedDate: assignedDate,
+        
+            workStatus: "fordownload",
+        
             rowIndex: index + 1,
+        
             uploadBatch: base,
-            createdAt: now
+        
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp()
           };
-
-          updates[`tasksByDate/${dateKey}/${taskId}`] = true;
+        
+          batch.set(taskRef, taskData);
         });
-
-        await update(ref(db), updates);
+        
+        await batch.commit();
 
         // ===== UPDATE adminStats (CHEAP + CORRECT) =====
         const statsRef = ref(db, `adminStats/${dateKey}`);
@@ -1125,15 +1171,51 @@ window.uploadCSV = async function(btn){
         });
 
         // ✅ Build local task objects (NO DB READ)
-        const newTasks = rows.map((task, index) => ({
-          _key: `TASK_${base}_${index}`,
-          ...task,
-          driverId: task.AGENTID || "",
-          status: "PENDING",
-          rowIndex: index + 1,
-          uploadBatch: base,
-          createdAt: now
-        }));
+        const newTasks = rows.map((task, index) => {
+
+          const taskId = `TASK_${base}_${index}`;
+        
+          return {
+            _key: taskId,
+        
+            taskId: taskId,
+        
+            jobType: task.JOBTYPE || "",
+            ba: task.BA || "",
+            dmz: task.DMZ || "",
+            mru: task.MRU || "",
+        
+            sequence: task.SEQUENCE || "",
+            meterNumber: task.METERNUMBER || "",
+            accountNumber: task.ACCOUNTNUMBER || "",
+        
+            customerName: task.CUSTOMERNAME || "",
+            address: task.ADDRESS || "",
+            zipCode: task.ZIPCODE || "",
+        
+            latitude: task.LATITUDE === ""
+              ? null
+              : Number(task.LATITUDE),
+        
+            longitude: task.LONGITUDE === ""
+              ? null
+              : Number(task.LONGITUDE),
+        
+            agentId: task.AGENTID || "",
+            agentName: task.AGENTNAME || "",
+        
+            assignedDate: assignedDate,
+        
+            workStatus: "fordownload",
+        
+            rowIndex: index + 1,
+        
+            uploadBatch: base,
+        
+            createdAt: now,
+            updatedAt: now
+          };
+        });
         
         // ✅ Inject directly into UI state
         appendTasksToLocalState(newTasks);
