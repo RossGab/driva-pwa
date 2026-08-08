@@ -81,7 +81,7 @@ select, input[type="date"] {
 
 <body>
 
-<h2>Manage Tasks V_R_1.0.1-WIP</h2>
+<h2>Manage Tasks V_R_1.0.2-WIP</h2>
 
 <button onclick="location.href='admin.html'" class="small-btn">⬅ Back</button>
 
@@ -409,7 +409,7 @@ async function processSnapshots(snapshotResults, allTasks) {
 async function loadLiveTasksFromFirebase(dateKey, onProgress) {
   try {
 
-    const tasksRef = collection(db, "tasks");
+    const tasksRef = collection(db, "TASK");
 
     const q = query(
       tasksRef,
@@ -916,7 +916,7 @@ async function bulkDelete(ids) {
 
     ids.forEach(id => {
 
-      const taskRef = doc(db, "tasks", id);
+      const taskRef = doc(db, "TASK", id);
 
       batch.delete(taskRef);
     });
@@ -960,7 +960,7 @@ async function bulkTransfer(ids) {
 
     ids.forEach(id => {
 
-      const taskRef = doc(db, "tasks", id);
+      const taskRef = doc(db, "TASK", id);
 
       batch.update(taskRef, {
         agentId: newDriver,
@@ -1096,79 +1096,83 @@ window.uploadCSV = async function(btn){
         
         const assignedDate = now.slice(0, 10);
         
-        // Firestore batch
-        const batch = writeBatch(db);
+        // ==========================================
+        // FIRESTORE BULK WRITE
+        // Firestore limit: 500 writes per batch
+        // ==========================================
         
-        rows.forEach((task, index) => {
+        const BATCH_SIZE = 500;
         
-          const taskId = `TASK_${base}_${index}`;
+        for (let start = 0; start < rows.length; start += BATCH_SIZE) {
         
-          const taskRef = doc(db, "tasks", taskId);
+          const batch = writeBatch(db);
         
-          const taskData = {
-            taskId: taskId,
+          const end = Math.min(
+            start + BATCH_SIZE,
+            rows.length
+          );
         
-            jobType: task.JOBTYPE || "",
-            ba: task.BA || "",
-            dmz: task.DMZ || "",
-            mru: task.MRU || "",
+          for (let index = start; index < end; index++) {
         
-            sequence: task.SEQUENCE || "",
-            meterNumber: task.METERNUMBER || "",
-            accountNumber: task.ACCOUNTNUMBER || "",
+            const task = rows[index];
         
-            customerName: task.CUSTOMERNAME || "",
-            address: task.ADDRESS || "",
-            zipCode: task.ZIPCODE || "",
+            const taskId = `TASK_${base}_${index}`;
         
-            latitude: task.LATITUDE === ""
-              ? null
-              : Number(task.LATITUDE),
+            const taskRef = doc(db, "TASK", taskId);
         
-            longitude: task.LONGITUDE === ""
-              ? null
-              : Number(task.LONGITUDE),
+            const taskData = {
+              taskId: taskId,
         
-            agentId: task.AGENTID || "",
-            agentName: task.AGENTNAME || "",
+              jobType: task.JOBTYPE || "",
+              ba: task.BA || "",
+              dmz: task.DMZ || "",
+              mru: task.MRU || "",
         
-            assignedDate: assignedDate,
+              sequence: task.SEQUENCE || "",
+              meterNumber: task.METERNUMBER || "",
+              accountNumber: task.ACCOUNTNUMBER || "",
         
-            workStatus: "fordownload",
+              customerName: task.CUSTOMERNAME || "",
+              address: task.ADDRESS || "",
+              zipCode: task.ZIPCODE || "",
         
-            rowIndex: index + 1,
+              latitude:
+                task.LATITUDE === ""
+                  ? null
+                  : Number(task.LATITUDE),
         
-            uploadBatch: base,
+              longitude:
+                task.LONGITUDE === ""
+                  ? null
+                  : Number(task.LONGITUDE),
         
-            createdAt: serverTimestamp(),
-            updatedAt: serverTimestamp()
-          };
+              agentId: task.AGENTID || "",
+              agentName: task.AGENTNAME || "",
         
-          batch.set(taskRef, taskData);
-        });
+              assignedDate: assignedDate,
         
-        await batch.commit();
-
-        // ===== UPDATE adminStats (CHEAP + CORRECT) =====
-        const statsRef = ref(db, `adminStats/${dateKey}`);
+              // NEW TASK
+              workStatus: "fordownload",
         
-        const statsSnap = await get(statsRef);
-        const current = statsSnap.val() || {
-          open: 0,
-          done: 0,
-          sla: { ok: 0, warn: 0, breach: 0 }
-        };
+              rowIndex: index + 1,
         
-        const added = rows.length;
+              uploadBatch: base,
         
-        await update(statsRef, {
-          open: (current.open || 0) + added,
-          sla: {
-            ok: (current.sla?.ok || 0) + added,
-            warn: current.sla?.warn || 0,
-            breach: current.sla?.breach || 0
+              createdAt: serverTimestamp(),
+              updatedAt: serverTimestamp()
+            };
+        
+            batch.set(taskRef, taskData);
           }
-        });
+        
+          await batch.commit();
+        
+          console.log(
+            `✅ Firestore batch uploaded: ${start + 1}-${end}`
+          );
+        }
+
+        
 
         // ✅ Build local task objects (NO DB READ)
         const newTasks = rows.map((task, index) => {
