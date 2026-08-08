@@ -81,7 +81,7 @@ select, input[type="date"] {
 
 <body>
 
-<h2>Manage Tasks V_R_1.0.11-WIP</h2>
+<h2>Manage Tasks V_R_1.0.11.1-WIP</h2>
 
 <button onclick="location.href='admin.html'" class="small-btn">⬅ Back</button>
 
@@ -696,34 +696,36 @@ t._search = Object.values(t)
     window.__TASKS_BY_DRIVER__[t.driverId].push(t);
   }
 
-  // ===== JOB INDEX =====
+    // ===== JOB INDEX =====
   if (t.jobType) {
 
     if (!window.__TASKS_BY_JOB__[t.jobType]) {
       window.__TASKS_BY_JOB__[t.jobType] = [];
     }
-  
+
     window.__TASKS_BY_JOB__[t.jobType].push(t);
   }
 
+}); // ✅ CLOSE allTasks.forEach()
 
-  // 🔥 RESET SELECTION STATE
-  SELECTED_IDS.clear();
-  checkAll.checked = false;
-  
-  LAST_FILTER_HASH = "";
-  
-  buildFilterLists();
-  
-  applyFilters();
-  
-  loadingText.innerText =
-    `Done (${allTasks.length} tasks loaded)`;
-  
-  setTimeout(() => {
-    loadingBar.style.display = "none";
-  }, 500);
-  
+
+// 🔥 RESET SELECTION STATE
+SELECTED_IDS.clear();
+checkAll.checked = false;
+
+LAST_FILTER_HASH = "";
+
+buildFilterLists();
+
+applyFilters();
+
+loadingText.innerText =
+  `Done (${allTasks.length} tasks loaded)`;
+
+setTimeout(() => {
+  loadingBar.style.display = "none";
+}, 500);
+
 
   } catch (err) {
     console.error("❌ loadTasks failed:", err);
