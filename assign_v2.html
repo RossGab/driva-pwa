@@ -81,7 +81,7 @@ select, input[type="date"] {
 
 <body>
 
-<h2>Manage Tasks V_R_1.0.6.3.1-WIP</h2>
+<h2>Manage Tasks V_R_1.0.6.3.2-WIP</h2>
 
 <button onclick="location.href='admin.html'" class="small-btn">⬅ Back</button>
 
@@ -222,7 +222,7 @@ select, input[type="date"] {
 
 <script type="module">
 import { initializeApp } from
-  "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+  "https://www.gstatic.com/firebasejs/12.9.0/firebase-app.js";
 
 import {
   getFirestore,
@@ -240,7 +240,7 @@ import {
   deleteDoc,
   serverTimestamp
 } from
-"https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+"https://www.gstatic.com/firebasejs/12.9.0/firebase-firestore.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyDFW61pnwLvh6HGKWt10zLYNr860fI8vkg",
@@ -254,7 +254,15 @@ const firebaseConfig = {
 
 
 const app = initializeApp(firebaseConfig);
-const db = getFirestore(app, "driver-task");
+
+const db = initializeFirestore(
+  app,
+  {
+    preferRest: true
+  },
+  "driver-task"
+);
+
 console.log("Firestore database initialized:", db);
 
 const testRef = doc(db, "TASK", "BROWSER_TEST");
