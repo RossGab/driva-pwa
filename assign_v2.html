@@ -81,7 +81,7 @@ select, input[type="date"] {
 
 <body>
 
-<h2>Manage Tasks V_R_1.0.6.2-WIP</h2>
+<h2>Manage Tasks V_R_1.0.6.3-WIP</h2>
 
 <button onclick="location.href='admin.html'" class="small-btn">⬅ Back</button>
 
@@ -228,13 +228,19 @@ import {
   getFirestore,
   collection,
   doc,
+  getDoc,
   getDocs,
   query,
   where,
+  orderBy,
+  limit,
   writeBatch,
+  setDoc,
+  updateDoc,
+  deleteDoc,
   serverTimestamp
 } from
-  "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+"https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyDFW61pnwLvh6HGKWt10zLYNr860fI8vkg",
@@ -250,6 +256,19 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app, "driver-task");
 console.log("Firestore database initialized:", db);
+const testRef = doc(db, "TASK", "BROWSER_TEST");
+
+setDoc(testRef, {
+  taskId: "BROWSER_TEST",
+  test: true,
+  createdAt: serverTimestamp()
+})
+.then(() => {
+  console.log("🔥 SIMPLE FIRESTORE WRITE SUCCESS");
+})
+.catch((error) => {
+  console.error("🔥 SIMPLE FIRESTORE WRITE FAILED:", error);
+});
 
 const bulkBtn = document.getElementById("bulkBtn");
 
