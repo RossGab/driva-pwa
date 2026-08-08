@@ -81,7 +81,7 @@ select, input[type="date"] {
 
 <body>
 
-<h2>Manage Tasks V_R_1.0.6.3.3-WIP</h2>
+<h2>Manage Tasks V_R_1.0.6.3.4-WIP</h2>
 
 <button onclick="location.href='admin.html'" class="small-btn">⬅ Back</button>
 
@@ -257,45 +257,18 @@ const app = initializeApp(firebaseConfig);
 
 const db = initializeFirestore(
   app,
-  {
-    preferRest: true
-  },
+  {},
+  "driver-task"
+);
+
+console.log("Firestore database initialized:", db);const db = initializeFirestore(
+  app,
+  {},
   "driver-task"
 );
 
 console.log("Firestore database initialized:", db);
 
-const testRef = doc(db, "TASK", "BROWSER_TEST");
-
-console.log("🔥 Starting simple Firestore write...");
-
-const firestoreWrite = setDoc(testRef, {
-  taskId: "BROWSER_TEST",
-  test: true,
-  createdAt: serverTimestamp()
-});
-
-const timeout = new Promise((_, reject) => {
-  setTimeout(() => {
-    reject(new Error(
-      "Firestore write timed out after 15 seconds"
-    ));
-  }, 15000);
-});
-
-Promise.race([
-  firestoreWrite,
-  timeout
-])
-.then(() => {
-  console.log("🔥 SIMPLE FIRESTORE WRITE SUCCESS");
-})
-.catch((error) => {
-  console.error(
-    "🔥 SIMPLE FIRESTORE WRITE FAILED:",
-    error
-  );
-});
 
 const bulkBtn = document.getElementById("bulkBtn");
 
