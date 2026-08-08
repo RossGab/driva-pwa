@@ -81,7 +81,7 @@ select, input[type="date"] {
 
 <body>
 
-<h2>Manage Tasks V_R_1.0.6.3.5-WIP</h2>
+<h2>Manage Tasks V_R_1.0.6.3.6-WIP</h2>
 
 <button onclick="location.href='admin.html'" class="small-btn">⬅ Back</button>
 
@@ -262,6 +262,25 @@ const db = initializeFirestore(
 );
 
 console.log("Firestore database initialized:", db);
+
+const testRef = doc(db, "TASK", "BROWSER_TEST");
+
+console.log("🔥 Starting simple Firestore write...");
+
+setDoc(testRef, {
+  taskId: "BROWSER_TEST",
+  test: true,
+  createdAt: serverTimestamp()
+})
+.then(() => {
+  console.log("🔥 SIMPLE FIRESTORE WRITE SUCCESS");
+})
+.catch((error) => {
+  console.error(
+    "🔥 SIMPLE FIRESTORE WRITE FAILED:",
+    error
+  );
+});
 
 const bulkBtn = document.getElementById("bulkBtn");
 
