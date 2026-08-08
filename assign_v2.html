@@ -81,7 +81,7 @@ select, input[type="date"] {
 
 <body>
 
-<h2>Manage Tasks V_R_1.0.8-WIP</h2>
+<h2>Manage Tasks V_R_1.0.9-WIP</h2>
 
 <button onclick="location.href='admin.html'" class="small-btn">⬅ Back</button>
 
@@ -367,14 +367,39 @@ function normalizeDate(dateStr) {
 
 /* ===== PH TIME ===== */
 function toPHTime(ts) {
-  return new Date(ts).toLocaleString("en-PH", {
+
+  if (!ts) return "";
+
+  // Firestore Timestamp
+  if (typeof ts.toDate === "function") {
+    return ts.toDate().toLocaleString("en-PH", {
+      timeZone: "Asia/Manila",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit"
+    });
+  }
+
+  // Normal Date / string
+  const date = ts instanceof Date
+    ? ts
+    : new Date(ts);
+
+  if (isNaN(date.getTime())) {
+    return "";
+  }
+
+  return date.toLocaleString("en-PH", {
     timeZone: "Asia/Manila",
-    year:"numeric",
-    month:"2-digit",
-    day:"2-digit",
-    hour:"2-digit",
-    minute:"2-digit",
-    second:"2-digit"
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit"
   });
 }
 
@@ -619,13 +644,14 @@ t._search = Object.values(t)
   }
 
   // ===== JOB INDEX =====
-  if (t.JOBTYPE) {
-    if (!window.__TASKS_BY_JOB__[t.JOBTYPE]) {
-      window.__TASKS_BY_JOB__[t.JOBTYPE] = [];
+  if (t.jobType) {
+
+    if (!window.__TASKS_BY_JOB__[t.jobType]) {
+      window.__TASKS_BY_JOB__[t.jobType] = [];
     }
-    window.__TASKS_BY_JOB__[t.JOBTYPE].push(t);
+  
+    window.__TASKS_BY_JOB__[t.jobType].push(t);
   }
-});
 
   applyFilters(); // ✅ AFTER indexes are ready
 
@@ -696,10 +722,10 @@ function buildFilterLists() {
     const t = data[i];
 
     if (t.agentId) drivers.add(t.agentId);
-    if (t.JOBTYPE) jobs.add(t.JOBTYPE);
-    if (t.BA) bas.add(t.BA);
-    if (t.DMZ) dmzs.add(t.DMZ);
-    if (t.MRU) mrus.add(t.MRU);
+    iif (t.jobType) jobs.add(t.jobType);
+    if (t.ba) bas.add(t.ba);
+    if (t.dmz) dmzs.add(t.dmz);
+    if (t.mru) mrus.add(t.mru);
   }
 
   // ✅ populate dropdowns
@@ -829,10 +855,10 @@ for (let i = 0; i < base.length; i++) {
 
   // OTHER FILTERS
   if (filterDriver.value && t.agentId !== filterDriver.value) continue;
-  if (filterJob.value && t.JOBTYPE !== filterJob.value) continue;
-  if (filterBA.value && t.BA !== filterBA.value) continue;
-  if (filterDMZ.value && t.DMZ !== filterDMZ.value) continue;
-  if (filterMRU.value && t.MRU !== filterMRU.value) continue;
+  if (filterJob.value && t.jobType !== filterJob.value) continue;
+  if (filterBA.value && t.ba !== filterBA.value) continue;
+  if (filterDMZ.value && t.dmz !== filterDMZ.value) continue;
+  if (filterMRU.value && t.mru !== filterMRU.value) continue;
 
   // SEARCH
  if (hasSearch && (!t._search || !t._search.includes(SEARCH_TERM))) continue;
@@ -868,18 +894,25 @@ window.toggleSelect = function (el) {
 
 /* ===== RENDER ===== */
 function renderTasks(data) {
-  const container = document.getElementById("taskList");
+
+  const container =
+    document.getElementById("taskList");
+
   container.textContent = "";
 
   if (!data.length) {
-    container.innerHTML = `<div>No matching tasks</div>`;
+    container.innerHTML =
+      `<div>No matching tasks</div>`;
     return;
   }
 
-  const frag = document.createDocumentFragment();
+  const frag =
+    document.createDocumentFragment();
 
   data.forEach(t => {
-    const div = document.createElement("div");
+
+    const div =
+      document.createElement("div");
 
     div.style.cssText = `
       background:#fff;
@@ -891,42 +924,161 @@ function renderTasks(data) {
     `;
 
     div.innerHTML = `
-      <div style="display:flex;justify-content:space-between;">
-        <input type="checkbox"
+
+      <!-- HEADER -->
+      <div style="
+        display:flex;
+        justify-content:space-between;
+        align-items:center;
+      ">
+
+        <input
+          type="checkbox"
           data-id="${t._key}"
-          onchange="toggleSelect(this)">
-        
-        <div style="font-size:11px;color:#777;">
+          onchange="toggleSelect(this)"
+        >
+
+        <div style="
+          font-size:11px;
+          color:#777;
+        ">
           ${t.workStatus || "fordownload"}
         </div>
+
       </div>
 
-      <div><b>${t.CUSTOMERNAME || ""}</b></div>
-      <div style="font-size:12px;color:#555;">${t.ADDRESS || ""}</div>
-      <div style="font-size:12px;">
-        🚗 ${t.agentId || "—"} | ${t.jobType || ""}
+      <!-- CUSTOMER -->
+      <div>
+        <b>${t.customerName || ""}</b>
       </div>
-      <div style="font-size:11px;color:#777;">
+
+      <!-- ADDRESS -->
+      <div style="
+        font-size:12px;
+        color:#555;
+      ">
+        ${t.address || ""}
+      </div>
+
+      <!-- ACCOUNT / METER -->
+      <div style="
+        font-size:12px;
+        margin-top:3px;
+      ">
+        Account:
+        <b>${t.accountNumber || "—"}</b>
+
+        &nbsp;|&nbsp;
+
+        Meter:
+        <b>${t.meterNumber || "—"}</b>
+      </div>
+
+      <!-- DRIVER -->
+      <div style="
+        font-size:12px;
+        margin-top:3px;
+      ">
+        🚗
+        <b>${t.agentId || "—"}</b>
+
+        |
+        ${t.agentName || "—"}
+      </div>
+
+      <!-- JOB INFORMATION -->
+      <div style="
+        font-size:12px;
+        margin-top:3px;
+      ">
+
+        Job:
+        <b>${t.jobType || "—"}</b>
+
+        |
+        BA:
+        <b>${t.ba || "—"}</b>
+
+        |
+        DMZ:
+        <b>${t.dmz || "—"}</b>
+
+        |
+        MRU:
+        <b>${t.mru || "—"}</b>
+
+      </div>
+
+      <!-- SEQUENCE -->
+      <div style="
+        font-size:12px;
+        margin-top:3px;
+      ">
+        Sequence:
+        <b>${t.sequence || "—"}</b>
+      </div>
+
+      <!-- LOCATION -->
+      <div style="
+        font-size:11px;
+        color:#777;
+        margin-top:3px;
+      ">
+
+        📍
+        ${t.latitude ?? "—"},
+        ${t.longitude ?? "—"}
+
+        ${t.zipCode
+          ? `| ZIP: ${t.zipCode}`
+          : ""
+        }
+
+      </div>
+
+      <!-- CREATED -->
+      <div style="
+        font-size:11px;
+        color:#999;
+        margin-top:4px;
+      ">
+
+        Created:
         ${toPHTime(t.createdAt)}
+
       </div>
+
     `;
 
     frag.appendChild(div);
+
   });
 
   container.appendChild(frag);
 
-  // 🔥 sync checkbox state (FAST)
-const checkboxes = container.querySelectorAll("input[type=checkbox]");
-checkboxes.forEach(cb => {
-  cb.checked = SELECTED_IDS.has(cb.dataset.id);
-});
-  // sync header checkbox
-  const pageIds = data.map(t => t._key);
-  
+  // Sync checkbox state
+  const checkboxes =
+    container.querySelectorAll(
+      "input[type=checkbox]"
+    );
+
+  checkboxes.forEach(cb => {
+
+    cb.checked =
+      SELECTED_IDS.has(cb.dataset.id);
+
+  });
+
+  // Sync header checkbox
+  const pageIds =
+    data.map(t => t._key);
+
   checkAll.checked =
     pageIds.length > 0 &&
-    pageIds.every(id => SELECTED_IDS.has(id));
+    pageIds.every(
+      id => SELECTED_IDS.has(id)
+    );
+
   checkSelection();
 }
 
