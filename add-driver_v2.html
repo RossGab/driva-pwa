@@ -49,6 +49,7 @@ input {
   padding:12px;
   margin-top:8px;
   font-size:14px;
+  box-sizing:border-box;
 }
 
 input[readonly] {
@@ -82,7 +83,7 @@ th, td {
 
 <body>
 
-<h2>👤 Driver Management V.R.0.0.0</h2>
+<h2>👤 Driver Management V.R.0.0.2</h2>
 
 <div class="card">
 
@@ -118,20 +119,22 @@ th, td {
 <script type="module">
 import { initializeApp } from
   "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+
 import {
-  getDatabase,
-  ref,
-  set,
-  get,
-  update,
-  remove
+  getFirestore,
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  setDoc,
+  updateDoc,
+  deleteDoc
 } from
-  "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+  "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyDFW61pnwLvh6HGKWt10zLYNr860fI8vkg",
   authDomain: "driva-pwa.firebaseapp.com",
-  databaseURL: "https://driva-pwa-default-rtdb.firebaseio.com",
   projectId: "driva-pwa",
   storageBucket: "driva-pwa.firebasestorage.app",
   messagingSenderId: "299138219722",
@@ -139,7 +142,28 @@ const firebaseConfig = {
 };
 
 const app = initializeApp(firebaseConfig);
-const db = getDatabase(app);
+const db = getFirestore(app);
+
+/*
+  FIRESTORE STRUCTURE
+
+  drivers/{driverCode}
+
+  Example:
+
+  drivers/
+    DRIVER001
+      driverCode: "DRIVER001"
+      name: "John Doe"
+      address: "..."
+      contact: "..."
+      team: "Team A"
+      vehicle: "ABC-123"
+      createdAt: "2026-08-10T..."
+      updatedAt: "2026-08-10T..."
+*/
+
+const DRIVERS_COLLECTION = "drivers";
 
 const searchBox = document.getElementById("searchBox");
 const form = document.getElementById("driverForm");
@@ -199,16 +223,27 @@ window.handleAction = async function () {
     const term = searchBox.value.trim().toLowerCase();
     if (!term) return alert("Enter search text");
 
-    const snap = await get(ref(db, "drivers"));
-    const all = snap.val() || {};
+    try {
+      const snap = await getDocs(collection(db, DRIVERS_COLLECTION));
 
-    const results = Object.values(all).filter(d =>
-      JSON.stringify(d).toLowerCase().includes(term)
-    );
+      const results = snap.docs
+        .map(docSnap => ({
+          ...docSnap.data(),
+          driverCode: docSnap.data().driverCode || docSnap.id
+        }))
+        .filter(d =>
+          JSON.stringify(d).toLowerCase().includes(term)
+        );
 
-    hideAll();
-    listDiv.classList.remove("hidden");
-    renderDriverTable(results);
+      hideAll();
+      listDiv.classList.remove("hidden");
+      renderDriverTable(results);
+
+    } catch (error) {
+      console.error("Driver search failed:", error);
+      alert("Failed to search drivers.");
+    }
+
     return;
   }
 
@@ -216,20 +251,47 @@ window.handleAction = async function () {
     const driverCode = codeEl.value.trim();
     if (!driverCode) return alert("Driver code required");
 
-    const refD = ref(db, `drivers/${driverCode}`);
-    if ((await get(refD)).exists()) return alert("Driver already exists");
+    try {
+      const driverRef = doc(db, DRIVERS_COLLECTION, driverCode);
+      const existing = await getDoc(driverRef);
 
-    await set(refD, buildPayload(true));
-    alert("Driver added");
-    clearForm();
+      if (existing.exists()) {
+        return alert("Driver already exists");
+      }
+
+      await setDoc(driverRef, buildPayload(true));
+
+      alert("Driver added");
+      clearForm();
+
+    } catch (error) {
+      console.error("Add driver failed:", error);
+      alert("Failed to add driver.");
+    }
+
     return;
   }
 
   if (MODE === "update") {
-    await update(ref(db, `drivers/${codeEl.value.trim()}`), buildPayload(false));
-    alert("Driver updated");
-    setReadOnly(true);
-    MODE = "confirm";
+    const driverCode = codeEl.value.trim();
+    if (!driverCode) return alert("Driver code required");
+
+    try {
+      await updateDoc(
+        doc(db, DRIVERS_COLLECTION, driverCode),
+        buildPayload(false)
+      );
+
+      alert("Driver updated");
+      setReadOnly(true);
+      MODE = "confirm";
+
+    } catch (error) {
+      console.error("Update driver failed:", error);
+      alert("Failed to update driver.");
+    }
+
+    return;
   }
 };
 
@@ -240,18 +302,37 @@ window.deleteDriver = async function () {
 
   if (!confirm(`Delete driver "${code}"?\nThis cannot be undone.`)) return;
 
-  await remove(ref(db, `drivers/${code}`));
-  alert("Driver deleted");
+  try {
+    await deleteDoc(doc(db, DRIVERS_COLLECTION, code));
 
-  hideAll();
-  clearForm();
-  MODE = null;
+    alert("Driver deleted");
+
+    hideAll();
+    clearForm();
+    MODE = null;
+
+  } catch (error) {
+    console.error("Delete driver failed:", error);
+    alert("Failed to delete driver.");
+  }
 };
 
 /* ===== LIST ===== */
 async function loadDriverList() {
-  const snap = await get(ref(db, "drivers"));
-  renderDriverTable(Object.values(snap.val() || {}));
+  try {
+    const snap = await getDocs(collection(db, DRIVERS_COLLECTION));
+
+    const drivers = snap.docs.map(docSnap => ({
+      ...docSnap.data(),
+      driverCode: docSnap.data().driverCode || docSnap.id
+    }));
+
+    renderDriverTable(drivers);
+
+  } catch (error) {
+    console.error("Load driver list failed:", error);
+    listDiv.innerHTML = "Failed to load drivers.";
+  }
 }
 
 function renderDriverTable(drivers) {
@@ -263,17 +344,23 @@ function renderDriverTable(drivers) {
   listDiv.innerHTML = `
     <table>
       <tr>
-        <th>Code</th><th>Name</th><th>Team</th><th>Contact</th><th></th>
+        <th>Code</th>
+        <th>Name</th>
+        <th>Team</th>
+        <th>Contact</th>
+        <th></th>
       </tr>
+
       ${drivers.map(d => `
         <tr>
-          <td>${d.driverCode}</td>
-          <td>${d.name}</td>
-          <td>${d.team || "-"}</td>
-          <td>${d.contact || "-"}</td>
+          <td>${escapeHtml(d.driverCode)}</td>
+          <td>${escapeHtml(d.name || "")}</td>
+          <td>${escapeHtml(d.team || "-")}</td>
+          <td>${escapeHtml(d.contact || "-")}</td>
           <td>
-            <button class="viewBtn"
-              onclick='viewDriver(${JSON.stringify(d)})'>
+            <button
+              class="viewBtn"
+              data-driver-code="${escapeHtml(d.driverCode)}">
               View / Modify
             </button>
           </td>
@@ -281,6 +368,30 @@ function renderDriverTable(drivers) {
       `).join("")}
     </table>
   `;
+
+  listDiv.querySelectorAll(".viewBtn").forEach(button => {
+    button.addEventListener("click", async () => {
+      const code = button.dataset.driverCode;
+
+      try {
+        const snap = await getDoc(doc(db, DRIVERS_COLLECTION, code));
+
+        if (!snap.exists()) {
+          alert("Driver no longer exists.");
+          return;
+        }
+
+        viewDriver({
+          ...snap.data(),
+          driverCode: snap.data().driverCode || snap.id
+        });
+
+      } catch (error) {
+        console.error("Load driver failed:", error);
+        alert("Failed to load driver.");
+      }
+    });
+  });
 }
 
 window.viewDriver = function (d) {
@@ -306,6 +417,8 @@ window.viewDriver = function (d) {
 
 /* ===== HELPERS ===== */
 function buildPayload(isNew) {
+  const now = new Date().toISOString();
+
   return {
     driverCode: codeEl.value.trim(),
     name: nameEl.value.trim(),
@@ -313,8 +426,8 @@ function buildPayload(isNew) {
     contact: contactEl.value.trim(),
     team: teamEl.value.trim(),
     vehicle: vehicleEl.value.trim(),
-    ...(isNew ? { createdAt: new Date().toISOString() } : {}),
-    updatedAt: new Date().toISOString()
+    ...(isNew ? { createdAt: now } : {}),
+    updatedAt: now
   };
 }
 
@@ -343,6 +456,15 @@ function clearForm() {
   contactEl.value = "";
   teamEl.value = "";
   vehicleEl.value = "";
+}
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
 }
 </script>
 
