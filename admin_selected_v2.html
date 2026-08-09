@@ -1724,7 +1724,6 @@ window.loadTaskPhotos = async function (taskId, btn) {
 
     // 5️⃣ Update Firebase (light write)
     await updateDoc(doc(db, TASK_COLLECTION, taskId), { ...payload, updatedAt: serverTimestamp() });
-    }
 
     alert("✅ Task updated");
 
