@@ -83,7 +83,7 @@ th, td {
 
 <body>
 
-<h2>👤 Driver Management V.R.0.0.2</h2>
+<h2>👤 Driver Management V.R.0.0.3</h2>
 
 <div class="card">
 
@@ -142,7 +142,8 @@ const firebaseConfig = {
 };
 
 const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
+// Use the existing named Firestore database shown in Firebase Console.
+const db = getFirestore(app, "drver-task");
 
 /*
   FIRESTORE STRUCTURE
