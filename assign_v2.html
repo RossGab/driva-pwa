@@ -81,7 +81,7 @@ select, input[type="date"] {
 
 <body>
 
-<h2>Manage Tasks V_R_1.0.12.2-WIP</h2>
+<h2>Manage Tasks V_R_1.0.13.1-WIP</h2>
 
 <button onclick="location.href='admin.html'" class="small-btn">⬅ Back</button>
 
@@ -112,20 +112,6 @@ select, input[type="date"] {
         Upload CSV
       </button>
     </div>
-
-    <!-- RIGHT SIDE (NEW BUTTON) -->
-    <button onclick="location.href='https://rossgab.github.io/driva-pwa/uploadTask.html'" style="
-      background:#007bff;
-      color:#fff;
-      border:none;
-      border-radius:8px;
-      padding:10px 14px;
-      font-weight:bold;
-      cursor:pointer;
-      white-space:nowrap;
-    ">
-      📦 Upload Exported Tasks
-    </button>
 
   </div>
 
@@ -264,25 +250,6 @@ const db = initializeFirestore(
 
 console.log("Firestore database initialized:", db);
 
-const testRef = doc(db, "TASK", "BROWSER_TEST");
-
-console.log("🔥 Starting simple Firestore write...");
-
-setDoc(testRef, {
-  taskId: "BROWSER_TEST",
-  test: true,
-  createdAt: serverTimestamp()
-})
-.then(() => {
-  console.log("🔥 SIMPLE FIRESTORE WRITE SUCCESS");
-})
-.catch((error) => {
-  console.error(
-    "🔥 SIMPLE FIRESTORE WRITE FAILED:",
-    error
-  );
-});
-
 const bulkBtn = document.getElementById("bulkBtn");
 
 const filterDateFrom = document.getElementById("filterDateFrom");
@@ -326,8 +293,7 @@ searchBox.addEventListener("input", e => {
 });
 
 let TASKS = [];
-
-window.__SNAPSHOT_TASKS__ = [];
+window.__TASKS_DATA__ = [];
 
 const PAGE_SIZE = 100;
 const FIRESTORE_PAGE_SIZE = 100;
@@ -411,62 +377,6 @@ function toPHTime(ts) {
     hour: "2-digit",
     minute: "2-digit",
     second: "2-digit"
-  });
-}
-
-async function loadSnapshotTasks(dateKey, retries = 2) {
-  try {
-    const res = await fetch(
-      `https://raw.githubusercontent.com/RossGab/driva-task-snapshots/main/snapshots/${dateKey}.json`,
-      { cache: "no-store" }
-    );
-
-    if (!res.ok) throw new Error("Fetch failed");
-
-    const data = await res.json();
-
-    return Object.entries(data).map(([id, task]) => ({
-      _key: id,
-      ...task
-    }));
-
-  } catch (e) {
-    if (retries > 0) {
-      return await loadSnapshotTasks(dateKey, retries - 1);
-    }
-
-    console.warn("Snapshot failed:", dateKey);
-    return [];
-  }
-}
-
-async function processSnapshots(snapshotResults, allTasks) {
-  const flat = snapshotResults.flat();
-
-  let i = 0;
-  const CHUNK = 800;
-
-  return new Promise(resolve => {
-
-    function processChunk() {
-      const end = Math.min(i + CHUNK, flat.length);
-
-      for (; i < end; i++) {
-        const t = flat[i];
-
-        if (t.status !== "COMPLETED") {
-          allTasks.push(t);
-        }
-      }
-
-      if (i < flat.length) {
-        setTimeout(processChunk, 0); // 🔥 prevents freeze
-      } else {
-        resolve();
-      }
-    }
-
-    processChunk();
   });
 }
 
@@ -577,11 +487,7 @@ async function loadLiveTasksFromFirebase(
   }
 }
 
-function isTodayKey(dateKey) {
-  return dateKey === getTodayPH().replace(/-/g, "");
-}
-
-/* ===== LOAD TASKS ===== */
+/* ===== LOAD TASKS - FIRESTORE ONLY ===== */
 async function loadTasks() {
   if (loadBtn.disabled) return;
 
@@ -589,155 +495,164 @@ async function loadTasks() {
   loadBtn.innerText = "Loading...";
 
   try {
+    const from = filterDateFrom.value;
+    const to   = filterDateTo.value;
 
-const from = filterDateFrom.value;
-const to   = filterDateTo.value;
+    if (!from || !to) {
+      alert("Select date range");
 
-if (!from || !to) {
-  alert("Select date range");
+      loadBtn.disabled = false;
+      loadBtn.innerText = "🔄 Load Tasks";
+      return;
+    }
 
-  loadBtn.disabled = false;
-  loadBtn.innerText = "🔄 Load Tasks";
+    document.getElementById("taskList").innerHTML = "";
+    loadingBar.style.display = "block";
+    loadingProgress.style.width = "0%";
+    loadingText.innerText = "Starting...";
 
-  return;
-}
-    
-document.getElementById("taskList").innerHTML = "";
-loadingBar.style.display = "block";
-loadingProgress.style.width = "0%";
-loadingText.innerText = "Starting...";
-  const dateKeys = [];
-  
+    const dateKeys = [];
 
-  for (let d = new Date(from); d <= new Date(to); d.setDate(d.getDate() + 1)) {
-    dateKeys.push(
-      d.toLocaleDateString("en-CA", { timeZone: "Asia/Manila" })
-       .replace(/-/g, "")
-    );
-  }
+    for (
+      let d = new Date(from);
+      d <= new Date(to);
+      d.setDate(d.getDate() + 1)
+    ) {
+      dateKeys.push(
+        d.toLocaleDateString("en-CA", {
+          timeZone: "Asia/Manila"
+        }).replace(/-/g, "")
+      );
+    }
 
-  const hasLive = dateKeys.some(k => isTodayKey(k));
+    let allTasks = [];
 
-  let allTasks = [];
+    // 🔥 FIRESTORE ONLY
+    // Load the selected dates directly from Firestore.
+    for (let i = 0; i < dateKeys.length; i++) {
 
- const snapshotKeys = dateKeys.filter(k => !isTodayKey(k));
-const liveKeys = dateKeys.filter(k => isTodayKey(k));
+      const key = dateKeys[i];
 
-// 🚀 LOAD SNAPSHOTS IN PARALLEL
-const snapshotResults = [];
-
-for (let i = 0; i < snapshotKeys.length; i++) {
-  loadingText.innerText =
-    `Loading snapshot ${i + 1} / ${snapshotKeys.length}`;
-
-  const res = await loadSnapshotTasks(snapshotKeys[i]);
-  snapshotResults.push(res);
-
-  const progress = (i + 1) / snapshotKeys.length * 50;
-  loadingProgress.style.width = progress + "%";
-}
-
-await processSnapshots(snapshotResults, allTasks);
-
-// 🔥 LOAD LIVE (still sequential for progress)
-for (const key of liveKeys) {
-  const result = await loadLiveTasksFromFirebase(
-    key,
-    (p, loaded, total) => {
-      const mapped = 50 + (p * 0.5);
-      loadingProgress.style.width = mapped + "%";
+      // Reset Firestore pagination for every date.
+      FIRESTORE_LAST_DOC = null;
+      FIRESTORE_HAS_MORE = false;
+      FIRESTORE_CURRENT_DATE = null;
+      FIRESTORE_PAGE = 0;
 
       loadingText.innerText =
-        `Loading live tasks... (${loaded}/${total})`;
-    }
-  );
+        `Loading Firestore ${i + 1} / ${dateKeys.length}`;
 
-  result.forEach(t => {
-    if (t.status !== "COMPLETED") {
-      allTasks.push(t);
-    }
-  });
-}
-window.__SNAPSHOT_TASKS__ = allTasks;
+      const result = await loadLiveTasksFromFirebase(
+        key,
+        (p, loaded, total) => {
 
-// 🔥 INIT INDEXES
-window.__TASKS_BY_DATE__ = {};
-window.__TASKS_BY_DRIVER__ = {};
-window.__TASKS_BY_JOB__ = {};
+          const dateProgress =
+            ((i + (p / 100)) / dateKeys.length) * 100;
 
-TASK_MAP = {};
+          loadingProgress.style.width =
+            Math.min(100, dateProgress) + "%";
 
-// ===== BUILD INDEXES =====
-allTasks.forEach(t => {
+          loadingText.innerText =
+            `Loading Firestore... (${loaded}/${total})`;
+        },
+        "first"
+      );
 
-  TASK_MAP[t._key] = t;
-
-  // ===== CACHE =====
-  let d = normalizeDate(t.createdAt);
-
-  // 🔥 fallback to filter date if missing
-  if (!d) {
-    d = filterDateFrom.value;
-  }
-
-  t._date = d;
-
-  if (!window.__TASKS_BY_DATE__[d]) {
-    window.__TASKS_BY_DATE__[d] = [];
-  }
-
-  window.__TASKS_BY_DATE__[d].push(t);
-
-  t._search = Object.values(t)
-    .map(v => (v || "").toString().toLowerCase())
-    .join(" ");
-
-  // ===== DRIVER INDEX =====
-  if (t.agentId) {
-
-    if (!window.__TASKS_BY_DRIVER__[t.agentId]) {
-      window.__TASKS_BY_DRIVER__[t.agentId] = [];
+      result.forEach(t => {
+        if (t.status !== "COMPLETED") {
+          allTasks.push(t);
+        }
+      });
     }
 
-    window.__TASKS_BY_DRIVER__[t.agentId].push(t);
-  }
+    // 🔥 INIT INDEXES
+    window.__TASKS_BY_DATE__ = {};
+    window.__TASKS_BY_DRIVER__ = {};
+    window.__TASKS_BY_JOB__ = {};
 
-  // ===== JOB INDEX =====
-  if (t.jobType) {
+    TASK_MAP = {};
 
-    if (!window.__TASKS_BY_JOB__[t.jobType]) {
-      window.__TASKS_BY_JOB__[t.jobType] = [];
-    }
+    // ===== BUILD INDEXES =====
+    allTasks.forEach(t => {
 
-    window.__TASKS_BY_JOB__[t.jobType].push(t);
-  }
+      TASK_MAP[t._key] = t;
 
-}); // CLOSE allTasks.forEach()
+      // ===== CACHE =====
+      let d = normalizeDate(t.createdAt);
 
+      // 🔥 Prefer assignedDate because that is the Firestore
+      // field used by the task query.
+      if (!d && t.assignedDate) {
+        d = normalizeDate(t.assignedDate);
+      }
 
-// 🔥 RESET SELECTION STATE
-SELECTED_IDS.clear();
-checkAll.checked = false;
+      // 🔥 fallback to filter date if missing
+      if (!d) {
+        d = filterDateFrom.value;
+      }
 
-LAST_FILTER_HASH = "";
+      t._date = d;
 
-buildFilterLists();
+      if (!window.__TASKS_BY_DATE__[d]) {
+        window.__TASKS_BY_DATE__[d] = [];
+      }
 
-applyFilters();
+      window.__TASKS_BY_DATE__[d].push(t);
 
-loadingText.innerText =
-  `Done (${allTasks.length} tasks loaded)`;
+      t._search = Object.values(t)
+        .map(v => (v || "").toString().toLowerCase())
+        .join(" ");
 
-setTimeout(() => {
-  loadingBar.style.display = "none";
-}, 500);
+      // ===== DRIVER INDEX =====
+      if (t.agentId) {
 
+        if (!window.__TASKS_BY_DRIVER__[t.agentId]) {
+          window.__TASKS_BY_DRIVER__[t.agentId] = [];
+        }
+
+        window.__TASKS_BY_DRIVER__[t.agentId].push(t);
+      }
+
+      // ===== JOB INDEX =====
+      if (t.jobType) {
+
+        if (!window.__TASKS_BY_JOB__[t.jobType]) {
+          window.__TASKS_BY_JOB__[t.jobType] = [];
+        }
+
+        window.__TASKS_BY_JOB__[t.jobType].push(t);
+      }
+
+    });
+
+    // 🔥 RESET SELECTION STATE
+    SELECTED_IDS.clear();
+    checkAll.checked = false;
+
+    LAST_FILTER_HASH = "";
+
+    // Store the loaded Firestore tasks in the main dataset.
+    window.__TASKS_DATA__ = allTasks;
+
+    buildFilterLists();
+
+    applyFilters();
+
+    loadingProgress.style.width = "100%";
+    loadingText.innerText =
+      `Done (${allTasks.length} tasks loaded)`;
+
+    setTimeout(() => {
+      loadingBar.style.display = "none";
+    }, 500);
 
   } catch (err) {
+
     console.error("❌ loadTasks failed:", err);
     alert("Something went wrong while loading tasks");
 
   } finally {
+
     loadBtn.disabled = false;
     loadBtn.innerText = "🔄 Load Tasks";
   }
@@ -776,7 +691,7 @@ function buildFilterLists() {
   const dmzs = new Set();
   const mrus = new Set();
 
-  const data = window.__SNAPSHOT_TASKS__ || [];
+  const data = window.__TASKS_DATA__ || [];
 
   // ✅ FIX: LOOP WITH BODY
   for (let i = 0; i < data.length; i++) {
@@ -893,7 +808,7 @@ else {
       }
     }
   } else {
-    base = window.__SNAPSHOT_TASKS__ || [];
+    base = window.__TASKS_DATA__ || [];
   }
 }
 
@@ -1198,8 +1113,8 @@ async function bulkDelete(ids) {
       delete TASK_MAP[id];
     });
 
-    window.__SNAPSHOT_TASKS__ =
-      window.__SNAPSHOT_TASKS__.filter(
+    window.__TASKS_DATA__ =
+      window.__TASKS_DATA__.filter(
         t => !ids.includes(t._key)
       );
 
@@ -1291,13 +1206,13 @@ const REQUIRED_HEADERS = [
 
 function appendTasksToLocalState(newTasks) {
   const existing = new Set(
-    (window.__SNAPSHOT_TASKS__ || []).map(t => t._key)
+    (window.__TASKS_DATA__ || []).map(t => t._key)
   );
 
   const unique = newTasks.filter(t => !existing.has(t._key));
 
   // 🔥 inject into main dataset
-  window.__SNAPSHOT_TASKS__.push(...unique);
+  window.__TASKS_DATA__.push(...unique);
 
   // 🔥 update TASK_MAP too (important for delete/transfer)
   unique.forEach(t => {
