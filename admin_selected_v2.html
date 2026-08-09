@@ -214,19 +214,19 @@ button {
 }
 
 /* STATUS COLORS */
-.snapshot-fresh {
+.data-fresh {
   background: #28a745; /* green */
 }
 
-.snapshot-warn {
+.data-warn {
   background: #f39c12; /* orange */
 }
 
-.snapshot-stale {
+.data-stale {
   background: #dc3545; /* red */
 }
 
-.snapshot-unknown {
+.data-unknown {
   background: #6c757d; /* gray */
 }
 
@@ -308,7 +308,7 @@ button {
   
   <div style="display:flex;align-items:center;gap:14px;">
     <img src="./logo.jpg" class="admin-logo" alt="Company Logo">
-    <h1>Admin Dashboard <span class="version">V.R.0.0.0-WIP</span></h1>
+    <h1>Admin Dashboard <span class="version">V.R.0.0.1-WIP</span></h1>
   </div>
 
   <!-- 📅 DATE FILTER -->
@@ -356,11 +356,11 @@ button {
   <button class="assign" onclick="location.href=''">⚙ Driver Configuration</button>
   <button class="assign" onclick="openReport()">📊 Report</button>
   <button
-    id="snapshotStatusBtn"
-    class="snapshot-btn snapshot-unknown"
+    id="dataSourceStatusBtn"
+    class="snapshot-btn snapshot-fresh"
     disabled
   >
-    📦 Snapshot: Unknown
+    ☁ Firestore
 </button>
 </div>
 
@@ -471,27 +471,28 @@ button {
 
 <script type="module">
 import { getAuth, signOut } from
-"https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+"https://www.gstatic.com/firebasejs/12.9.0/firebase-auth.js";
 import { initializeApp } from
-  "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+  "https://www.gstatic.com/firebasejs/12.9.0/firebase-app.js";
 import {
-  getDatabase, ref, get, update, remove, set
+  initializeFirestore,
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  query,
+  where,
+  orderBy,
+  writeBatch,
+  updateDoc,
+  serverTimestamp
 } from
-  "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
-
-function getTaskCacheKey() {
-  return `ADMIN_TASK_CACHE_${SELECTED_DATE}`;
-}
-
-function getTaskIdCacheKey() {
-  return `ADMIN_TASK_IDS_${SELECTED_DATE}`;
-}
+"https://www.gstatic.com/firebasejs/12.9.0/firebase-firestore.js";
 
 /* ===== FIREBASE ===== */
 const firebaseConfig = {
   apiKey: "AIzaSyDFW61pnwLvh6HGKWt10zLYNr860fI8vkg",
   authDomain: "driva-pwa.firebaseapp.com",
-  databaseURL: "https://driva-pwa-default-rtdb.firebaseio.com",
   projectId: "driva-pwa",
   storageBucket: "driva-pwa.firebasestorage.app",
   messagingSenderId: "299138219722",
@@ -547,7 +548,7 @@ async function onDateRangeChange() {
   DATE_FROM = newFrom;
   DATE_TO = newTo;
 
-  window.__SNAPSHOT_TASKS__ = null;
+  window.__FIRESTORE_TASKS__ = null;
 
   showLoader("Loading date range…");
 
@@ -562,40 +563,16 @@ dateFromInput.addEventListener("change", onDateRangeChange);
 dateToInput.addEventListener("change", onDateRangeChange);
 
 
-async function updateSnapshotStatusForDate(dateKey) {
-  const btn = document.getElementById("snapshotStatusBtn");
-  if (!btn) return;
-
-  const url =
-    `https://raw.githubusercontent.com/RossGab/driva-task-snapshots/main/snapshots/${dateKey}.json`;
-
-  try {
-    const res = await fetch(url, {
-      method: "HEAD",        // 🔥 lightweight check
-      cache: "no-store"
-    });
-
-    if (!res.ok) throw new Error("Missing");
-
-    btn.className = "snapshot-btn snapshot-fresh";
-    btn.textContent = "🟢 Snapshot Available";
-  } catch {
-    btn.className = "snapshot-btn snapshot-stale";
-    btn.textContent = "📦 No Snapshot for Selected Date";
-  }
-}
-
-function showNoSnapshotMessage(dateKey) {
-    const btn = document.getElementById("snapshotStatusBtn");
-  if (btn) {
-    btn.className = "snapshot-btn snapshot-stale";
-    btn.textContent = "📦 No Snapshot for Selected Date";
-  }
-}
-
 async function loadDriverUIConfig() {
-  const snap = await get(ref(db, "config/driverUI/jobTypes"));
-  window.DRIVER_UI_CONFIG = snap.val() || {};
+  try {
+    const snap = await getDoc(doc(db, ...DRIVER_CONFIG_DOC));
+    const data = snap.exists() ? snap.data() : {};
+    // Support either { jobTypes: {...} } or the jobTypes object directly.
+    window.DRIVER_UI_CONFIG = data.jobTypes || data || {};
+  } catch (e) {
+    console.warn("⚠️ Firestore driver UI config unavailable:", e);
+    window.DRIVER_UI_CONFIG = {};
+  }
 }
 
 function showLoader(text = "Loading…") {
@@ -628,26 +605,6 @@ function normalizeDate(dateStr) {
   });
 }
 
-async function loadSnapshotTasks(dateKey) {
-  try {
-    const res = await fetch(getSnapshotUrl(dateKey), {
-      cache: "no-store"
-    });
-
-    if (!res.ok) return null;
-
-    const data = await res.json();
-
-    return Object.entries(data).map(([id, task]) => ({
-      _key: id,
-      ...task
-    }));
-  } catch (e) {
-    console.warn("Snapshot load failed", e);
-    return null;
-  }
-}
-  
 function renderAdminPagination() {
   const el = document.getElementById("adminPagination");
   if (!el) return;
@@ -680,7 +637,7 @@ function renderAdminPagination() {
 window.adminPrevPage = function () {
   if (ADMIN_CURRENT_PAGE > 0) {
     ADMIN_CURRENT_PAGE--;
-    loadAdminPageFromSnapshot(CURRENT_STATUS);
+    loadAdminPageFromFirestore(CURRENT_STATUS);
   }
 };
 
@@ -688,7 +645,7 @@ window.adminNextPage = function () {
   const totalPages = Math.ceil(FILTERED_TASK_IDS.length / ADMIN_PAGE_SIZE);
   if (ADMIN_CURRENT_PAGE < totalPages - 1) {
     ADMIN_CURRENT_PAGE++;
-    loadAdminPageFromSnapshot(CURRENT_STATUS);
+    loadAdminPageFromFirestore(CURRENT_STATUS);
   }
 };
 
@@ -771,44 +728,20 @@ window.openReport = function () {
   window.location.href = "report.html";
 };
 
-function getCachedTasks() {
-  try {
-    const raw = localStorage.getItem(getTaskCacheKey())
-    return raw ? JSON.parse(raw) : null;
-  } catch {
-    return null;
-  }
-}
-
-function setCachedTasks(tasks) {
-  try {
-    localStorage.setItem(getTaskCacheKey(), JSON.stringify(tasks));
-  } catch {}
-}
-
-function clearTaskCache() {
-  localStorage.removeItem(getTaskCacheKey());
-  localStorage.removeItem(getTaskIdCacheKey());
-}
-
-/* =========================
-   SNAPSHOT CONFIG
-========================= */
-
-const SNAPSHOT_BASE_URL =
-  "https://raw.githubusercontent.com/RossGab/driva-task-snapshots/main/snapshots";
-
-function getSnapshotUrl(dateKey) {
-  return `${SNAPSHOT_BASE_URL}/${dateKey}.json`;
-}
-
-function isTodayPH(dateStr) {
-  return dateStr === getTodayPH();
-}
-
 const app = initializeApp(firebaseConfig);
-const db = getDatabase(app);
+
+// Firestore named database used by the existing Firestore dashboards.
+const db = initializeFirestore(app, {}, "drver-task");
 const auth = getAuth(app);
+
+// Firestore collections used by this dashboard.
+// TASK is confirmed by the existing Firestore task dashboard.
+// The driver/status/config collections are isolated here so they are easy to change
+// if your Firestore schema uses different names.
+const TASK_COLLECTION = "TASK";
+const DRIVER_COLLECTION = "drivers";
+const DRIVER_STATUS_COLLECTION = "driverStatus";
+const DRIVER_CONFIG_DOC = ["config", "driverUI"];
 
 const EDITABLE_FIELDS = [
   "driverId",
@@ -865,7 +798,7 @@ searchBox.addEventListener("input", e => {
 
     if (CURRENT_STATUS) {
       // 🔥 IMPORTANT: only reload current page
-      loadAdminPageFromSnapshot(CURRENT_STATUS);
+      loadAdminPageFromFirestore(CURRENT_STATUS);
     }
   }, SEARCH_DELAY);
 });
@@ -906,7 +839,7 @@ searchBox.addEventListener("input", e => {
       else FILTER_BA.delete(ba);
     
       ADMIN_CURRENT_PAGE = 0; // 🔥 reset to first page
-      loadAdminPageFromSnapshot(CURRENT_STATUS);
+      loadAdminPageFromFirestore(CURRENT_STATUS);
     };
 
     box.appendChild(label);
@@ -922,131 +855,35 @@ function getSLA(task) {
   return { text:"SLA Breached", cls:"sla-breach" };
 }
 
-const DRIVER_SNAPSHOT_URL =
-  "https://raw.githubusercontent.com/RossGab/driva-task-snapshots/main/snapshots/drivers.json";
-
 async function loadDriverSnapshot() {
   try {
-    const res = await fetch(DRIVER_SNAPSHOT_URL, { cache: "no-store" });
-    if (!res.ok) throw new Error("Driver snapshot not found");
+    const snap = await getDocs(collection(db, DRIVER_COLLECTION));
+    const data = {};
 
-    const data = await res.json();
+    snap.forEach(docSnap => {
+      const d = docSnap.data() || {};
+      const id = docSnap.id;
+      data[id] = {
+        ...d,
+        name: d.name || d.AGENTNAME || d.agentName || "",
+        contact: d.contact || d.phone || d.mobile || ""
+      };
+    });
 
-    // Normalize to existing structure
-    DRIVER_CACHE = data || {};
+    DRIVER_CACHE = data;
+    console.log(`☁ Firestore drivers loaded: ${Object.keys(data).length}`);
   } catch (e) {
-    console.warn("⚠️ Failed to load driver snapshot", e);
+    console.error("❌ Failed to load drivers from Firestore:", e);
     DRIVER_CACHE = {};
   }
 }
 
-async function updateSnapshotFreshness() {
-  const btn = document.getElementById("snapshotStatusBtn");
+function updateDataSourceStatus(message = "☁ Firestore") {
+  const btn = document.getElementById("dataSourceStatusBtn");
   if (!btn) return;
-
-  const metaUrl =
-    "https://raw.githubusercontent.com/RossGab/driva-task-snapshots/main/snapshots/latest.json";
-
-  try {
-    const res = await fetch(metaUrl, { cache: "no-store" });
-    if (!res.ok) throw new Error("No meta");
-    
-    const meta = await res.json();
-    const status = meta.status || "idle";
-    const updatedAt = new Date(meta.updatedAt);
-
-    const now = new Date();
-    // 🟣 RUNNING STATE (HIGHEST PRIORITY)
-    if (status === "running") {
-      btn.className = "snapshot-btn";
-      btn.classList.add("snapshot-warn");
-    
-      btn.textContent = "⏳ Snapshot in progress...";
-      btn.disabled = true;
-      btn.style.cursor = "default";
-      btn.onclick = null;
-    
-      return; // ⛔ stop here
-    }
-    const diffMin = Math.floor((now - updatedAt) / 60000);
-
-    // Format time in PH locale
-    const timeStr = updatedAt.toLocaleTimeString("en-PH", {
-      hour: "numeric",
-      minute: "2-digit",
-      hour12: true
-    });
-
-    const dateStr = updatedAt.toLocaleDateString("en-PH", {
-      month: "short",
-      day: "numeric"
-    });
-
-    btn.className = "snapshot-btn";
-
-    // 🔴 stale (> 1 hour)
-    if (diffMin > 60) {
-      btn.classList.add("snapshot-stale");
-      btn.textContent = `🔴 Snapshot Updated: ${dateStr} ${timeStr}`;
-      btn.disabled = false;
-      btn.style.cursor = "pointer";
-      btn.onclick = triggerSnapshotWorkflow;
-    }
-    
-    // 🟡 warning (> 15 mins)
-    else if (diffMin > 15) {
-      btn.classList.add("snapshot-warn");
-      btn.textContent = `🟡 Snapshot Updated: ${timeStr}`;
-      btn.disabled = false;
-      btn.style.cursor = "pointer";
-      btn.onclick = triggerSnapshotWorkflow;
-    }
-    
-    // 🟢 fresh
-    else {
-      btn.classList.add("snapshot-fresh");
-      btn.textContent = `🟢 Snapshot Updated: ${timeStr}`;
-      btn.disabled = true;
-      btn.style.cursor = "default";
-      btn.onclick = null;
-    }
-
-  } catch {
-    // silently fail — availability handled elsewhere
-  }
+  btn.className = "snapshot-btn data-fresh";
+  btn.textContent = message;
 }
-
-async function triggerSnapshotWorkflow() {
-
-  const btn = document.getElementById("snapshotStatusBtn");
-
-  btn.textContent = "⏳ Snapshot in progress...";
-  btn.className = "snapshot-btn snapshot-warn";
-  btn.disabled = true;
-  btn.style.cursor = "default";
-
-  try {
-
-    const res = await fetch(
-      "https://trigger.rcnitura.workers.dev",
-      { method: "POST" }
-    );
-
-    const data = await res.json();
-
-    if (!data.ok) throw new Error();
-
-    setTimeout(updateSnapshotFreshness, 2000);
-
-  } catch (e) {
-
-    console.error(e);
-    btn.textContent = "❌ Trigger failed";
-    btn.disabled = false;
-
-  }
-}
-
 
 window.onerror = (msg, src, line) => {
   alert(`JS Error:\n${msg}\nLine: ${line}`);
@@ -1056,7 +893,7 @@ window.onerror = (msg, src, line) => {
   document.getElementById("clearSearchBtn").style.display = "none";
 
   if (CURRENT_STATUS) {
-    loadAdminPageFromSnapshot(CURRENT_STATUS); // ✅ page-only reload
+    loadAdminPageFromFirestore(CURRENT_STATUS); // ✅ page-only reload
   }
 };
 
@@ -1067,7 +904,7 @@ window.logout = function () {
 };
   
 window.refreshDashboard = function () {
-  if (!window.__SNAPSHOT_TASKS__) {
+  if (!window.__FIRESTORE_TASKS__) {
     openCount.innerText = 0;
     doneCount.innerText = 0;
     slaOk.innerText = 0;
@@ -1079,7 +916,7 @@ window.refreshDashboard = function () {
   let open = 0, done = 0;
   let ok = 0, warn = 0, breach = 0;
 
-  window.__SNAPSHOT_TASKS__.forEach(t => {
+  window.__FIRESTORE_TASKS__.forEach(t => {
     if (t.status === "COMPLETED") {
       done++;
     } else {
@@ -1307,7 +1144,7 @@ window.revertToPending = async function (taskKey) {
   showLoader("Resetting task…");
 
   try {
-    const snap = await get(ref(db, `tasks/${taskKey}`));
+    const snap = await getDoc(doc(db, TASK_COLLECTION, taskKey));
     if (!snap.exists()) {
       alert("Task not found");
       return;
@@ -1365,7 +1202,7 @@ window.revertToPending = async function (taskKey) {
     });
 
     // 3️⃣ Apply LIGHT update
-    await update(ref(db, `tasks/${taskKey}`), updates);
+    await updateDoc(doc(db, TASK_COLLECTION, taskKey), updates);
 
     // 4️⃣ Update local cache
     const cached = getCachedTasks() || [];
@@ -1398,15 +1235,16 @@ window.markAsCompleted = async function (taskId) {
   showLoader("Completing task…");
 
   try {
-    await update(ref(db, `tasks/${taskId}`), {
+    await updateDoc(doc(db, TASK_COLLECTION, taskId), {
       status: "COMPLETED",
       finalized: true,
-      completedAt: new Date().toISOString()
+      completedAt: new Date().toISOString(),
+      updatedAt: serverTimestamp()
     });
 
     // 🔄 Update local snapshot cache (optional but good)
-    if (window.__SNAPSHOT_TASKS__) {
-      const t = window.__SNAPSHOT_TASKS__.find(x => x._key === taskId);
+    if (window.__FIRESTORE_TASKS__) {
+      const t = window.__FIRESTORE_TASKS__.find(x => x._key === taskId);
       if (t) {
         t.status = "COMPLETED";
         t.finalized = true;
@@ -1455,11 +1293,10 @@ window.showAllOpenTasks = function () {
 };
   
 window.forceRefresh = async function () {
-  clearTaskCache();
   showLoader("Force refreshing all data…");
 
   try {
-    await loadDriverSnapshot(); // ✅ snapshot instead
+    await loadDriverSnapshot();; // ✅ snapshot instead
     await refreshDashboard();
     await loadTasks(CURRENT_STATUS || "PENDING");
   } finally {
@@ -1475,13 +1312,13 @@ window.softRefresh = async function () {
     await refreshDashboard();
 
     // 2️⃣ Reload current page only
-    if (CURRENT_STATUS && window.__SNAPSHOT_TASKS__) {
-      await loadAdminPageFromSnapshot(CURRENT_STATUS);
+    if (CURRENT_STATUS && window.__FIRESTORE_TASKS__) {
+      await loadAdminPageFromFirestore(CURRENT_STATUS);
     }
 
     // 3️⃣ Live Map only if visible
     if (MAP_VISIBLE) {
-      buildTaskStatsFromSnapshot();
+      buildTaskStatsFromFirestore();
       await refreshMap();
     }
   } finally {
@@ -1510,64 +1347,103 @@ window.loadTasks = async function (status) {
   CURRENT_STATUS = status;
   taskList.innerHTML = "Loading...";
 
-
-
-  showLoader("Loading snapshot…");
+  showLoader("Loading Firestore…");
 
   const keys = getDateRangeKeys(DATE_FROM, DATE_TO);
+  let firestoreTasks = [];
 
+  try {
+    for (let i = 0; i < keys.length; i++) {
+      const dateKey = keys[i];
+      const firestoreDate =
+        `${dateKey.slice(0, 4)}-${dateKey.slice(4, 6)}-${dateKey.slice(6, 8)}`;
 
-  let snapshotTasks = [];
-  
-  for (const key of keys) {
-    const data = await loadSnapshotTasks(key);
-    if (data) {
-      snapshotTasks = snapshotTasks.concat(data);
+      const q = query(
+        collection(db, TASK_COLLECTION),
+        where("assignedDate", "==", firestoreDate),
+        orderBy("createdAt")
+      );
+
+      const snap = await getDocs(q);
+
+      snap.forEach(docSnap => {
+        const raw = docSnap.data() || {};
+
+        // Normalize the Firestore task schema to the fields used by this UI.
+        const task = {
+          _key: docSnap.id,
+          ...raw,
+          driverId: raw.driverId ?? raw.agentId ?? "",
+          JOBTYPE: raw.JOBTYPE ?? raw.jobType ?? "",
+          BA: raw.BA ?? raw.ba ?? "",
+          DMZ: raw.DMZ ?? raw.dmz ?? "",
+          MRU: raw.MRU ?? raw.mru ?? "",
+          SEQUENCE: raw.SEQUENCE ?? raw.sequence ?? "",
+          METERNUMBER: raw.METERNUMBER ?? raw.meterNumber ?? "",
+          ACCOUNTNUMBER: raw.ACCOUNTNUMBER ?? raw.accountNumber ?? "",
+          CUSTOMERNAME: raw.CUSTOMERNAME ?? raw.customerName ?? "",
+          ADDRESS: raw.ADDRESS ?? raw.address ?? "",
+          ZIPCODE: raw.ZIPCODE ?? raw.zipCode ?? "",
+          LATITUDE: raw.LATITUDE ?? raw.latitude ?? null,
+          LONGITUDE: raw.LONGITUDE ?? raw.longitude ?? null,
+          deliveryType: raw.deliveryType ?? "",
+          status: raw.status ?? (
+            String(raw.workStatus || "").toUpperCase() === "COMPLETED"
+              ? "COMPLETED"
+              : "PENDING"
+          )
+        };
+
+        firestoreTasks.push(task);
+      });
+
+      const progress = ((i + 1) / keys.length) * 100;
+      setLoaderText(`Firestore: ${i + 1}/${keys.length} date(s)`);
     }
-  }
 
-  // ✅ STRICT MODE: NO FALLBACK
-  if (!snapshotTasks.length) {
-    window.__SNAPSHOT_TASKS__ = null;
-    showNoSnapshotMessage(DATE_FROM);
+    window.__FIRESTORE_TASKS__ = firestoreTasks;
+
+    ADMIN_TASK_IDS = firestoreTasks.map(t => t._key);
+    FILTERED_TASK_IDS = [...ADMIN_TASK_IDS];
+    ADMIN_CURRENT_PAGE = 0;
+
+    ALL_BA_FOR_DATE.clear();
+    firestoreTasks.forEach(t => {
+      if (t.BA) ALL_BA_FOR_DATE.add(t.BA);
+    });
+
+    renderGlobalBAFilters();
+
+    updateDataSourceStatus("☁ Firestore");
+    refreshDashboard();
+
+    await loadAdminPageFromFirestore(status);
+  } catch (e) {
+    console.error("❌ Firestore task load failed:", e);
+    window.__FIRESTORE_TASKS__ = [];
+    taskList.innerHTML = `
+      <div style="padding:12px;background:#fff;border-radius:8px;color:#b00020;">
+        ❌ Failed to load tasks from Firestore.
+      </div>
+    `;
+  } finally {
     hideLoader();
-    return;
   }
-
-  console.log("📦 Using snapshot range:", DATE_FROM, "to", DATE_TO);
-
-  ADMIN_TASK_IDS = snapshotTasks.map(t => t._key);
-  FILTERED_TASK_IDS = [...ADMIN_TASK_IDS];
-  ADMIN_CURRENT_PAGE = 0;
-
-  ALL_BA_FOR_DATE.clear();
-  snapshotTasks.forEach(t => {
-    if (t.BA) ALL_BA_FOR_DATE.add(t.BA);
-  });
-
-  renderGlobalBAFilters();
-
-  window.__SNAPSHOT_TASKS__ = snapshotTasks;
-
-  updateSnapshotStatusForDate(keys[keys.length - 1]); // latest date
-  updateSnapshotFreshness();
-  refreshDashboard();
-
-  await loadAdminPageFromSnapshot(status);
-  updateSnapshotFreshness();
-  hideLoader();
 };
 
-async function loadAdminPageFromSnapshot(status) {
-  if (!window.__SNAPSHOT_TASKS__) return;
+async function loadAdminPageFromFirestore(status) {
+  if (!window.__FIRESTORE_TASKS__) return;
 
-  let tasks = window.__SNAPSHOT_TASKS__.filter(t =>
+  let tasks = window.__FIRESTORE_TASKS__.filter(t =>
     status === "COMPLETED"
       ? t.status === "COMPLETED"
       : t.status !== "COMPLETED"
   );
 
-  // 🔍 Search filter
+  if (FILTER_DRIVER) {
+    tasks = tasks.filter(t => t.driverId === FILTER_DRIVER);
+  }
+
   if (SEARCH_TERM) {
     tasks = tasks.filter(t =>
       Object.values(t).some(v =>
@@ -1576,7 +1452,6 @@ async function loadAdminPageFromSnapshot(status) {
     );
   }
 
-  // 🏷 BA filter
   if (FILTER_BA.size) {
     tasks = tasks.filter(t => FILTER_BA.has(t.BA));
   }
@@ -1736,7 +1611,7 @@ window.loadTaskPhotos = async function (taskId, btn) {
   btn.disabled = true;
   btn.innerText = "Loading photos…";
 
-  const snap = await get(ref(db, `tasks/${taskId}`));
+  const snap = await getDoc(doc(db, TASK_COLLECTION, taskId));
   if (!snap.exists()) {
     btn.innerText = "No photos";
     return;
@@ -1796,7 +1671,7 @@ window.loadTaskPhotos = async function (taskId, btn) {
 
   try {
     // 1️⃣ Read original task (source of truth)
-    const snap = await get(ref(db, `tasks/${taskId}`));
+    const snap = await getDoc(doc(db, TASK_COLLECTION, taskId));
     if (!snap.exists()) {
       alert("Task not found");
       return;
@@ -1848,18 +1723,7 @@ window.loadTaskPhotos = async function (taskId, btn) {
     }
 
     // 5️⃣ Update Firebase (light write)
-    await update(ref(db, `tasks/${taskId}`), payload);
-
-    // 6️⃣ Update LOCAL CACHE only (NO refetch)
-    const cached = getCachedTasks() || [];
-    const idx = cached.findIndex(t => t._key === taskId);
-
-    if (idx !== -1) {
-      cached[idx] = {
-        ...cached[idx],
-        ...payload
-      };
-      setCachedTasks(cached);
+    await updateDoc(doc(db, TASK_COLLECTION, taskId), { ...payload, updatedAt: serverTimestamp() });
     }
 
     alert("✅ Task updated");
@@ -1917,8 +1781,8 @@ window.toggleLiveMap = async function () {
   initMap();
   setTimeout(() => map.invalidateSize(), 200);
 
-  buildTaskStatsFromSnapshot();
-  buildDriverBAMapFromSnapshot();
+  buildTaskStatsFromFirestore();
+  buildDriverBAMapFromFirestore();
   buildLiveMapBAFilters();
   await refreshMap();
 };  
@@ -2057,12 +1921,12 @@ function renderDriverList(statusData = {}) {
   }
 }
 
-function buildTaskStatsFromSnapshot() {
+function buildTaskStatsFromFirestore() {
   TASK_STATS = {};
 
-  if (!window.__SNAPSHOT_TASKS__) return;
+  if (!window.__FIRESTORE_TASKS__) return;
 
-  window.__SNAPSHOT_TASKS__.forEach(t => {
+  window.__FIRESTORE_TASKS__.forEach(t => {
     if (!t.driverId) return;
 
     if (!TASK_STATS[t.driverId]) {
@@ -2077,12 +1941,12 @@ function buildTaskStatsFromSnapshot() {
   });
 }
 
-function buildDriverBAMapFromSnapshot() {
+function buildDriverBAMapFromFirestore() {
   DRIVER_BA_MAP = {};
 
-  if (!window.__SNAPSHOT_TASKS__) return;
+  if (!window.__FIRESTORE_TASKS__) return;
 
-  window.__SNAPSHOT_TASKS__.forEach(t => {
+  window.__FIRESTORE_TASKS__.forEach(t => {
     if (!t.driverId || !t.BA) return;
 
     if (!DRIVER_BA_MAP[t.driverId]) {
@@ -2097,66 +1961,75 @@ function buildDriverBAMapFromSnapshot() {
 
   
 async function refreshMap() {
-  const snap = await withTimeout(get(ref(db, "driverStatus")), 8000);
-  const data = snap.val() || {};
+  try {
+    const snap = await withTimeout(
+      getDocs(collection(db, DRIVER_STATUS_COLLECTION)),
+      8000
+    );
 
-  renderDriverList(data);
+    const data = {};
+    snap.forEach(docSnap => {
+      data[docSnap.id] = docSnap.data() || {};
+    });
 
-  Object.entries(data).forEach(([id, d]) => {
+    renderDriverList(data);
 
-  // 🔥 BA FILTER
-  if (!driverMatchesBA(id)) {
-    if (markers[id]) {
-      map.removeLayer(markers[id]);
-      delete markers[id];
-    }
-    return;
-  }
-    if (!d.latitude || !d.longitude) return;
+    Object.entries(data).forEach(([id, d]) => {
+      if (!driverMatchesBA(id)) {
+        if (markers[id]) {
+          map.removeLayer(markers[id]);
+          delete markers[id];
+        }
+        return;
+      }
 
-    const pos = [d.latitude, d.longitude];
-    const status = getDriverStatus(d.lastSeen);
-    // ✅ Online-only filter (map markers)
-    if (SHOW_ONLINE_ONLY && status.label !== "Active") {
-      if (markers[id]) {
+      if (d.latitude == null || d.longitude == null) return;
+
+      const pos = [Number(d.latitude), Number(d.longitude)];
+      const status = getDriverStatus(d.lastSeen);
+
+      if (SHOW_ONLINE_ONLY && status.label !== "Active") {
+        if (markers[id]) {
+          map.removeLayer(markers[id]);
+          delete markers[id];
+        }
+        return;
+      }
+
+      const icon = L.divIcon({
+        html: `<div style="
+          width:14px;
+          height:14px;
+          background:${status.color};
+          border-radius:50%;
+          border:2px solid white;
+        "></div>`,
+        className: ""
+      });
+
+      if (!markers[id]) {
+        markers[id] = L.marker(pos, { icon })
+          .addTo(map)
+          .bindPopup(`
+            <b>${id}</b><br>
+            Status: ${status.label}<br>
+            Last seen: ${d.lastSeen ? new Date(d.lastSeen?.toDate ? d.lastSeen.toDate() : d.lastSeen).toLocaleString() : "—"}
+          `);
+      } else {
+        markers[id].setLatLng(pos);
+        markers[id].setIcon(icon);
+      }
+    });
+
+    Object.keys(markers).forEach(id => {
+      if (!data[id]) {
         map.removeLayer(markers[id]);
         delete markers[id];
       }
-      return;
-    }
-
-    const icon = L.divIcon({
-      html: `<div style="
-        width:14px;
-        height:14px;
-        background:${status.color};
-        border-radius:50%;
-        border:2px solid white;
-      "></div>`,
-      className: ""
     });
-
-    if (!markers[id]) {
-      markers[id] = L.marker(pos, { icon })
-        .addTo(map)
-        .bindPopup(`
-          <b>${id}</b><br>
-          Status: ${status.label}<br>
-          Last seen: ${new Date(d.lastSeen).toLocaleString()}
-        `);
-    } else {
-      markers[id].setLatLng(pos);
-      markers[id].setIcon(icon);
-    }
-  });
-
-  // 🧹 CLEANUP REMOVED DRIVERS
-  Object.keys(markers).forEach(id => {
-    if (!data[id]) {
-      map.removeLayer(markers[id]);
-      delete markers[id];
-    }
-  });
+  } catch (e) {
+    console.error("❌ Firestore driver status load failed:", e);
+  }
 }
 
 let MAP_REFRESH_TIMER = null;
@@ -2166,7 +2039,8 @@ function startMapAutoRefresh() {
 
   MAP_REFRESH_TIMER = setInterval(async () => {
     if (!MAP_VISIBLE) return;
-    buildTaskStatsFromSnapshot();     // 📦 Snapshot
+    buildTaskStatsFromFirestore();
+    await refreshMap();
   }, 60000); // 🔥 every 60 seconds
 }
 
@@ -2195,23 +2069,6 @@ window.scrollToTop = function () {
   });
 };
 
-async function ensureDriverStatusNodes() {
-  const statusSnap = await get(ref(db, "driverStatus"));
-  const statusData = statusSnap.val() || {};
-
-  for (const driverId of Object.keys(DRIVER_CACHE)) {
-    if (!statusData[driverId]) {
-      console.log("➕ Creating driverStatus for", driverId);
-
-      await update(ref(db, `driverStatus/${driverId}`), {
-        lastSeen: null,
-        latitude: null,
-        longitude: null
-      });
-    }
-  }
-}
-
 /* INIT */
 function setLoaderText(txt) {
   const el = document.querySelector(".loader-text");
@@ -2221,10 +2078,10 @@ function setLoaderText(txt) {
 (async function init() {
   showLoader("Loading drivers…");
   try {
-    await loadDriverSnapshot()
+    await loadDriverSnapshot();
 
     // 🔥 ADD THIS
-    await ensureDriverStatusNodes();
+    
 
     showLoader("Loading driver config…");
     await loadDriverUIConfig();
@@ -2250,8 +2107,7 @@ function setLoaderText(txt) {
       });
     }
 
-    await updateSnapshotFreshness(); // 🔥 run immediately
-    setInterval(updateSnapshotFreshness, 10000);
+    updateDataSourceStatus("☁ Firestore");
     
     hideLoader();
   }
