@@ -141,7 +141,7 @@ img { width:100%;margin-top:8px;border-radius:6px; }
     color:#fff;
   "
 >
-  🔄 Download / Refresh Tasks
+  Task for download (0)
 </button>
 <button id="syncBtn"
   style="
@@ -288,12 +288,16 @@ import {
   query as fsQuery,
   where,
   orderBy,
-  getDocs
+  getDocs,
+  getCountFromServer,
+  doc as fsDoc,
+  writeBatch,
+  serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "V.R.0.0.1";
+const VERSION = "V.R.0.0.2";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -1738,17 +1742,18 @@ checkStorageQuota();
 setInterval(checkStorageQuota, 60_000); // every 60 seconds
 
 // =====================================================
-// 🔥 FIRESTORE DRIVER TASK LOADER
+// 🔥 GET TASKS WAITING FOR DOWNLOAD
 // =====================================================
 async function loadDriverTasksFromFirestore(selectedDate) {
 
   const dateKey = selectedDate.replace(/-/g, "");
 
   console.log(
-    "🔥 Loading driver tasks from Firestore:",
+    "🔥 Loading FORDOWNLOAD tasks:",
     {
-      dateKey,
-      DRIVER_ID
+      assignedDate: dateKey,
+      driverId: DRIVER_ID,
+      workStatus: "fordownload"
     }
   );
 
@@ -1775,7 +1780,7 @@ async function loadDriverTasksFromFirestore(selectedDate) {
     where(
       "workStatus",
       "==",
-      "pending"
+      "fordownload"
     ),
 
     orderBy("createdAt")
@@ -1792,19 +1797,347 @@ async function loadDriverTasksFromFirestore(selectedDate) {
 
     tasks.push({
       _key: docSnap.id,
-
       ...data,
-
       dateKey
     });
 
   });
 
   console.log(
-    `🔥 Firestore returned ${tasks.length} tasks for driver ${DRIVER_ID}`
+    `🔥 Firestore returned ${tasks.length} FORDOWNLOAD tasks`
   );
 
   return tasks;
+}
+
+// =====================================================
+// 🔢 COUNT TASKS FOR DOWNLOAD
+// =====================================================
+async function getTasksForDownloadCount(selectedDate) {
+
+  const dateKey =
+    selectedDate.replace(/-/g, "");
+
+  const tasksRef =
+    collection(firestore, "TASK");
+
+  const q = fsQuery(
+    tasksRef,
+
+    where(
+      "assignedDate",
+      "==",
+      dateKey
+    ),
+
+    where(
+      "agentId",
+      "==",
+      DRIVER_ID
+    ),
+
+    where(
+      "workStatus",
+      "==",
+      "fordownload"
+    )
+  );
+
+  const countSnap =
+    await getCountFromServer(q);
+
+  const count =
+    countSnap.data().count || 0;
+
+  console.log(
+    `🔢 Tasks for download: ${count}`,
+    {
+      dateKey,
+      driverId: DRIVER_ID
+    }
+  );
+
+  return count;
+}
+
+// =====================================================
+// 🔢 UPDATE "TASK FOR DOWNLOAD" BUTTON
+// =====================================================
+async function updateTasksForDownloadCount() {
+
+  const btn =
+    document.getElementById("refreshTasksBtn");
+
+  if (!btn) return;
+
+  const selectedDate =
+    dateFilter.value;
+
+  if (!selectedDate) {
+    btn.innerText =
+      "Task for download (0)";
+    return;
+  }
+
+  // Offline → cannot query Firestore
+  if (!navigator.onLine) {
+    btn.innerText =
+      "Task for download (—)";
+    return;
+  }
+
+  try {
+
+    const count =
+      await getTasksForDownloadCount(
+        selectedDate
+      );
+
+    btn.innerText =
+      `Task for download (${count})`;
+
+    btn.dataset.count =
+      String(count);
+
+    btn.disabled =
+      count === 0;
+
+    btn.style.opacity =
+      count === 0 ? "0.6" : "1";
+
+  } catch (err) {
+
+    console.error(
+      "❌ Failed to get download count:",
+      err
+    );
+
+    btn.innerText =
+      "Task for download (?)";
+
+    btn.disabled = false;
+    btn.style.opacity = "1";
+  }
+}
+
+// =====================================================
+// ⬇️ DOWNLOAD FORDOWNLOAD TASKS
+// =====================================================
+async function downloadTasksForDriver() {
+
+  if (IS_DOWNLOADING) {
+    alert("⏳ Task download already running.");
+    return;
+  }
+
+  if (!navigator.onLine) {
+    alert(
+      "📴 Connect to the internet first."
+    );
+    return;
+  }
+
+  const selectedDate =
+    dateFilter.value;
+
+  if (!selectedDate) {
+    alert(
+      "Please select a date first."
+    );
+    return;
+  }
+
+  IS_DOWNLOADING = true;
+
+  const btn =
+    document.getElementById(
+      "refreshTasksBtn"
+    );
+
+  try {
+
+    if (btn) {
+      btn.disabled = true;
+      btn.style.opacity = "0.7";
+      btn.innerText =
+        "⏬ Downloading tasks...";
+    }
+
+    showMessage(
+      "⏬ Downloading tasks..."
+    );
+
+    // ==========================================
+    // 1. GET TASKS WAITING FOR DOWNLOAD
+    // ==========================================
+
+    const freshTasks =
+      await loadDriverTasksFromFirestore(
+        selectedDate
+      );
+
+    console.log(
+      "🔥 Tasks downloaded from Firestore:",
+      freshTasks.length
+    );
+
+    if (!freshTasks.length) {
+
+      alert(
+        "📭 There are no tasks waiting for download."
+      );
+
+      return;
+    }
+
+    // ==========================================
+    // 2. CONVERT FIRESTORE → DRIVER LOCAL MODEL
+    // ==========================================
+
+    const localTasks =
+      freshTasks.map(task => ({
+
+        ...task,
+
+        _key:
+          task._key,
+
+        driverId:
+          task.agentId,
+
+        driverName:
+          task.agentName,
+
+        dateKey:
+          selectedDate.replace(/-/g, ""),
+
+        // Driver's local state
+        status:
+          "PENDING",
+
+        // Firestore lifecycle state
+        workStatus:
+          "pending",
+
+        finalized:
+          false,
+
+        exported:
+          false
+
+      }));
+
+    // ==========================================
+    // 3. SAVE LOCALLY FIRST
+    // ==========================================
+
+    await saveTasksToIndexedDB(
+      localTasks
+    );
+
+    console.log(
+      `💾 Saved ${localTasks.length} tasks to IndexedDB`
+    );
+
+    // ==========================================
+    // 4. MARK FIRESTORE TASKS AS DOWNLOADED
+    // ==========================================
+
+    await markTasksAsDownloaded(
+      freshTasks
+    );
+
+    console.log(
+      `✅ ${freshTasks.length} tasks moved: fordownload → pending`
+    );
+
+    // ==========================================
+    // 5. LOAD LOCAL TASK LIST
+    // ==========================================
+
+    FORCE_REDOWNLOAD = false;
+
+    await loadTasks();
+
+    // ==========================================
+    // 6. REFRESH DOWNLOAD COUNT
+    // ==========================================
+
+    await updateTasksForDownloadCount();
+
+  } catch (err) {
+
+    console.error(
+      "❌ Task download failed:",
+      err
+    );
+
+    alert(
+      "❌ Failed to download tasks.\n\n" +
+      (err?.message || "Unknown error")
+    );
+
+  } finally {
+
+    IS_DOWNLOADING = false;
+
+    await updateTasksForDownloadCount();
+  }
+}
+
+// =====================================================
+// 🔄 FORDOWNLOAD → PENDING
+// =====================================================
+async function markTasksAsDownloaded(tasks) {
+
+  if (!tasks.length) return;
+
+  console.log(
+    `🔄 Updating ${tasks.length} Firestore tasks to pending...`
+  );
+
+  // Firestore batch limit = 500
+  const CHUNK_SIZE = 450;
+
+  for (
+    let start = 0;
+    start < tasks.length;
+    start += CHUNK_SIZE
+  ) {
+
+    const chunk =
+      tasks.slice(
+        start,
+        start + CHUNK_SIZE
+      );
+
+    const batch =
+      writeBatch(firestore);
+
+    for (const task of chunk) {
+
+      const taskRef =
+        fsDoc(
+          firestore,
+          "TASK",
+          task._key
+        );
+
+      batch.update(
+        taskRef,
+        {
+          workStatus: "pending",
+          updatedAt: serverTimestamp()
+        }
+      );
+    }
+
+    await batch.commit();
+
+    console.log(
+      `✅ Firestore batch committed: ${chunk.length} tasks`
+    );
+  }
 }
   
 async function loadTasks() {
@@ -1863,31 +2196,29 @@ async function loadTasks() {
     }
 
     // ===============================
-    // 2️⃣ CACHE-FIRST STRICT MODE
+    // 2️⃣ SHOW DOWNLOADED LOCAL TASKS
     // ===============================
     
-    const hasLocalTasks = localTasks.length > 0;
+    TASKS_CACHE =
+      sortTasksOfflineSafe(localTasks);
     
-    if (!FORCE_REDOWNLOAD && hasLocalTasks) {
-      TASKS_CACHE = sortTasksOfflineSafe(localTasks);
+    selectedJobTypes.clear();
+    jobTypeFilterInitialized = false;
     
-      selectedJobTypes.clear();
-      jobTypeFilterInitialized = false;
-      renderJobTypeFilters(TASKS_CACHE);
-      refreshUI();
+    renderJobTypeFilters(
+      TASKS_CACHE
+    );
     
-      LOAD_IN_PROGRESS = false;
-      return; // ⛔ STOP — DO NOT FETCH FIREBASE
+    refreshUI();
+    
+    // 🔢 Always refresh the Firestore
+    // download counter separately.
+    if (navigator.onLine) {
+      updateTasksForDownloadCount();
     }
-
-    // ===============================
-    // 3️⃣ FETCH FROM FIRESTORE
-    // ===============================
     
-    const freshTasks =
-      await loadDriverTasksFromFirestore(
-        selectedDate
-      );
+    LOAD_IN_PROGRESS = false;
+    return;
     
     console.log(
       "🔥 Fresh Firestore tasks:",
@@ -1929,20 +2260,6 @@ async function loadTasks() {
       LOAD_IN_PROGRESS = false;
       return;
     }
-
-    
-
-    if (ids.length > 0 && freshTasks.length === 0) {
-        showMessage(`
-          ⚠ Tasks exist for this date,<br>
-          but none assigned to Driver ID: <b>${DRIVER_ID}</b>
-          <br><br>
-          Check ⚙️ Driver ID setting.
-        `);
-      
-        LOAD_IN_PROGRESS = false;
-        return;
-      }
 
     if (!freshTasks.length) {
 
@@ -2013,49 +2330,60 @@ async function loadTasks() {
   LOAD_IN_PROGRESS = false;
 }
 
-document.getElementById("refreshTasksBtn").onclick = async () => {
+// =====================================================
+// ⬇️ TASK FOR DOWNLOAD BUTTON
+// =====================================================
+document.getElementById("refreshTasksBtn").onclick =
+  async () => {
 
-  // 🔒 BLOCK if there are pending uploads
-  const pendingUpload = (await getTasksFromIndexedDB()).filter(t =>
-    t.status === "LOCAL_COMPLETED" &&
-    !t.exported &&
-    t.driverId === DRIVER_ID
-  ).length;
-  
-  if (pendingUpload > 0) {
-    alert(
-      `⚠ You have ${pendingUpload} task(s) waiting for upload.\n\n` +
-      "Please press 'Sync Completed Tasks' first before downloading new tasks."
-    );
-    return;
-  }
+    // Block download if completed tasks are waiting
+    // to be uploaded.
+    const pendingUpload =
+      (await getTasksFromIndexedDB()).filter(t =>
+        t.status === "LOCAL_COMPLETED" &&
+        !t.exported &&
+        String(t.driverId).trim().toUpperCase() ===
+        String(DRIVER_ID).trim().toUpperCase()
+      ).length;
 
-  if (!navigator.onLine) {
-    alert("📴 You are offline.\n\nConnect to the internet to download tasks.");
-    return;
-  }
+    if (pendingUpload > 0) {
 
-  if (LOAD_IN_PROGRESS) {
-    alert("⏳ Tasks are already loading.");
-    return;
-  }
+      alert(
+        `⚠ You have ${pendingUpload} task(s) waiting for upload.\n\n` +
+        "Please press 'Sync Completed Tasks' first."
+      );
 
-  const ok = confirm(
-    "🔄 Download tasks from server?\n\n" +
-    "This will refresh today’s task list.\n" +
-    "Offline photos will NOT be lost."
-  );
+      return;
+    }
 
-  if (!ok) return;
+    const count =
+      Number(
+        document.getElementById(
+          "refreshTasksBtn"
+        )?.dataset.count || 0
+      );
 
-  FORCE_REDOWNLOAD = true;
+    if (count === 0) {
 
-  showMessage("⏬ Downloading tasks…");
+      alert(
+        "📭 No tasks are currently waiting for download."
+      );
 
-  await loadTasks();
+      await updateTasksForDownloadCount();
 
-  FORCE_REDOWNLOAD = false;
-};
+      return;
+    }
+
+    const ok =
+      confirm(
+        `Download ${count} task(s) for this date?\n\n` +
+        "The tasks will be saved locally and marked as pending."
+      );
+
+    if (!ok) return;
+
+    await downloadTasksForDriver();
+  };
 
 
 async function detectGPSPermission() {
@@ -2099,20 +2427,30 @@ function handleGPSError(err) {
 }
 
 function updateUploadCounter() {
-  const el = document.getElementById("uploadCounter");
-  const note = document.getElementById("uploadNote");
-  const retryBtn = document.getElementById("retryUploadBtn");
-  const refreshBtn = document.getElementById("refreshTasksBtn");
 
-  if (el) el.style.display = "none";
-  if (note) note.style.display = "none";
-  if (retryBtn) retryBtn.style.display = "none";
+  const el =
+    document.getElementById(
+      "uploadCounter"
+    );
 
-  if (refreshBtn) {
-    refreshBtn.disabled = false;
-    refreshBtn.style.opacity = "1";
-    refreshBtn.innerText = "🔄 Download / Refresh Tasks";
-  }
+  const note =
+    document.getElementById(
+      "uploadNote"
+    );
+
+  const retryBtn =
+    document.getElementById(
+      "retryUploadBtn"
+    );
+
+  if (el)
+    el.style.display = "none";
+
+  if (note)
+    note.style.display = "none";
+
+  if (retryBtn)
+    retryBtn.style.display = "none";
 }
   
 async function updateRemainingCounter(tasks) {
