@@ -282,10 +282,18 @@ img { width:100%;margin-top:8px;border-radius:6px; }
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 import { getDatabase, ref, get, update, query, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+import {
+  getFirestore,
+  collection,
+  query as fsQuery,
+  where,
+  orderBy,
+  getDocs
+} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "V.R.0.0.0";
+const VERSION = "V.R.0.0.1";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -318,8 +326,17 @@ const firebaseConfig = {
 };
 
 const app = initializeApp(firebaseConfig);
+
 const db = getDatabase(app);
+
+const firestore = getFirestore(app, "drver-task");
+
 const storage = getStorage(app);
+
+console.log(
+  "🔥 Firestore driver database initialized:",
+  firestore
+);
 
 const DB_NAME = "driver_uploads";
 const DB_VERSION = 5; // ⬅️ bump version ONCE
@@ -1720,6 +1737,75 @@ async function preloadDriverUIConfig(tasks) {
 checkStorageQuota();
 setInterval(checkStorageQuota, 60_000); // every 60 seconds
 
+// =====================================================
+// 🔥 FIRESTORE DRIVER TASK LOADER
+// =====================================================
+async function loadDriverTasksFromFirestore(selectedDate) {
+
+  const dateKey = selectedDate.replace(/-/g, "");
+
+  console.log(
+    "🔥 Loading driver tasks from Firestore:",
+    {
+      dateKey,
+      DRIVER_ID
+    }
+  );
+
+  const tasksRef = collection(
+    firestore,
+    "TASK"
+  );
+
+  const q = fsQuery(
+    tasksRef,
+
+    where(
+      "assignedDate",
+      "==",
+      dateKey
+    ),
+
+    where(
+      "agentId",
+      "==",
+      DRIVER_ID
+    ),
+
+    where(
+      "workStatus",
+      "==",
+      "pending"
+    ),
+
+    orderBy("createdAt")
+  );
+
+  const snapshot =
+    await getDocs(q);
+
+  const tasks = [];
+
+  snapshot.forEach(docSnap => {
+
+    const data = docSnap.data();
+
+    tasks.push({
+      _key: docSnap.id,
+
+      ...data,
+
+      dateKey
+    });
+
+  });
+
+  console.log(
+    `🔥 Firestore returned ${tasks.length} tasks for driver ${DRIVER_ID}`
+  );
+
+  return tasks;
+}
   
 async function loadTasks() {
   if (LOAD_IN_PROGRESS) return;
@@ -1795,15 +1881,26 @@ async function loadTasks() {
     }
 
     // ===============================
-    // 3️⃣ FETCH FROM FIREBASE
+    // 3️⃣ FETCH FROM FIRESTORE
     // ===============================
-    const idsSnap = await get(ref(db, `tasksByDate/${dateKey}`));
-    const ids = Object.keys(idsSnap.val() || {});
+    
+    const freshTasks =
+      await loadDriverTasksFromFirestore(
+        selectedDate
+      );
+    
+    console.log(
+      "🔥 Fresh Firestore tasks:",
+      freshTasks.length
+    );
 
-    if (!ids.length) {
+    if (!freshTasks.length) {
 
+      // Keep locally completed / pending offline tasks
       if (localTasks.length) {
-        TASKS_CACHE = sortTasksOfflineSafe(localTasks);
+    
+        TASKS_CACHE =
+          sortTasksOfflineSafe(localTasks);
     
         selectedJobTypes.clear();
         jobTypeFilterInitialized = false;
@@ -1812,10 +1909,13 @@ async function loadTasks() {
         refreshUI();
     
       } else {
+    
         TASKS_CACHE = [];
+    
         toggleJobTypeFilter(false);
+    
         updateRemainingCounter([]);
-        updateUploadCounter([]);
+        updateUploadCounter();
     
         showMessage(`
           📭 No tasks found for selected date.<br><br>
@@ -1830,55 +1930,7 @@ async function loadTasks() {
       return;
     }
 
-    const reads = ids.map(async id => {
-      const s = await get(ref(db, `tasks/${id}`));
-      if (!s.exists()) return null;
-
-      const task = s.val();
-      
-      if (
-        String(task.driverId || "").trim().toUpperCase() !==
-        String(DRIVER_ID).trim().toUpperCase()
-      ) return null;
-      
-      // 🔒 Skip tasks already completed locally
-      // 🔒 Skip tasks already completed locally
-      const local = cached.find(t => t._key === id);
-      
-      if (local?.status === "LOCAL_COMPLETED") {
-      
-        // 🧹 CLEANUP: exported + already completed in Firebase
-        if (local.exported && task.status === "COMPLETED") {
-
-          // 🔥 DELETE RELATED PHOTOS FIRST
-          const photos = await getAllPhotosFromDB();
-          const related = photos.filter(p => p.taskKey === local._key);
-        
-          for (const p of related) {
-            await deletePhotoFromDB(p.id);
-          }
-        
-          // 🔥 THEN DELETE TASK
-          await deleteTaskFromIndexedDB(local._key);
-        
-          return null;
-        }
-      
-        // ✅ if exported → DO NOT override
-        if (local.exported) {
-          return null;
-        }
-      
-        // ⛔ still local and not completed in Firebase
-        if (task.status !== "COMPLETED") return null;
-      }
-      
-      if (task.status === "COMPLETED") return null;
-
-      return { _key: id, ...task, dateKey };
-    });
-
-    let freshTasks = (await Promise.all(reads)).filter(Boolean);
+    
 
     if (ids.length > 0 && freshTasks.length === 0) {
         showMessage(`
