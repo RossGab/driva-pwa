@@ -297,7 +297,7 @@ import {
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "V.R.0.0.2";
+const VERSION = "V.R.0.0.3";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -1746,7 +1746,7 @@ setInterval(checkStorageQuota, 60_000); // every 60 seconds
 // =====================================================
 async function loadDriverTasksFromFirestore(selectedDate) {
 
-  const dateKey = selectedDate.replace(/-/g, "");
+  const firestoreDate = selectedDate;
 
   console.log(
     "🔥 Loading FORDOWNLOAD tasks:",
@@ -1815,8 +1815,7 @@ async function loadDriverTasksFromFirestore(selectedDate) {
 // =====================================================
 async function getTasksForDownloadCount(selectedDate) {
 
-  const dateKey =
-    selectedDate.replace(/-/g, "");
+  const firestoreDate = selectedDate;
 
   const tasksRef =
     collection(firestore, "TASK");
@@ -1827,7 +1826,7 @@ async function getTasksForDownloadCount(selectedDate) {
     where(
       "assignedDate",
       "==",
-      dateKey
+      firestoreDate
     ),
 
     where(
@@ -1852,8 +1851,9 @@ async function getTasksForDownloadCount(selectedDate) {
   console.log(
     `🔢 Tasks for download: ${count}`,
     {
-      dateKey,
-      driverId: DRIVER_ID
+      assignedDate: firestoreDate,
+      driverId: DRIVER_ID,
+      workStatus: "fordownload"
     }
   );
 
