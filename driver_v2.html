@@ -297,7 +297,7 @@ import {
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "V.R.0.0.3";
+const VERSION = "V.R.0.0.4";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -1746,29 +1746,37 @@ setInterval(checkStorageQuota, 60_000); // every 60 seconds
 // =====================================================
 async function loadDriverTasksFromFirestore(selectedDate) {
 
+  // Firestore uses YYYY-MM-DD
   const firestoreDate = selectedDate;
+
+  // IndexedDB uses YYYYMMDD
+  const dateKey =
+    selectedDate.replace(/-/g, "");
 
   console.log(
     "🔥 Loading FORDOWNLOAD tasks:",
     {
-      assignedDate: dateKey,
+      assignedDate: firestoreDate,
+      dateKey: dateKey,
       driverId: DRIVER_ID,
       workStatus: "fordownload"
     }
   );
 
-  const tasksRef = collection(
-    firestore,
-    "TASK"
-  );
+  const tasksRef =
+    collection(
+      firestore,
+      "TASK"
+    );
 
   const q = fsQuery(
+
     tasksRef,
 
     where(
       "assignedDate",
       "==",
-      dateKey
+      firestoreDate
     ),
 
     where(
@@ -1781,9 +1789,7 @@ async function loadDriverTasksFromFirestore(selectedDate) {
       "workStatus",
       "==",
       "fordownload"
-    ),
-
-    orderBy("createdAt")
+    )
   );
 
   const snapshot =
@@ -1793,14 +1799,34 @@ async function loadDriverTasksFromFirestore(selectedDate) {
 
   snapshot.forEach(docSnap => {
 
-    const data = docSnap.data();
+    const data =
+      docSnap.data();
 
     tasks.push({
       _key: docSnap.id,
       ...data,
-      dateKey
+
+      // Local IndexedDB date
+      dateKey: dateKey
     });
 
+  });
+
+  // Sort locally instead of using Firestore orderBy().
+  // This avoids another composite-index requirement.
+  tasks.sort((a, b) => {
+
+    const aTime =
+      a.createdAt?.toMillis
+        ? a.createdAt.toMillis()
+        : new Date(a.createdAt || 0).getTime();
+
+    const bTime =
+      b.createdAt?.toMillis
+        ? b.createdAt.toMillis()
+        : new Date(b.createdAt || 0).getTime();
+
+    return aTime - bTime;
   });
 
   console.log(
@@ -2220,90 +2246,7 @@ async function loadTasks() {
     LOAD_IN_PROGRESS = false;
     return;
     
-    console.log(
-      "🔥 Fresh Firestore tasks:",
-      freshTasks.length
-    );
-
-    if (!freshTasks.length) {
-
-      // Keep locally completed / pending offline tasks
-      if (localTasks.length) {
     
-        TASKS_CACHE =
-          sortTasksOfflineSafe(localTasks);
-    
-        selectedJobTypes.clear();
-        jobTypeFilterInitialized = false;
-    
-        renderJobTypeFilters(TASKS_CACHE);
-        refreshUI();
-    
-      } else {
-    
-        TASKS_CACHE = [];
-    
-        toggleJobTypeFilter(false);
-    
-        updateRemainingCounter([]);
-        updateUploadCounter();
-    
-        showMessage(`
-          📭 No tasks found for selected date.<br><br>
-          <small>
-            Date: ${selectedDate}<br>
-            Driver: ${DRIVER_ID}
-          </small>
-        `);
-      }
-    
-      LOAD_IN_PROGRESS = false;
-      return;
-    }
-
-    if (!freshTasks.length) {
-
-        TASKS_CACHE = [];
-        selectedJobTypes.clear();
-        jobTypeFilterInitialized = false;
-        toggleJobTypeFilter(false);
-      
-        updateRemainingCounter([]);
-        updateUploadCounter();
-      
-        showMessage("📭 No tasks found for selected date.");
-      
-        LOAD_IN_PROGRESS = false;
-        return;
-      }
-
-    // ===============================
-    // 4️⃣ SAVE TO INDEXEDDB
-    // ===============================
-    await saveTasksToIndexedDB(freshTasks);
-
-    // 🔥 REMOVE LOCAL TASKS NOT IN FIREBASE
-    const freshIds = new Set(freshTasks.map(t => t._key));
-    
-    for (const local of cached) {
-      if (
-        local.dateKey === dateKey &&
-        local.driverId === DRIVER_ID &&
-        !freshIds.has(local._key) &&
-        local.status !== "LOCAL_COMPLETED"
-      ) {
-        await deleteTaskFromIndexedDB(local._key);
-      }
-    }
-
-    TASKS_CACHE = sortTasksOfflineSafe(freshTasks);
-
-    selectedJobTypes.clear();
-    jobTypeFilterInitialized = false;
-    renderJobTypeFilters(TASKS_CACHE);
-
-    refreshUI();
-
   } catch (err) {
   console.error("❌ loadTasks error:", err);
 
