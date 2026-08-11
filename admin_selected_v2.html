@@ -308,7 +308,7 @@ button {
   
   <div style="display:flex;align-items:center;gap:14px;">
     <img src="./logo.jpg" class="admin-logo" alt="Company Logo">
-    <h1>Admin Dashboard <span class="version">V.R.0.0.2-WIP</span></h1>
+    <h1>Admin Dashboard <span class="version">V.R.0.0.3-WIP</span></h1>
   </div>
 
   <!-- 📅 DATE FILTER -->
@@ -489,6 +489,13 @@ import {
 } from
 "https://www.gstatic.com/firebasejs/12.9.0/firebase-firestore.js";
 
+import {
+  getDatabase,
+  ref,
+  get
+} from
+"https://www.gstatic.com/firebasejs/12.9.0/firebase-database.js";
+
 /* ===== FIREBASE ===== */
 const firebaseConfig = {
   apiKey: "AIzaSyDFW61pnwLvh6HGKWt10zLYNr860fI8vkg",
@@ -565,12 +572,38 @@ dateToInput.addEventListener("change", onDateRangeChange);
 
 async function loadDriverUIConfig() {
   try {
-    const snap = await getDoc(doc(db, ...DRIVER_CONFIG_DOC));
-    const data = snap.exists() ? snap.data() : {};
-    // Support either { jobTypes: {...} } or the jobTypes object directly.
-    window.DRIVER_UI_CONFIG = data.jobTypes || data || {};
+
+    const snapshot =
+      await get(
+        ref(rtdb, "config/driverUI")
+      );
+
+    const data =
+      snapshot.exists()
+        ? snapshot.val()
+        : {};
+
+    // Support:
+    // { jobTypes: {...} }
+    // or directly { NOD: {...}, ... }
+
+    window.DRIVER_UI_CONFIG =
+      data.jobTypes ||
+      data ||
+      {};
+
+    console.log(
+      "🔥 Driver UI config loaded from Realtime Database:",
+      window.DRIVER_UI_CONFIG
+    );
+
   } catch (e) {
-    console.warn("⚠️ Firestore driver UI config unavailable:", e);
+
+    console.error(
+      "❌ Failed to load driver UI config from Realtime Database:",
+      e
+    );
+
     window.DRIVER_UI_CONFIG = {};
   }
 }
@@ -731,9 +764,15 @@ window.openReport = function () {
 const app = initializeApp(firebaseConfig);
 
 // Firestore named database used by the existing Firestore dashboards.
-const db = initializeFirestore(app, {}, "drver-task");
-const auth = getAuth(app);
+const db = initializeFirestore(
+  app,
+  {},
+  "drver-task"
+);
 
+const rtdb = getDatabase(app);
+
+const auth = getAuth(app);
 // Firestore collections used by this dashboard.
 // TASK is confirmed by the existing Firestore task dashboard.
 // The driver/status/config collections are isolated here so they are easy to change
@@ -741,7 +780,6 @@ const auth = getAuth(app);
 const TASK_COLLECTION = "TASK";
 const DRIVER_COLLECTION = "drivers";
 const DRIVER_STATUS_COLLECTION = "driverStatus";
-const DRIVER_CONFIG_DOC = ["config", "driverUI"];
 
 const EDITABLE_FIELDS = [
   "driverId",
