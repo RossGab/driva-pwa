@@ -297,7 +297,7 @@ import {
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "V.R.0.0.5";
+const VERSION = "V.R.0.0.6";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -1742,214 +1742,331 @@ checkStorageQuota();
 setInterval(checkStorageQuota, 60_000); // every 60 seconds
 
 // =====================================================
-// 🔄 NORMALIZE FIRESTORE TASK → DRIVER TASK MODEL
+// 🔄 NORMALIZE TASK DATA
 // =====================================================
 function normalizeFirestoreTask(data, taskId, dateKey) {
 
-  const get = (...keys) => {
+  const keys = Object.keys(data || {});
+
+  // Case-insensitive / punctuation-insensitive lookup
+  const findValue = (...possibleNames) => {
+
+    const normalizedNames = possibleNames.map(name =>
+      String(name)
+        .toLowerCase()
+        .replace(/[^a-z0-9]/g, "")
+    );
+
     for (const key of keys) {
-      if (
-        data[key] !== undefined &&
-        data[key] !== null &&
-        String(data[key]).trim() !== ""
-      ) {
-        return data[key];
+
+      const normalizedKey =
+        String(key)
+          .toLowerCase()
+          .replace(/[^a-z0-9]/g, "");
+
+      if (normalizedNames.includes(normalizedKey)) {
+
+        const value = data[key];
+
+        if (
+          value !== undefined &&
+          value !== null &&
+          String(value).trim() !== ""
+        ) {
+          return value;
+        }
       }
     }
 
     return "";
   };
 
-  return {
-    // -----------------------------------------
-    // SYSTEM
-    // -----------------------------------------
-    _key: taskId,
+  const task = {
 
-    // -----------------------------------------
+    // ==========================================
+    // SYSTEM
+    // ==========================================
+    _key: taskId,
+    dateKey,
+
+    // ==========================================
     // DRIVER
-    // -----------------------------------------
-    driverId: get(
+    // ==========================================
+    driverId: findValue(
       "agentId",
       "driverId",
       "driverID",
-      "DRIVERID"
+      "DRIVERID",
+      "driver"
     ),
 
-    driverName: get(
+    driverName: findValue(
       "agentName",
       "driverName",
+      "driverID",
       "DRIVERNAME"
     ),
 
-    // -----------------------------------------
-    // TASK DATE
-    // -----------------------------------------
-    dateKey: dateKey,
-
-    assignedDate: get(
-      "assignedDate",
-      "ASSIGNEDDATE"
-    ),
-
-    // -----------------------------------------
+    // ==========================================
     // CUSTOMER
-    // -----------------------------------------
-    CUSTOMERNAME: get(
+    // ==========================================
+    CUSTOMERNAME: findValue(
       "CUSTOMERNAME",
       "customerName",
-      "customername",
-      "CUSTOMER_NAME",
-      "CustomerName"
+      "customer_name",
+      "customer",
+      "name"
     ),
 
-    ADDRESS: get(
+    ADDRESS: findValue(
       "ADDRESS",
       "address",
-      "Address"
+      "customerAddress",
+      "customer_address"
     ),
 
-    ACCOUNTNUMBER: get(
+    ACCOUNTNUMBER: findValue(
       "ACCOUNTNUMBER",
       "accountNumber",
-      "accountnumber",
-      "ACCOUNT_NUMBER",
-      "AccountNumber"
+      "account_number",
+      "accountNo",
+      "account_no"
     ),
 
-    MRU: get(
+    MRU: findValue(
       "MRU",
-      "mru",
-      "Mru"
+      "mru"
     ),
 
-    METERNUMBER: get(
+    METERNUMBER: findValue(
       "METERNUMBER",
       "meterNumber",
-      "meternumber",
-      "METER_NUMBER",
-      "MeterNumber"
+      "meter_number",
+      "meterNo",
+      "meter_no"
     ),
 
-    DMZ: get(
+    DMZ: findValue(
       "DMZ",
-      "dmz",
-      "Dmz"
+      "dmz"
     ),
 
-    SEQUENCE: get(
+    SEQUENCE: findValue(
       "SEQUENCE",
       "sequence",
-      "Sequence"
+      "sequenceNumber",
+      "sequence_number",
+      "sequenceNo",
+      "sequence_no"
     ),
 
-    JOBTYPE: get(
+    JOBTYPE: findValue(
       "JOBTYPE",
       "jobType",
-      "jobtype",
-      "JOB_TYPE",
-      "JobType"
+      "job_type",
+      "job"
     ),
 
-    // -----------------------------------------
-    // LOCATION
-    // -----------------------------------------
-    LATITUDE: get(
+    // ==========================================
+    // GPS
+    // ==========================================
+    LATITUDE: findValue(
       "LATITUDE",
       "latitude",
-      "lat",
-      "Latitude"
+      "lat"
     ),
 
-    LONGITUDE: get(
+    LONGITUDE: findValue(
       "LONGITUDE",
       "longitude",
       "lng",
-      "lon",
-      "Longitude"
-    ),
-
-    // -----------------------------------------
-    // KEEP ALL ORIGINAL FIRESTORE DATA
-    // -----------------------------------------
-    ...data,
-
-    // -----------------------------------------
-    // IMPORTANT:
-    // Put normalized values AFTER ...data
-    // so they cannot be overwritten.
-    // -----------------------------------------
-    CUSTOMERNAME: get(
-      "CUSTOMERNAME",
-      "customerName",
-      "customername",
-      "CUSTOMER_NAME",
-      "CustomerName"
-    ),
-
-    ADDRESS: get(
-      "ADDRESS",
-      "address",
-      "Address"
-    ),
-
-    ACCOUNTNUMBER: get(
-      "ACCOUNTNUMBER",
-      "accountNumber",
-      "accountnumber",
-      "ACCOUNT_NUMBER",
-      "AccountNumber"
-    ),
-
-    MRU: get(
-      "MRU",
-      "mru",
-      "Mru"
-    ),
-
-    METERNUMBER: get(
-      "METERNUMBER",
-      "meterNumber",
-      "meternumber",
-      "METER_NUMBER",
-      "MeterNumber"
-    ),
-
-    DMZ: get(
-      "DMZ",
-      "dmz",
-      "Dmz"
-    ),
-
-    SEQUENCE: get(
-      "SEQUENCE",
-      "sequence",
-      "Sequence"
-    ),
-
-    JOBTYPE: get(
-      "JOBTYPE",
-      "jobType",
-      "jobtype",
-      "JOB_TYPE",
-      "JobType"
-    ),
-
-    LATITUDE: get(
-      "LATITUDE",
-      "latitude",
-      "lat",
-      "Latitude"
-    ),
-
-    LONGITUDE: get(
-      "LONGITUDE",
-      "longitude",
-      "lng",
-      "lon",
-      "Longitude"
+      "lon"
     )
   };
+
+  // ==========================================
+  // KEEP ORIGINAL FIRESTORE DATA
+  // ==========================================
+  Object.assign(task, data);
+
+  // ==========================================
+  // IMPORTANT:
+  // normalized values overwrite original
+  // ==========================================
+  task._key = taskId;
+  task.dateKey = dateKey;
+
+  task.driverId = findValue(
+    "agentId",
+    "driverId",
+    "driverID",
+    "DRIVERID",
+    "driver"
+  );
+
+  task.driverName = findValue(
+    "agentName",
+    "driverName",
+    "DRIVERNAME"
+  );
+
+  task.CUSTOMERNAME = findValue(
+    "CUSTOMERNAME",
+    "customerName",
+    "customer_name",
+    "customer",
+    "name"
+  );
+
+  task.ADDRESS = findValue(
+    "ADDRESS",
+    "address",
+    "customerAddress",
+    "customer_address"
+  );
+
+  task.ACCOUNTNUMBER = findValue(
+    "ACCOUNTNUMBER",
+    "accountNumber",
+    "account_number",
+    "accountNo",
+    "account_no"
+  );
+
+  task.MRU = findValue(
+    "MRU",
+    "mru"
+  );
+
+  task.METERNUMBER = findValue(
+    "METERNUMBER",
+    "meterNumber",
+    "meter_number",
+    "meterNo",
+    "meter_no"
+  );
+
+  task.DMZ = findValue(
+    "DMZ",
+    "dmz"
+  );
+
+  task.SEQUENCE = findValue(
+    "SEQUENCE",
+    "sequence",
+    "sequenceNumber",
+    "sequence_number",
+    "sequenceNo",
+    "sequence_no"
+  );
+
+  task.JOBTYPE = findValue(
+    "JOBTYPE",
+    "jobType",
+    "job_type",
+    "job"
+  );
+
+  task.LATITUDE = findValue(
+    "LATITUDE",
+    "latitude",
+    "lat"
+  );
+
+  task.LONGITUDE = findValue(
+    "LONGITUDE",
+    "longitude",
+    "lng",
+    "lon"
+  );
+
+  console.log("🔎 TASK FIELD KEYS:", keys);
+
+  console.log("🔄 NORMALIZED TASK:", {
+    _key: task._key,
+    driverId: task.driverId,
+    CUSTOMERNAME: task.CUSTOMERNAME,
+    ADDRESS: task.ADDRESS,
+    ACCOUNTNUMBER: task.ACCOUNTNUMBER,
+    MRU: task.MRU,
+    METERNUMBER: task.METERNUMBER,
+    DMZ: task.DMZ,
+    SEQUENCE: task.SEQUENCE,
+    JOBTYPE: task.JOBTYPE,
+    LATITUDE: task.LATITUDE,
+    LONGITUDE: task.LONGITUDE
+  });
+
+  return task;
+}
+
+// =====================================================
+// 🔧 MIGRATE EXISTING INDEXEDDB TASKS
+// =====================================================
+async function migrateIndexedDBTasks() {
+
+  const tasks =
+    await getTasksFromIndexedDB();
+
+  if (!tasks.length) {
+    console.log("🔧 No IndexedDB tasks to migrate.");
+    return;
+  }
+
+  console.log(
+    `🔧 Migrating ${tasks.length} IndexedDB tasks...`
+  );
+
+  const migrated = [];
+
+  for (const oldTask of tasks) {
+
+    const normalized =
+      normalizeFirestoreTask(
+        oldTask,
+        oldTask._key,
+        oldTask.dateKey
+      );
+
+    // Preserve local state
+    normalized.status =
+      oldTask.status || "PENDING";
+
+    normalized.workStatus =
+      oldTask.workStatus || "pending";
+
+    normalized.finalized =
+      oldTask.finalized || false;
+
+    normalized.exported =
+      oldTask.exported || false;
+
+    normalized.deliveryData =
+      oldTask.deliveryData || {};
+
+    normalized.createdAt =
+      oldTask.createdAt;
+
+    normalized.updatedAt =
+      oldTask.updatedAt;
+
+    migrated.push(normalized);
+  }
+
+  await saveTasksToIndexedDB(migrated);
+
+  console.log(
+    "✅ IndexedDB task migration complete."
+  );
+
+  // Show exactly what was saved
+  const verify =
+    await getTasksFromIndexedDB();
+
+  console.log(
+    "🔎 FIRST MIGRATED TASK:",
+    verify[0]
+  );
 }
 
 // =====================================================
@@ -2013,7 +2130,7 @@ async function loadDriverTasksFromFirestore(selectedDate) {
     const data = docSnap.data();
   
     console.log(
-      "🔥 FIRESTORE TASK:",
+      "🔥 FIRESTORE RAW TASK:",
       docSnap.id,
       data
     );
@@ -2025,37 +2142,7 @@ async function loadDriverTasksFromFirestore(selectedDate) {
         dateKey
       );
   
-    console.log(
-      "🔄 NORMALIZED TASK:",
-      normalizedTask
-    );
-  
     tasks.push(normalizedTask);
-  
-  });snapshot.forEach(docSnap => {
-  
-    const data = docSnap.data();
-  
-    console.log(
-      "🔥 FIRESTORE TASK:",
-      docSnap.id,
-      data
-    );
-  
-    const normalizedTask =
-      normalizeFirestoreTask(
-        data,
-        docSnap.id,
-        dateKey
-      );
-  
-    console.log(
-      "🔄 NORMALIZED TASK:",
-      normalizedTask
-    );
-  
-    tasks.push(normalizedTask);
-  
   });
 
   // Sort locally instead of using Firestore orderBy().
@@ -2268,35 +2355,32 @@ async function downloadTasksForDriver() {
 
     const localTasks =
       freshTasks.map(task => ({
-
+    
         ...task,
-
-        _key:
-          task._key,
-
+    
+        _key: task._key,
+    
         driverId:
-          task.agentId,
-
+          task.driverId || DRIVER_ID,
+    
         driverName:
-          task.agentName,
-
+          task.driverName || "",
+    
         dateKey:
           selectedDate.replace(/-/g, ""),
-
-        // Driver's local state
+    
         status:
           "PENDING",
-
-        // Firestore lifecycle state
+    
         workStatus:
           "pending",
-
+    
         finalized:
           false,
-
+    
         exported:
           false
-
+    
       }));
 
     // ==========================================
@@ -3164,7 +3248,24 @@ setTimeout(() => {
 await pruneOldTasks();
 
 // 🚀 INITIAL BOOT LOAD
-loadTasks();
+(async () => {
+
+  try {
+
+    await migrateIndexedDBTasks();
+
+  } catch (err) {
+
+    console.error(
+      "❌ IndexedDB migration failed:",
+      err
+    );
+
+  }
+
+  await loadTasks();
+
+})();
 
 
 function markTaskCompletedInCache(taskKey) {
