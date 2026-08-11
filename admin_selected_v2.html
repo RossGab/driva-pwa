@@ -308,7 +308,7 @@ button {
   
   <div style="display:flex;align-items:center;gap:14px;">
     <img src="./logo.jpg" class="admin-logo" alt="Company Logo">
-    <h1>Admin Dashboard <span class="version">V.R.0.0.3-WIP</span></h1>
+    <h1>Admin Dashboard <span class="version">V.R.0.0.4-WIP</span></h1>
   </div>
 
   <!-- 📅 DATE FILTER -->
@@ -1824,63 +1824,258 @@ window.cancelEdit = function (btn) {
   `;
 };
 
-window.loadTaskPhotos = async function (taskId, btn) {
-  if (btn.dataset.loaded === "1") return;
+  window.loadTaskPhotos = async function(taskId, btn) {
+
+  if (!btn) return;
+
+  if (btn.dataset.loaded === "1") {
+    return;
+  }
 
   btn.dataset.loaded = "1";
   btn.disabled = true;
   btn.innerText = "Loading photos…";
 
-  const snap = await getDoc(doc(db, TASK_COLLECTION, taskId));
-  if (!snap.exists()) {
-    btn.innerText = "No photos";
-    return;
-  }
+  try {
 
-  const t = snap.val();
-  const parent = btn.parentElement;
+    console.log(
+      "📸 Loading photos for task:",
+      taskId
+    );
 
-  // 🔹 Create container
-  const photoContainer = document.createElement("div");
-  photoContainer.style.cssText = `
-    display:grid;
-    grid-template-columns:repeat(auto-fill, minmax(120px,1fr));
-    gap:8px;
-    margin-top:10px;
-  `;
+    // ==========================================
+    // 1. GET TASK FROM FIRESTORE
+    // ==========================================
 
-  let hasPhoto = false;
+    const snap = await getDoc(
+      doc(
+        db,
+        TASK_COLLECTION,
+        taskId
+      )
+    );
 
-  [1,2,3].forEach(i => {
-    const url = t[`photo${i}Url`];
-    if (!url) return;
+    if (!snap.exists()) {
 
-    hasPhoto = true;
+      console.warn(
+        "⚠️ Task not found:",
+        taskId
+      );
 
-    const img = document.createElement("img");
-    img.src = url;
-    img.style.cssText = `
-      width:100%;
-      aspect-ratio:1/1;
-      object-fit:cover;
-      border-radius:6px;
-      border:2px solid #28a745;
-      cursor:pointer;
+      btn.innerText = "No task";
+      return;
+    }
+
+    // 🔥 FIRESTORE → data()
+    const t = snap.data();
+
+    console.log(
+      "📸 Firestore task photo data:",
+      {
+        taskId,
+        photo1Url: !!t.photo1Url,
+        photo2Url: !!t.photo2Url,
+        photo3Url: !!t.photo3Url
+      }
+    );
+
+    // ==========================================
+    // 2. CREATE PHOTO CONTAINER
+    // ==========================================
+
+    const photoContainer =
+      document.createElement("div");
+
+    photoContainer.style.cssText = `
+      display:grid;
+      grid-template-columns:repeat(
+        auto-fill,
+        minmax(140px, 1fr)
+      );
+      gap:10px;
+      margin-top:10px;
     `;
-    img.onclick = () => window.open(url, "_blank");
 
-    photoContainer.appendChild(img);
-  });
+    let hasPhoto = false;
 
-  if (!hasPhoto) {
-    btn.innerText = "No photos";
-    return;
+    // ==========================================
+    // 3. RENDER ALL AVAILABLE PHOTOS
+    // ==========================================
+
+    for (const i of [1, 2, 3]) {
+
+      const url =
+        t[`photo${i}Url`];
+
+      if (
+        !url ||
+        typeof url !== "string"
+      ) {
+        continue;
+      }
+
+      hasPhoto = true;
+
+      // -------------------------------
+      // Photo wrapper
+      // -------------------------------
+
+      const wrapper =
+        document.createElement("div");
+
+      wrapper.style.cssText = `
+        position:relative;
+        border:2px solid #28a745;
+        border-radius:8px;
+        overflow:hidden;
+        background:#f5f5f5;
+      `;
+
+      // -------------------------------
+      // Image
+      // -------------------------------
+
+      const img =
+        document.createElement("img");
+
+      img.src = url;
+
+      img.alt =
+        `Task ${taskId} Photo ${i}`;
+
+      img.loading = "lazy";
+
+      img.style.cssText = `
+        display:block;
+        width:100%;
+        aspect-ratio:1/1;
+        object-fit:cover;
+        cursor:pointer;
+      `;
+
+      // -------------------------------
+      // Photo label
+      // -------------------------------
+
+      const label =
+        document.createElement("div");
+
+      label.innerText =
+        `Photo ${i}`;
+
+      label.style.cssText = `
+        padding:5px;
+        text-align:center;
+        font-size:12px;
+        font-weight:bold;
+        background:#fff;
+      `;
+
+      // -------------------------------
+      // Open full image
+      // -------------------------------
+
+      img.onclick = () => {
+
+        window.open(
+          url,
+          "_blank",
+          "noopener,noreferrer"
+        );
+
+      };
+
+      // -------------------------------
+      // Image error
+      // -------------------------------
+
+      img.onerror = () => {
+
+        console.error(
+          `❌ Photo ${i} failed to load:`,
+          url
+        );
+
+        img.style.display =
+          "none";
+
+        const error =
+          document.createElement("div");
+
+        error.innerText =
+          `❌ Photo ${i} unavailable`;
+
+        error.style.cssText = `
+          padding:20px 5px;
+          text-align:center;
+          color:#b00020;
+          font-size:12px;
+        `;
+
+        wrapper.insertBefore(
+          error,
+          label
+        );
+      };
+
+      wrapper.appendChild(img);
+      wrapper.appendChild(label);
+
+      photoContainer.appendChild(
+        wrapper
+      );
+    }
+
+    // ==========================================
+    // 4. NO PHOTOS
+    // ==========================================
+
+    if (!hasPhoto) {
+
+      btn.innerText =
+        "No photos";
+
+      btn.dataset.loaded =
+        "0";
+
+      return;
+    }
+
+    // ==========================================
+    // 5. INSERT AFTER BUTTON
+    // ==========================================
+
+    btn.insertAdjacentElement(
+      "afterend",
+      photoContainer
+    );
+
+    btn.innerText =
+      "Photos Loaded";
+
+    console.log(
+      "✅ Photos loaded:",
+      taskId
+    );
+
+  } catch (error) {
+
+    console.error(
+      "❌ Failed to load task photos:",
+      error
+    );
+
+    // Allow user to try again
+    btn.dataset.loaded =
+      "0";
+
+    btn.disabled =
+      false;
+
+    btn.innerText =
+      "📸 Load Photos";
+
   }
-
-  // 🔥 Append instead of replacing
-  btn.insertAdjacentElement("afterend", photoContainer);
-
-  btn.innerText = "Photos Loaded";
 };
 
   window.saveEdit = async function (btn) {
