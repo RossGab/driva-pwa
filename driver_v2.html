@@ -297,7 +297,7 @@ import {
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "V.R.0.0.7";
+const VERSION = "V.R.0.0.8";
 const BILLING_CACHE = {};
 window.BILLING_CACHE = BILLING_CACHE;
 const DRIVER_UI_CACHE = {};
@@ -3303,7 +3303,7 @@ window.handleDeliveryMethod = async function(taskKey, jobType, method) {
           <div class="delivery-fields">
             <label>${field.label}${req}</label>
             <textarea data-key="${key}"
-              oninput="window.BILLING_CACHE['${taskKey}']['${key}'] = this.value"></textarea>
+              oninput="window.BILLING_CACHE['${taskKey}']['${key}'] = this.value"></textarea>;
           </div>`;
       } else {
         html += `
@@ -3340,10 +3340,20 @@ window.handleDeliveryMethod = async function(taskKey, jobType, method) {
 };
 
 window.handleRadioTrigger = async function(taskKey, jobType, method, radioKey) {
+
+  if (!BILLING_CACHE[taskKey]) {
+    BILLING_CACHE[taskKey] = {};
+  }
+
   BILLING_CACHE[taskKey].deliverytype_2nd = radioKey;
+
   const cfg = await loadDriverUI(jobType);
-  const radioBlock = cfg?.[method]?.fields?.[radioKey];
-  const box = document.getElementById(`sub_${taskKey}`);
+
+  const radioBlock =
+    cfg?.[method]?.fields?.[radioKey];
+
+  const box =
+    document.getElementById(`sub_${taskKey}`);
 
   if (!box) return;
 
@@ -3354,29 +3364,76 @@ window.handleRadioTrigger = async function(taskKey, jobType, method, radioKey) {
   syncDynamicFields(taskKey);
 
   // ❌ No children → STOP
-  if (!radioBlock?.fields?._order?.length) return;
+  if (!radioBlock?.fields?._order?.length) {
+    return;
+  }
 
   let html = `<div class="delivery-fields">`;
 
   for (const key of radioBlock.fields._order) {
-    const field = radioBlock.fields.options[key];
-    const req = field.required ? " *" : "";
 
+    const field =
+      radioBlock.fields.options[key];
+
+    if (!field) continue;
+
+    const req =
+      field.required ? " *" : "";
+
+    // =========================
+    // TEXTAREA
+    // =========================
     if (field.type === "textarea") {
+
       html += `
         <label>${field.label}${req}</label>
-        <textarea data-key="${key}"
-          oninput="window.BILLING_CACHE['${taskKey}']['${key}'] = this.value"></textarea>
+
+        <textarea
+          data-key="${key}"
+          oninput="window.BILLING_CACHE['${taskKey}']['${key}'] = this.value"
+        ></textarea>
+      `;
+
+    // =========================
+    // TEXT INPUT
+    // =========================
     } else {
+
       html += `
         <label>${field.label}${req}</label>
-        <input type="text" data-key="${key}"
-          oninput="window.BILLING_CACHE['${taskKey}']['${key}'] = this.value">
+
+        <input
+          type="text"
+          data-key="${key}"
+          oninput="window.BILLING_CACHE['${taskKey}']['${key}'] = this.value"
+        >
+      `;
     }
   }
 
   html += `</div>`;
+
   box.innerHTML = html;
+
+  // 🔥 RESTORE PREVIOUS VALUES
+  const saved = BILLING_CACHE[taskKey] || {};
+
+  box.querySelectorAll("input, textarea").forEach(el => {
+
+    const key =
+      el.getAttribute("data-key");
+
+    if (key && saved[key] !== undefined) {
+      el.value = saved[key];
+    }
+
+  });
+
+  // 🔥 SAVE FORM STATE
+  saveFormCache({
+    ...loadFormCache(),
+    [taskKey]: BILLING_CACHE[taskKey]
+  });
 };
 
 async function exportTasksToFile() {
