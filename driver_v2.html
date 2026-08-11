@@ -291,13 +291,15 @@ import {
   getDocs,
   getCountFromServer,
   doc as fsDoc,
+  getDoc,
+  updateDoc,
   writeBatch,
   serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "V.R.0.0.8";
+const VERSION = "V.R.0.0.9";
 const BILLING_CACHE = {};
 window.BILLING_CACHE = BILLING_CACHE;
 const DRIVER_UI_CACHE = {};
@@ -961,30 +963,105 @@ if (allUploaded) {
   // 🔎 VERIFY FIREBASE REALLY HAS THE PHOTOS
   let data = {};
 
-  for (let i = 0; i < 3; i++) {
-    const verify = await get(ref(db, `tasks/${task._key}`));
-    data = verify.val() || {};
-  
-    const allPhotosExist = related.every(p =>
-      data[`photo${p.photoIndex}Url`]
+  // 🔎 VERIFY FIRESTORE REALLY HAS THE TASK
+let data = {};
+
+for (let i = 0; i < 3; i++) {
+
+  const verifySnap =
+    await getDoc(
+      fsDoc(
+        firestore,
+        "TASK",
+        task._key
+      )
     );
-  
-    if (allPhotosExist && data.status === "COMPLETED") {
-      break; // ✅ confirmed
-    }
-  
-    await new Promise(r => setTimeout(r, 500)); // ⏳ wait 0.5s
+
+  if (verifySnap.exists()) {
+    data = verifySnap.data();
+  } else {
+    data = {};
   }
+
+  const allPhotosExist =
+    related.every(p =>
+      data[
+        `photo${p.photoIndex}Url`
+      ]
+    );
+
+  const completed =
+    data.workStatus === "completed" &&
+    data.status === "COMPLETED";
+
+  console.log(
+    "🔎 Firestore sync verification:",
+    {
+      taskKey: task._key,
+      allPhotosExist,
+      workStatus: data.workStatus,
+      status: data.status
+    }
+  );
+
+  if (
+    allPhotosExist &&
+    completed
+  ) {
+    break;
+  }
+
+  await new Promise(
+    r => setTimeout(r, 500)
+  );
+}
 
   let verified = true;
 
-  for (const p of related) {
-    const key = `photo${p.photoIndex}Url`;
-    if (!data[key]) {
-      verified = false;
-      break;
-    }
+// Verify all photos
+for (const p of related) {
+
+  const key =
+    `photo${p.photoIndex}Url`;
+
+  if (!data[key]) {
+
+    console.warn(
+      "❌ Missing Firestore photo:",
+      key
+    );
+
+    verified = false;
+    break;
   }
+}
+
+// Verify completed status
+if (
+  data.workStatus !==
+  "completed"
+) {
+
+  console.warn(
+    "❌ Firestore workStatus is not completed:",
+    data.workStatus
+  );
+
+  verified = false;
+}
+
+if (
+  data.status !==
+  "COMPLETED"
+) {
+
+  console.warn(
+    "❌ Firestore status is not COMPLETED:",
+    data.status
+  );
+
+  verified = false;
+}
 
   if (!verified) {
     console.warn("Verification failed, skipping delete");
@@ -1694,39 +1771,277 @@ async function uploadNow(
   isLastPhoto
 ) {
 
-  const taskSnap = await get(ref(db, `tasks/${taskKey}`));
-  const task = taskSnap.val() || {};
+  console.log("⬆️ Syncing task:", {
+    taskKey,
+    photoIndex,
+    isLastPhoto
+  });
 
-  if (task[`photo${photoIndex}Url`]) {
-    console.log("⚠️ Already uploaded — skipping", taskKey, photoIndex);
+  // ==========================================
+  // 1. GET TASK FROM FIRESTORE
+  // ==========================================
+
+  const taskRef = fsDoc(
+    firestore,
+    "TASK",
+    taskKey
+  );
+
+  const taskSnap = await getDoc(taskRef);
+
+  if (!taskSnap.exists()) {
+
+    console.error(
+      "❌ Firestore TASK not found:",
+      taskKey
+    );
+
+    return false;
+  }
+
+  const task = taskSnap.data();
+
+  console.log(
+    "🔥 Firestore task found:",
+    task
+  );
+
+  // ==========================================
+  // 2. PHOTO ALREADY UPLOADED?
+  // ==========================================
+
+  if (
+    task[`photo${photoIndex}Url`]
+  ) {
+
+    console.log(
+      "⚠️ Photo already uploaded — skipping:",
+      taskKey,
+      photoIndex
+    );
+
     return true;
   }
 
-  const filename = `${taskKey}_photo_${photoIndex}.jpg`;
+  // ==========================================
+  // 3. UPLOAD PHOTO TO STORAGE
+  // ==========================================
 
-  const imgRef = sRef(storage, `tasks/${taskKey}/${filename}`);
+  const filename =
+    `${taskKey}_photo_${photoIndex}.jpg`;
+
+  const imgRef =
+    sRef(
+      storage,
+      `tasks/${taskKey}/${filename}`
+    );
 
   try {
-    await uploadBytes(imgRef, blob);
-  } catch {
+
+    await uploadBytes(
+      imgRef,
+      blob
+    );
+
+  } catch (err) {
+
+    console.error(
+      "❌ Storage upload failed:",
+      err
+    );
+
     return false;
-  }          // ✔ storage
-  const url = await getDownloadURL(imgRef); // ✔ confirm
+  }
+
+  // ==========================================
+  // 4. GET DOWNLOAD URL
+  // ==========================================
+
+  let url;
+
+  try {
+
+    url =
+      await getDownloadURL(
+        imgRef
+      );
+
+  } catch (err) {
+
+    console.error(
+      "❌ Failed to get download URL:",
+      err
+    );
+
+    return false;
+  }
+
+  // ==========================================
+  // 5. BUILD FIRESTORE UPDATE
+  // ==========================================
 
   const updatePayload = {
-  ...(isLastPhoto ? { status: "COMPLETED", forceReopen: false } : {}),
-  ...(deliveryData || {}), // 🔥 SAVE ALL DRIVER INPUT DATA
-  [`photo${photoIndex}Url`]: url,
-  [`photo${photoIndex}Filename`]: filename,
-  [`photo${photoIndex}TakenAt`]: takenAt,
-  uploadedAt: new Date().toISOString()
-};
 
-  await update(ref(db, `tasks/${taskKey}`), updatePayload); // ✔ realtime DB
+    // Save driver-entered fields
+    ...(deliveryData || {}),
 
-  saveToGallery(blob, filename); // only after both succeed
+    // Photo
+    [`photo${photoIndex}Url`]:
+      url,
 
-  return true; // success signal
+    [`photo${photoIndex}Filename`]:
+      filename,
+
+    [`photo${photoIndex}TakenAt`]:
+      takenAt,
+
+    // GPS
+    ...(photoGPS
+      ? {
+          [`photo${photoIndex}GPS`]:
+            photoGPS
+        }
+      : {}),
+
+    uploadedAt:
+      serverTimestamp()
+  };
+
+  // ==========================================
+  // 6. LAST PHOTO = COMPLETED
+  // ==========================================
+
+  if (isLastPhoto) {
+
+    updatePayload.workStatus =
+      "completed";
+
+    updatePayload.status =
+      "COMPLETED";
+
+    updatePayload.forceReopen =
+      false;
+
+    updatePayload.completedAt =
+      serverTimestamp();
+
+    updatePayload.completedBy =
+      DRIVER_ID;
+  }
+
+  console.log(
+    "🔥 Updating Firestore TASK:",
+    taskKey,
+    updatePayload
+  );
+
+  // ==========================================
+  // 7. UPDATE FIRESTORE
+  // ==========================================
+
+  try {
+
+    await updateDoc(
+      taskRef,
+      updatePayload
+    );
+
+  } catch (err) {
+
+    console.error(
+      "❌ Firestore TASK update failed:",
+      err
+    );
+
+    return false;
+  }
+
+  // ==========================================
+  // 8. VERIFY FIRESTORE IMMEDIATELY
+  // ==========================================
+
+  const verifySnap =
+    await getDoc(taskRef);
+
+  if (!verifySnap.exists()) {
+
+    console.error(
+      "❌ Firestore verification failed:",
+      taskKey
+    );
+
+    return false;
+  }
+
+  const verifyData =
+    verifySnap.data();
+
+  console.log(
+    "🔎 FIRESTORE AFTER SYNC:",
+    {
+      taskKey,
+      workStatus:
+        verifyData.workStatus,
+
+      status:
+        verifyData.status,
+
+      photo:
+        verifyData[
+          `photo${photoIndex}Url`
+        ]
+    }
+  );
+
+  // ==========================================
+  // 9. VERIFY COMPLETED STATUS
+  // ==========================================
+
+  if (isLastPhoto) {
+
+    if (
+      verifyData.workStatus !==
+      "completed"
+    ) {
+
+      console.error(
+        "❌ Firestore workStatus is NOT completed:",
+        verifyData.workStatus
+      );
+
+      return false;
+    }
+
+    if (
+      verifyData.status !==
+      "COMPLETED"
+    ) {
+
+      console.error(
+        "❌ Firestore status is NOT COMPLETED:",
+        verifyData.status
+      );
+
+      return false;
+    }
+  }
+
+  // ==========================================
+  // 10. SAVE TO GALLERY
+  // ==========================================
+
+  saveToGallery(
+    blob,
+    filename
+  );
+
+  console.log(
+    "✅ Firestore sync successful:",
+    taskKey,
+    photoIndex
+  );
+
+  return true;
 }
 
 async function preloadDriverUIConfig(tasks) {
