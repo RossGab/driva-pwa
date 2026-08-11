@@ -297,7 +297,7 @@ import {
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "V.R.0.0.4";
+const VERSION = "V.R.0.0.5";
 const BILLING_CACHE = {};
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
@@ -1742,6 +1742,217 @@ checkStorageQuota();
 setInterval(checkStorageQuota, 60_000); // every 60 seconds
 
 // =====================================================
+// 🔄 NORMALIZE FIRESTORE TASK → DRIVER TASK MODEL
+// =====================================================
+function normalizeFirestoreTask(data, taskId, dateKey) {
+
+  const get = (...keys) => {
+    for (const key of keys) {
+      if (
+        data[key] !== undefined &&
+        data[key] !== null &&
+        String(data[key]).trim() !== ""
+      ) {
+        return data[key];
+      }
+    }
+
+    return "";
+  };
+
+  return {
+    // -----------------------------------------
+    // SYSTEM
+    // -----------------------------------------
+    _key: taskId,
+
+    // -----------------------------------------
+    // DRIVER
+    // -----------------------------------------
+    driverId: get(
+      "agentId",
+      "driverId",
+      "driverID",
+      "DRIVERID"
+    ),
+
+    driverName: get(
+      "agentName",
+      "driverName",
+      "DRIVERNAME"
+    ),
+
+    // -----------------------------------------
+    // TASK DATE
+    // -----------------------------------------
+    dateKey: dateKey,
+
+    assignedDate: get(
+      "assignedDate",
+      "ASSIGNEDDATE"
+    ),
+
+    // -----------------------------------------
+    // CUSTOMER
+    // -----------------------------------------
+    CUSTOMERNAME: get(
+      "CUSTOMERNAME",
+      "customerName",
+      "customername",
+      "CUSTOMER_NAME",
+      "CustomerName"
+    ),
+
+    ADDRESS: get(
+      "ADDRESS",
+      "address",
+      "Address"
+    ),
+
+    ACCOUNTNUMBER: get(
+      "ACCOUNTNUMBER",
+      "accountNumber",
+      "accountnumber",
+      "ACCOUNT_NUMBER",
+      "AccountNumber"
+    ),
+
+    MRU: get(
+      "MRU",
+      "mru",
+      "Mru"
+    ),
+
+    METERNUMBER: get(
+      "METERNUMBER",
+      "meterNumber",
+      "meternumber",
+      "METER_NUMBER",
+      "MeterNumber"
+    ),
+
+    DMZ: get(
+      "DMZ",
+      "dmz",
+      "Dmz"
+    ),
+
+    SEQUENCE: get(
+      "SEQUENCE",
+      "sequence",
+      "Sequence"
+    ),
+
+    JOBTYPE: get(
+      "JOBTYPE",
+      "jobType",
+      "jobtype",
+      "JOB_TYPE",
+      "JobType"
+    ),
+
+    // -----------------------------------------
+    // LOCATION
+    // -----------------------------------------
+    LATITUDE: get(
+      "LATITUDE",
+      "latitude",
+      "lat",
+      "Latitude"
+    ),
+
+    LONGITUDE: get(
+      "LONGITUDE",
+      "longitude",
+      "lng",
+      "lon",
+      "Longitude"
+    ),
+
+    // -----------------------------------------
+    // KEEP ALL ORIGINAL FIRESTORE DATA
+    // -----------------------------------------
+    ...data,
+
+    // -----------------------------------------
+    // IMPORTANT:
+    // Put normalized values AFTER ...data
+    // so they cannot be overwritten.
+    // -----------------------------------------
+    CUSTOMERNAME: get(
+      "CUSTOMERNAME",
+      "customerName",
+      "customername",
+      "CUSTOMER_NAME",
+      "CustomerName"
+    ),
+
+    ADDRESS: get(
+      "ADDRESS",
+      "address",
+      "Address"
+    ),
+
+    ACCOUNTNUMBER: get(
+      "ACCOUNTNUMBER",
+      "accountNumber",
+      "accountnumber",
+      "ACCOUNT_NUMBER",
+      "AccountNumber"
+    ),
+
+    MRU: get(
+      "MRU",
+      "mru",
+      "Mru"
+    ),
+
+    METERNUMBER: get(
+      "METERNUMBER",
+      "meterNumber",
+      "meternumber",
+      "METER_NUMBER",
+      "MeterNumber"
+    ),
+
+    DMZ: get(
+      "DMZ",
+      "dmz",
+      "Dmz"
+    ),
+
+    SEQUENCE: get(
+      "SEQUENCE",
+      "sequence",
+      "Sequence"
+    ),
+
+    JOBTYPE: get(
+      "JOBTYPE",
+      "jobType",
+      "jobtype",
+      "JOB_TYPE",
+      "JobType"
+    ),
+
+    LATITUDE: get(
+      "LATITUDE",
+      "latitude",
+      "lat",
+      "Latitude"
+    ),
+
+    LONGITUDE: get(
+      "LONGITUDE",
+      "longitude",
+      "lng",
+      "lon",
+      "Longitude"
+    )
+  };
+}
+
+// =====================================================
 // 🔥 GET TASKS WAITING FOR DOWNLOAD
 // =====================================================
 async function loadDriverTasksFromFirestore(selectedDate) {
@@ -1799,17 +2010,52 @@ async function loadDriverTasksFromFirestore(selectedDate) {
 
   snapshot.forEach(docSnap => {
 
-    const data =
-      docSnap.data();
-
-    tasks.push({
-      _key: docSnap.id,
-      ...data,
-
-      // Local IndexedDB date
-      dateKey: dateKey
-    });
-
+    const data = docSnap.data();
+  
+    console.log(
+      "🔥 FIRESTORE TASK:",
+      docSnap.id,
+      data
+    );
+  
+    const normalizedTask =
+      normalizeFirestoreTask(
+        data,
+        docSnap.id,
+        dateKey
+      );
+  
+    console.log(
+      "🔄 NORMALIZED TASK:",
+      normalizedTask
+    );
+  
+    tasks.push(normalizedTask);
+  
+  });snapshot.forEach(docSnap => {
+  
+    const data = docSnap.data();
+  
+    console.log(
+      "🔥 FIRESTORE TASK:",
+      docSnap.id,
+      data
+    );
+  
+    const normalizedTask =
+      normalizeFirestoreTask(
+        data,
+        docSnap.id,
+        dateKey
+      );
+  
+    console.log(
+      "🔄 NORMALIZED TASK:",
+      normalizedTask
+    );
+  
+    tasks.push(normalizedTask);
+  
   });
 
   // Sort locally instead of using Firestore orderBy().
