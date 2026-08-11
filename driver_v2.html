@@ -299,7 +299,7 @@ import {
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "V.R.0.0.9";
+const VERSION = "V.R.0.0.10";
 const BILLING_CACHE = {};
 window.BILLING_CACHE = BILLING_CACHE;
 const DRIVER_UI_CACHE = {};
@@ -958,126 +958,130 @@ for (const task of completed) {
     }
 
     // ✅ DELETE ONLY AFTER SUCCESS
-if (allUploaded) {
-
-  // 🔎 VERIFY FIREBASE REALLY HAS THE PHOTOS
-  let data = {};
-
-  // 🔎 VERIFY FIRESTORE REALLY HAS THE TASK
-let data = {};
-
-for (let i = 0; i < 3; i++) {
-
-  const verifySnap =
-    await getDoc(
-      fsDoc(
-        firestore,
-        "TASK",
-        task._key
-      )
-    );
-
-  if (verifySnap.exists()) {
-    data = verifySnap.data();
-  } else {
-    data = {};
-  }
-
-  const allPhotosExist =
-    related.every(p =>
-      data[
-        `photo${p.photoIndex}Url`
-      ]
-    );
-
-  const completed =
-    data.workStatus === "completed" &&
-    data.status === "COMPLETED";
-
-  console.log(
-    "🔎 Firestore sync verification:",
-    {
-      taskKey: task._key,
-      allPhotosExist,
-      workStatus: data.workStatus,
-      status: data.status
+    if (allUploaded) {
+    
+      // 🔎 VERIFY FIRESTORE REALLY HAS THE TASK
+      let data = {};
+    
+      for (let i = 0; i < 3; i++) {
+    
+        const verifySnap =
+          await getDoc(
+            fsDoc(
+              firestore,
+              "TASK",
+              task._key
+            )
+          );
+    
+        if (verifySnap.exists()) {
+          data = verifySnap.data();
+        } else {
+          data = {};
+        }
+    
+        const allPhotosExist =
+          related.every(p =>
+            data[
+              `photo${p.photoIndex}Url`
+            ]
+          );
+    
+        const completed =
+          data.workStatus === "completed" &&
+          data.status === "COMPLETED";
+    
+        console.log(
+          "🔎 Firestore sync verification:",
+          {
+            taskKey: task._key,
+            allPhotosExist,
+            workStatus: data.workStatus,
+            status: data.status
+          }
+        );
+    
+        if (
+          allPhotosExist &&
+          completed
+        ) {
+          break;
+        }
+    
+        await new Promise(
+          r => setTimeout(r, 500)
+        );
+      }
+    
+      let verified = true;
+    
+      // Verify all photos
+      for (const p of related) {
+    
+        const key =
+          `photo${p.photoIndex}Url`;
+    
+        if (!data[key]) {
+    
+          console.warn(
+            "❌ Missing Firestore photo:",
+            key
+          );
+    
+          verified = false;
+          break;
+        }
+      }
+    
+      // Verify completed status
+      if (
+        data.workStatus !==
+        "completed"
+      ) {
+    
+        console.warn(
+          "❌ Firestore workStatus is not completed:",
+          data.workStatus
+        );
+    
+        verified = false;
+      }
+    
+      if (
+        data.status !==
+        "COMPLETED"
+      ) {
+    
+        console.warn(
+          "❌ Firestore status is not COMPLETED:",
+          data.status
+        );
+    
+        verified = false;
+      }
+    
+      if (!verified) {
+        console.warn(
+          "Verification failed, skipping delete"
+        );
+        continue;
+      }
+    
+      // ✅ DELETE ONLY IF VERIFIED
+      for (const p of related) {
+        await deletePhotoFromDB(p.id);
+      }
+    
+      await deleteTaskFromIndexedDB(task._key);
+    
+      UPLOAD_QUEUE_COUNT =
+        Math.max(
+          0,
+          UPLOAD_QUEUE_COUNT - 1
+        );
+    
+      updateUploadCounter();
     }
-  );
-
-  if (
-    allPhotosExist &&
-    completed
-  ) {
-    break;
-  }
-
-  await new Promise(
-    r => setTimeout(r, 500)
-  );
-}
-
-  let verified = true;
-
-// Verify all photos
-for (const p of related) {
-
-  const key =
-    `photo${p.photoIndex}Url`;
-
-  if (!data[key]) {
-
-    console.warn(
-      "❌ Missing Firestore photo:",
-      key
-    );
-
-    verified = false;
-    break;
-  }
-}
-
-// Verify completed status
-if (
-  data.workStatus !==
-  "completed"
-) {
-
-  console.warn(
-    "❌ Firestore workStatus is not completed:",
-    data.workStatus
-  );
-
-  verified = false;
-}
-
-if (
-  data.status !==
-  "COMPLETED"
-) {
-
-  console.warn(
-    "❌ Firestore status is not COMPLETED:",
-    data.status
-  );
-
-  verified = false;
-}
-
-  if (!verified) {
-    console.warn("Verification failed, skipping delete");
-    continue;
-  }
-
-  // ✅ DELETE ONLY IF VERIFIED
-  for (const p of related) {
-    await deletePhotoFromDB(p.id);
-  }
-
-  await deleteTaskFromIndexedDB(task._key);
-
-  UPLOAD_QUEUE_COUNT = Math.max(0, UPLOAD_QUEUE_COUNT - 1);
-  updateUploadCounter();
-}
   }
 
   alert("✅ Sync complete.");
