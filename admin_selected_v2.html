@@ -308,7 +308,7 @@ button {
   
   <div style="display:flex;align-items:center;gap:14px;">
     <img src="./logo.jpg" class="admin-logo" alt="Company Logo">
-    <h1>Admin Dashboard <span class="version">V.R.0.0.1-WIP</span></h1>
+    <h1>Admin Dashboard <span class="version">V.R.0.0.2-WIP</span></h1>
   </div>
 
   <!-- 📅 DATE FILTER -->
@@ -975,86 +975,268 @@ function renderCompletedPhotos(t) {
   `;
 }
 
+function formatFirestoreDate(value) {
+
+  if (!value) {
+    return "";
+  }
+
+  try {
+
+    // Firestore Timestamp
+    if (
+      typeof value === "object" &&
+      typeof value.toDate === "function"
+    ) {
+      return value
+        .toDate()
+        .toLocaleString("en-PH", {
+          timeZone: "Asia/Manila"
+        });
+    }
+
+    // JS Date
+    if (value instanceof Date) {
+      return value.toLocaleString(
+        "en-PH",
+        {
+          timeZone: "Asia/Manila"
+        }
+      );
+    }
+
+    // ISO/string timestamp
+    return new Date(value)
+      .toLocaleString(
+        "en-PH",
+        {
+          timeZone: "Asia/Manila"
+        }
+      );
+
+  } catch (e) {
+
+    console.warn(
+      "⚠️ Unable to format date:",
+      value
+    );
+
+    return String(value);
+  }
+}
 
 function renderDynamicCompletedFields(t) {
-  if (!t.deliveryType || !t.JOBTYPE) return "";
+
+  if (!t || !t.deliveryType || !t.JOBTYPE) {
+    return "";
+  }
+
+  // ==========================================
+  // GET DELIVERY METHOD CONFIGURATION
+  // ==========================================
+
+  const jobConfig =
+    window.DRIVER_UI_CONFIG?.[t.JOBTYPE];
+
+  const deliveryMethods =
+    jobConfig?.deliveryMethods;
 
   const cfg =
-    window.DRIVER_UI_CONFIG?.[t.JOBTYPE]
-      ?.deliveryMethods
-      ?.[t.deliveryType];
+    deliveryMethods?.[t.deliveryType];
 
-  if (!cfg || !cfg._order || !cfg.fields) return "";
+  if (
+    !cfg ||
+    !cfg.fields ||
+    !Array.isArray(cfg._order)
+  ) {
+    console.warn(
+      "⚠️ No delivery configuration found:",
+      {
+        jobType: t.JOBTYPE,
+        deliveryType: t.deliveryType
+      }
+    );
+
+    return "";
+  }
 
   let html = `
-    <div class="task-form full" style="margin-top:12px">
+    <div
+      class="task-form full"
+      style="margin-top:12px"
+    >
       <b>DELIVERY DETAILS</b>
   `;
 
-  /* ===============================
-     1️⃣ NORMAL INPUT FIELDS
-     =============================== */
+  // ==========================================
+  // RENDER VALUE HELPER
+  // ==========================================
 
-  for (const key of cfg._order) {
-    const field = cfg.fields[key];
-    if (!field) continue;
+  function renderField(
+    fieldKey,
+    field,
+    value
+  ) {
 
-    if (field.type === "radio") continue; // skip radio here
+    if (!field) return "";
 
-    const value = t[key] || "";
+    const label =
+      field.label || fieldKey;
+
+    const safeValue =
+      value === null ||
+      value === undefined
+        ? ""
+        : String(value);
 
     if (field.type === "textarea") {
-      html += `
-        <label class="full">${field.label}</label>
-        <textarea class="full" disabled>${value}</textarea>
+
+      return `
+        <label class="full">
+          ${label}
+        </label>
+
+        <textarea
+          class="full"
+          disabled
+        >${safeValue}</textarea>
       `;
-    } else {
-      html += `
-        <label class="full">${field.label}</label>
-        <input class="full" value="${value}" disabled>
-      `;
+
     }
-  }
 
-  /* ===============================
-     2️⃣ RADIO RESULT + CHILD FIELDS
-     =============================== */
+    return `
+      <label class="full">
+        ${label}
+      </label>
 
-  const selected = t.result;
-
-  if (selected && cfg.fields[selected]) {
-    const radioField = cfg.fields[selected];
-
-    html += `
-      <label class="full">Result</label>
-      <input class="full" value="${radioField.label}" disabled>
+      <input
+        class="full"
+        value="${safeValue.replace(/"/g, "&quot;")}"
+        disabled
+      >
     `;
-
-    const children = radioField.fields?.options;
-
-    if (children && radioField.fields?._order?.length) {
-      for (const childKey of radioField.fields._order) {
-        const child = children[childKey];
-        if (!child) continue;
-
-        const value = t[childKey] || "";
-
-        if (child.type === "textarea") {
-          html += `
-            <label class="full">${child.label}</label>
-            <textarea class="full" disabled>${value}</textarea>
-          `;
-        } else {
-          html += `
-            <label class="full">${child.label}</label>
-            <input class="full" value="${value}" disabled>
-          `;
-        }
-      }
-    }
   }
+
+  // ==========================================
+  // 1️⃣ DELIVERY METHOD FIELDS
+  // ==========================================
+
+  for (
+    const fieldKey of cfg._order
+  ) {
+
+    const field =
+      cfg.fields[fieldKey];
+
+    if (!field) continue;
+
+    // Radio fields are handled separately
+    if (field.type === "radio") {
+
+      const selectedValue =
+        t[fieldKey];
+
+      // If this radio itself contains
+      // child fields, render the selected
+      // child configuration dynamically.
+
+      if (
+        selectedValue &&
+        field.fields
+      ) {
+
+        const selectedOption =
+          field.fields.options?.[
+            selectedValue
+          ];
+
+        if (selectedOption) {
+
+          html += `
+            <label class="full">
+              ${field.label || fieldKey}
+            </label>
+
+            <input
+              class="full"
+              value="${(
+                selectedOption.label ||
+                selectedValue
+              ).replace(/"/g, "&quot;")}"
+              disabled
+            >
+          `;
+
+          const childOrder =
+            field.fields._order || [];
+
+          for (
+            const childKey of childOrder
+          ) {
+
+            const childField =
+              field.fields.options?.[
+                childKey
+              ];
+
+            if (!childField) continue;
+
+            html += renderField(
+              childKey,
+              childField,
+              t[childKey]
+            );
+          }
+        }
+
+      }
+
+      continue;
+    }
+
+    // ========================================
+    // NORMAL TEXT / TEXTAREA FIELD
+    // ========================================
+
+    html += renderField(
+      fieldKey,
+      field,
+      t[fieldKey]
+    );
+  }
+
+  // ==========================================
+  // 2️⃣ COMPLETION METADATA
+  // ==========================================
+
+  html += `
+    <label class="full">
+      Completed By
+    </label>
+
+    <input
+      class="full"
+      value="${(
+        t.completedBy || ""
+      ).replace(/"/g, "&quot;")}"
+      disabled
+    >
+
+    <label class="full">
+      Completed At
+    </label>
+
+    <input
+      class="full"
+      value="${formatFirestoreDate(
+        t.completedAt
+      )}"
+      disabled
+    >
+  `;
 
   html += `</div>`;
+
   return html;
 }
   
