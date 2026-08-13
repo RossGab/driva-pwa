@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Task Report</title>
+
+<!-- SheetJS -->
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+<style>
+body {
+  font-family: Arial, sans-serif;
+  background:#f3f3f3;
+  padding:12px;
+}
+
+h2 {
+  text-align:center;
+}
+
+.filters {
+  background:#fff;
+  padding:12px;
+  border-radius:8px;
+  box-shadow:0 0 4px rgba(0,0,0,.1);
+  margin-bottom:12px;
+  display:grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap:10px;
+}
+
+select, input, button {
+  padding:8px;
+  border-radius:6px;
+  border:1px solid #ccc;
+}
+
+button {
+  background:#007bff;
+  color:#fff;
+  border:none;
+  cursor:pointer;
+}
+
+button:hover {
+  background:#0056b3;
+}
+
+.note {
+  font-size:12px;
+  color:#555;
+  text-align:center;
+}
+</style>
+</head>
+
+<body>
+
+<h2>📊 Task Report V.R.0.0.0</h2>
+
+<button
+  onclick="location.href='admin.html'"
+  style="
+    margin: 10px 0 14px;
+    padding: 10px;
+    width: 100%;
+    background: #444;
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    font-size: 14px;
+    cursor: pointer;
+  "
+>
+  ⬅ Back to Dashboard
+</button>
+
+<div class="filters">
+  <select id="statusFilter">
+    <option value="">All Status</option>
+    <option value="PENDING">PENDING</option>
+    <option value="COMPLETED">COMPLETED</option>
+  </select>
+
+  <select id="jobTypeFilter">
+    <option value="">All Job Types</option>
+  </select>
+
+  <select id="baFilter">
+    <option value="">All BA</option>
+  </select>
+
+  <select id="dmzFilter">
+    <option value="">All DMZ</option>
+  </select>
+
+  <input type="date" id="dateFrom">
+  <input type="date" id="dateTo">
+
+  <button onclick="generateReport()">⬇ Export XLSX</button>
+</div>
+
+<p class="note">
+  Date range is based on <b>Created Date</b>
+</p>
+
+<script>
+/* ===============================
+   SNAPSHOT CONFIG
+================================ */
+const SNAPSHOT_BASE =
+  "https://raw.githubusercontent.com/RossGab/driva-task-snapshots/main/snapshots";
+
+/* ===============================
+   GLOBAL STATE
+================================ */
+let ALL_TASKS = [];
+let DRIVER_MAP = {};
+
+/* ===============================
+   DRIVER SNAPSHOT
+================================ */
+async function loadDrivers() {
+  const res = await fetch(`${SNAPSHOT_BASE}/drivers.json`, {
+    cache: "no-store"
+  });
+
+  if (!res.ok) {
+    console.warn("⚠️ No driver snapshot");
+    return;
+  }
+
+  DRIVER_MAP = await res.json();
+}
+
+function flattenTaskForReport(task) {
+
+  const row = {};
+
+  // include task ID
+  row.TASK_ID = task._key || "";
+
+  for (const key in task) {
+
+    if (key === "_key") continue;
+
+    const value = task[key];
+    const col = key.toUpperCase();
+
+    // special handling for uploadedAt
+if (key === "uploadedAt" && value) {
+
+  const d = new Date(value);
+
+  row["UPLOADEDAT"] = d.toLocaleString("en-US", {
+    timeZone: "Asia/Manila",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false
+  });
+
+  continue;
+}
+
+    // objects → stringify
+    if (typeof value === "object" && value !== null) {
+      row[col] = JSON.stringify(value);
+      continue;
+    }
+
+    row[col] = value ?? "";
+  }
+
+  return row;
+}
+
+/* ===============================
+   DATE HELPERS
+================================ */
+function dateToKey(dateStr) {
+  return dateStr.replace(/-/g, ""); // YYYYMMDD
+}
+
+function getDateRangeKeys(from, to) {
+  const keys = [];
+  const d1 = new Date(from);
+  const d2 = new Date(to);
+
+  for (
+    let d = new Date(d1);
+    d <= d2;
+    d.setDate(d.getDate() + 1)
+  ) {
+    keys.push(
+      d.toLocaleDateString("en-CA", {
+        timeZone: "Asia/Manila"
+      }).replace(/-/g, "")
+    );
+  }
+  return keys;
+}
+
+function toPHDateTime(value) {
+  if (!value) return "";
+
+  const d = new Date(value);
+  if (isNaN(d.getTime())) return "";
+
+  return d.toLocaleString("en-GB", {
+    timeZone: "Asia/Manila",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false
+  });
+}
+
+/* ===============================
+   LOAD SNAPSHOTS (CORE)
+================================ */
+async function loadTasksByDateRange(from, to) {
+  ALL_TASKS = [];
+
+  const keys = getDateRangeKeys(from, to);
+
+  for (const key of keys) {
+    try {
+      const res = await fetch(`${SNAPSHOT_BASE}/${key}.json`, {
+        cache: "no-store"
+      });
+      if (!res.ok) continue;
+
+      const data = await res.json();
+
+      Object.entries(data).forEach(([id, task]) => {
+        ALL_TASKS.push({ _key: id, ...task });
+      });
+    } catch {
+      console.warn("⚠️ Missing snapshot:", key);
+    }
+  }
+
+  buildFilterOptions();
+}
+
+/* ===============================
+   FILTER UI
+================================ */
+function buildFilterOptions() {
+  fillSelect("jobTypeFilter", "JOBTYPE");
+  fillSelect("baFilter", "BA");
+  fillSelect("dmzFilter", "DMZ");
+}
+
+function fillSelect(id, field, fallbackLabel = field) {
+  const select = document.getElementById(id);
+  select.innerHTML = `<option value="">All ${fallbackLabel}</option>`;
+
+  const values = [...new Set(
+    ALL_TASKS
+      .map(t => t[field])
+      .filter(v => v !== undefined && v !== null && v !== "")
+  )].sort();
+
+  values.forEach(v => {
+    const opt = document.createElement("option");
+    opt.value = v;
+    opt.textContent = v;
+    select.appendChild(opt);
+  });
+}
+
+/* ===============================
+   EXPORT XLSX
+================================ */
+window.generateReport = async function () {
+
+  const from = document.getElementById("dateFrom").value;
+  const to   = document.getElementById("dateTo").value;
+
+  const keys = getDateRangeKeys(from, to);
+
+  const status = document.getElementById("statusFilter").value;
+  const jobType = document.getElementById("jobTypeFilter").value;
+  const ba = document.getElementById("baFilter").value;
+  const dmz = document.getElementById("dmzFilter").value;
+
+  // =========================
+  // 🔄 PROGRESS UI
+  // =========================
+  let progress = document.getElementById("progressBox");
+  if (!progress) {
+    progress = document.createElement("div");
+    progress.id = "progressBox";
+    progress.style = `
+      background:#fff;
+      padding:10px;
+      margin-bottom:10px;
+      border-radius:6px;
+      text-align:center;
+      font-size:13px;
+      font-weight:bold;
+    `;
+    document.body.insertBefore(progress, document.body.children[2]);
+  }
+
+  let totalRows = 0;
+  let headerSet = new Set();
+  let rows = [];
+
+  progress.innerText = "🔍 Scanning data...";
+
+  // =========================
+  // 1️⃣ LOAD + FILTER
+  // =========================
+  for (let i = 0; i < keys.length; i++) {
+
+    const key = keys[i];
+
+    progress.innerText = `📥 Loading ${i+1}/${keys.length} days...`;
+
+    try {
+      const res = await fetch(`${SNAPSHOT_BASE}/${key}.json`, { cache:"no-store" });
+      if (!res.ok) continue;
+
+      const data = await res.json();
+
+      for (const [id, task] of Object.entries(data)) {
+
+        if (
+          (status && task.status !== status) ||
+          (jobType && task.JOBTYPE !== jobType) ||
+          (ba && task.BA !== ba) ||
+          (dmz && task.DMZ !== dmz)
+        ) continue;
+
+        const row = flattenTaskForReport({ _key:id, ...task });
+
+        Object.keys(row).forEach(k => headerSet.add(k));
+        rows.push(row);
+
+        totalRows++;
+      }
+
+    } catch {}
+
+    // yield UI
+    await new Promise(r => setTimeout(r, 0));
+  }
+
+  if (!rows.length) {
+    alert("No data found.");
+    progress.remove();
+    return;
+  }
+
+  // =========================
+  // 🚀 AUTO MODE DECISION
+  // =========================
+  const headers = Array.from(headerSet).sort();
+
+  if (totalRows > 100000) {
+    progress.innerText = "⚡ Large data detected → Exporting CSV...";
+
+    exportCSV(headers, rows, from, to);
+
+    progress.remove();
+    return;
+  }
+
+  // =========================
+  // 📊 XLSX MODE
+  // =========================
+  progress.innerText = "📊 Generating Excel...";
+
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet([]);
+
+  // header
+  XLSX.utils.sheet_add_aoa(ws, [headers], { origin:"A1" });
+
+  // data (chunked)
+  for (let i = 0; i < rows.length; i++) {
+
+    const aligned = headers.map(h => rows[i][h] ?? "");
+
+    XLSX.utils.sheet_add_aoa(ws, [aligned], { origin:-1 });
+
+    if (i % 500 === 0) {
+      progress.innerText = `📊 Writing Excel... ${i}/${rows.length}`;
+      await new Promise(r => setTimeout(r, 0));
+    }
+  }
+
+  XLSX.utils.book_append_sheet(wb, ws, "Tasks");
+
+  XLSX.writeFile(wb, `Task_Report_${from}_to_${to}.xlsx`);
+
+  progress.remove();
+};
+
+function exportCSV(headers, rows, from, to) {
+
+  const escape = v =>
+    `"${String(v ?? "").replace(/"/g,'""')}"`;
+
+  let csv = headers.join(",") + "\n";
+
+  for (let i = 0; i < rows.length; i++) {
+    const line = headers.map(h => escape(rows[i][h])).join(",");
+    csv += line + "\n";
+  }
+
+  const blob = new Blob([csv], { type:"text/csv" });
+
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `Task_Report_${from}_to_${to}.csv`;
+  a.click();
+}
+
+/* ===============================
+   INIT
+================================ */
+(async function init() {
+  const today = new Date().toISOString().slice(0,10);
+
+  document.getElementById("dateFrom").value = today;
+  document.getElementById("dateTo").value = today;
+
+  // 1️⃣ Load driver snapshot first
+  await loadDrivers();
+
+  // 2️⃣ Preload today's tasks so dropdowns populate
+  await loadTasksByDateRange(today, today);
+})();
+</script>
+</body>
+</html>
