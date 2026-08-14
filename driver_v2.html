@@ -42,6 +42,29 @@ button { width:100%;padding:10px;margin-top:6px;border-radius:6px;border:none;fo
   margin-top: 6px;
 }
 
+/* =====================================================
+   🔒 SYNC LOCK
+   ===================================================== */
+
+body.sync-active .task {
+  opacity: 0.75;
+}
+
+body.sync-active .task button,
+body.sync-active .task input,
+body.sync-active .task textarea {
+  cursor: not-allowed;
+}
+
+body.sync-active #refreshTasksBtn {
+  background: #95a5a6 !important;
+}
+
+body.sync-active #settingsBtn {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .job-type-chip {
   display: flex;
   align-items: center;
@@ -382,7 +405,7 @@ import {
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "V.R.0.0.14";
+const VERSION = "V.R.0.0.15";
 const BILLING_CACHE = {};
 window.BILLING_CACHE = BILLING_CACHE;
 const DRIVER_UI_CACHE = {};
@@ -400,6 +423,47 @@ let CURRENT_RENDER_LIST = [];
 let IS_DOWNLOADING = false;
 let LAST_RENDER_SIGNATURE = "";
 let SYNC_RUNNING = false;
+
+function setTaskWorkLocked(locked) {
+
+  SYNC_RUNNING = locked;
+
+  const controls = [
+    "refreshTasksBtn",
+    "settingsBtn",
+    "dateFilter",
+    "searchBox",
+    "scanQRBtn"
+  ];
+
+  controls.forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+
+    el.disabled = locked;
+  });
+
+  document
+    .querySelectorAll(
+      ".task button, .task input, .task textarea"
+    )
+    .forEach(el => {
+      el.disabled = locked;
+    });
+
+  document.body.classList.toggle(
+    "sync-active",
+    locked
+  );
+
+  const note =
+    document.getElementById("uploadNote");
+
+  if (note) {
+    note.style.display =
+      locked ? "block" : "none";
+  }
+}
 
 function updateSyncProgress({
   current = 0,
@@ -1081,6 +1145,8 @@ document.getElementById("syncBtn").onclick = async () => {
     SYNC_RUNNING = false;
     return;
   }
+  // 🔒 LOCK DRIVER TASK OPERATIONS
+  setTaskWorkLocked(true);
 
   // 🔥 LOAD PHOTOS ONCE
 
@@ -1368,9 +1434,10 @@ if (note) {
   note.style.display = "none";
 }
 
-SYNC_RUNNING = false;
-
 await loadTasks();
+
+// 🔓 SYNC FINISHED — DRIVER CAN WORK AGAIN
+setTaskWorkLocked(false);
 };
 
 // 🔒 SAFE WRAPPER (DO NOT MODIFY ORIGINAL LOGIC)
@@ -1987,6 +2054,15 @@ let BOOT_WATCHDOG_FIRED = false;
 // };
 window.startPhoto = async function(index, taskKey) {
 
+  // 🔒 DO NOT START A NEW TASK DURING SYNC
+  if (SYNC_RUNNING) {
+    alert(
+      "⏳ Sync is still in progress.\n\n" +
+      "Please wait until synchronization is complete."
+    );
+    return;
+  }
+
   CURRENT_TASK = taskKey;
   CURRENT_PHOTO_INDEX = index;
 
@@ -2083,7 +2159,16 @@ cameraInput.onchange = async e => {
   
   window.submitTask = async function(taskKey) {
 
-  syncDynamicFields(taskKey); // 🔥 ENSURE LATEST DATA
+  // 🔒 DO NOT COMPLETE ANOTHER TASK DURING SYNC
+  if (SYNC_RUNNING) {
+    alert(
+      "⏳ Sync is still in progress.\n\n" +
+      "Please wait until synchronization is complete."
+    );
+    return;
+  }
+
+  syncDynamicFields(taskKey);
 
   if (!(await validateDynamic(taskKey))) return;
 
@@ -3405,6 +3490,15 @@ async function loadTasks() {
 document.getElementById("refreshTasksBtn").onclick =
   async () => {
 
+    // 🔒 DO NOT DOWNLOAD WHILE SYNC IS RUNNING
+    if (SYNC_RUNNING) {
+      alert(
+        "⏳ Sync is still in progress.\n\n" +
+        "Please wait until synchronization is complete."
+      );
+      return;
+    }
+
     // Block download if completed tasks are waiting
     // to be uploaded.
     const pendingUpload =
@@ -3735,6 +3829,15 @@ function renderOneTask(t) {
 
   div.innerHTML = html;
 taskList.appendChild(div);
+  // 🔒 If sync started while this task was being rendered,
+  // immediately lock its controls.
+  if (SYNC_RUNNING) {
+    div
+      .querySelectorAll("button, input, textarea")
+      .forEach(el => {
+        el.disabled = true;
+      });
+  }
 
 // ✅ NOW the container exists
 if (
