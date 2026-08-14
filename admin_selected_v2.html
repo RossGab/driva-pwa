@@ -308,7 +308,7 @@ button {
   
   <div style="display:flex;align-items:center;gap:14px;">
     <img src="./logo.jpg" class="admin-logo" alt="Company Logo">
-    <h1>Admin Dashboard <span class="version">V.R.0.0.5-WIP</span></h1>
+    <h1>Admin Dashboard <span class="version">V.R.0.0.7-WIP</span></h1>
   </div>
 
   <!-- 📅 DATE FILTER -->
@@ -561,10 +561,32 @@ async function onDateRangeChange() {
   showLoader("Loading date range…");
 
   try {
-    await loadTasks(CURRENT_STATUS || "PENDING");
-  } finally {
-    hideLoader();
+
+  await loadTasks(
+    CURRENT_STATUS || "PENDING"
+  );
+
+  // ==========================================
+  // 🗺 LIVE MAP DATE CHANGE
+  // ==========================================
+
+  if (MAP_VISIBLE) {
+
+    buildTaskStatsFromFirestore();
+
+    buildDriverBAMapFromFirestore();
+
+    buildMapAssignedDriverIds();
+
+    buildLiveMapBAFilters();
+
+    refreshMap();
   }
+
+} finally {
+
+  hideLoader();
+}
 }
 
 dateFromInput.addEventListener("change", onDateRangeChange);
@@ -2242,11 +2264,15 @@ window.toggleLiveMap = async function () {
 
   // Build task-related information
   buildTaskStatsFromFirestore();
-
+  
   buildDriverBAMapFromFirestore();
-
+  
+  // 🗺 Determine which drivers have tasks
+  // for the selected date/range
+  buildMapAssignedDriverIds();
+  
   buildLiveMapBAFilters();
-
+  
   // Start realtime driver GPS listener
   startDriverStatusListener();
 };
@@ -2717,12 +2743,6 @@ function processDriverStatusData(data = {}) {
 });
 }
 
-function processDriverStatusData(data = {}) {
-
-  // existing code...
-}
-
-
 // =====================================================
 // 🔄 REFRESH MAP FROM CURRENT RTDB DATA
 // =====================================================
@@ -2740,8 +2760,6 @@ function refreshMap() {
 // =====================================================
 // 📡 START REALTIME DRIVER STATUS LISTENER
 // =====================================================
-
-function startDriverStatusListener() {
 
 
 function startDriverStatusListener() {
