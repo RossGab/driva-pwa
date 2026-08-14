@@ -194,6 +194,89 @@ img { width:100%;margin-top:8px;border-radius:6px; }
   The screen may refresh while uploading.<br>
   <b>Please wait until the upload is completed.</b>
 </div>
+
+  <div
+  id="syncProgressBox"
+  style="
+    display:none;
+    background:#fff;
+    padding:12px;
+    margin-bottom:10px;
+    border-radius:8px;
+    border:1px solid #ddd;
+  "
+>
+  <div style="font-weight:bold;margin-bottom:8px;">
+    🔄 Syncing Completed Tasks
+  </div>
+
+  <div
+    id="syncProgressText"
+    style="font-size:14px;margin-bottom:6px;"
+  >
+    Preparing...
+  </div>
+
+  <div
+    style="
+      width:100%;
+      height:18px;
+      background:#e9ecef;
+      border-radius:10px;
+      overflow:hidden;
+    "
+  >
+    <div
+      id="syncProgressBar"
+      style="
+        width:0%;
+        height:100%;
+        background:#2ecc71;
+        transition:width .2s ease;
+      "
+    ></div>
+  </div>
+
+  <div
+    id="syncProgressPercent"
+    style="
+      text-align:center;
+      font-weight:bold;
+      margin-top:5px;
+    "
+  >
+    0%
+  </div>
+
+  <div
+    id="syncCurrentTask"
+    style="
+      font-size:13px;
+      color:#555;
+      margin-top:8px;
+    "
+  ></div>
+
+  <div
+    id="syncCurrentPhoto"
+    style="
+      font-size:13px;
+      color:#555;
+      margin-top:4px;
+    "
+  ></div>
+
+  <div
+    id="syncResultCount"
+    style="
+      font-size:13px;
+      margin-top:8px;
+    "
+  >
+    ✅ Successful: 0 &nbsp; | &nbsp; ❌ Failed: 0
+  </div>
+</div>
+
 <button
   id="retryUploadBtn"
   style="
@@ -299,7 +382,7 @@ import {
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "V.R.0.0.11";
+const VERSION = "V.R.0.0.12";
 const BILLING_CACHE = {};
 window.BILLING_CACHE = BILLING_CACHE;
 const DRIVER_UI_CACHE = {};
@@ -318,6 +401,89 @@ let IS_DOWNLOADING = false;
 let LAST_RENDER_SIGNATURE = "";
 let SYNC_RUNNING = false;
 
+function updateSyncProgress({
+  current = 0,
+  total = 0,
+  currentTask = "",
+  currentPhoto = "",
+  successful = 0,
+  failed = 0,
+  message = ""
+}) {
+
+  const box =
+    document.getElementById("syncProgressBox");
+
+  const text =
+    document.getElementById("syncProgressText");
+
+  const bar =
+    document.getElementById("syncProgressBar");
+
+  const percent =
+    document.getElementById("syncProgressPercent");
+
+  const task =
+    document.getElementById("syncCurrentTask");
+
+  const photo =
+    document.getElementById("syncCurrentPhoto");
+
+  const result =
+    document.getElementById("syncResultCount");
+
+  if (!box) return;
+
+  box.style.display = "block";
+
+  const pct =
+    total > 0
+      ? Math.min(100, (current / total) * 100)
+      : 0;
+
+  if (text) {
+    text.innerText =
+      message ||
+      `Task ${current} of ${total}`;
+  }
+
+  if (bar) {
+    bar.style.width = `${pct}%`;
+  }
+
+  if (percent) {
+    percent.innerText =
+      `${pct.toFixed(1)}%`;
+  }
+
+  if (task) {
+    task.innerText =
+      currentTask
+        ? `📋 Current task: ${currentTask}`
+        : "";
+  }
+
+  if (photo) {
+    photo.innerText =
+      currentPhoto
+        ? currentPhoto
+        : "";
+  }
+
+  if (result) {
+    result.innerHTML =
+      `✅ Successful: ${successful} &nbsp; | &nbsp; ❌ Failed: ${failed}`;
+  }
+}
+
+function hideSyncProgress() {
+  const box =
+    document.getElementById("syncProgressBox");
+
+  if (box) {
+    box.style.display = "none";
+  }
+}
 
 
 
@@ -919,16 +1085,54 @@ document.getElementById("syncBtn").onclick = async () => {
 
 const photos = await getAllPhotosFromDB();
 
-for (const task of completed) {
+let successful = 0;
+let failed = 0;
+
+updateSyncProgress({
+  current: 0,
+  total: completed.length,
+  successful,
+  failed,
+  message: "📦 Preparing upload..."
+});
+
+for (let taskIndex = 0; taskIndex < completed.length; taskIndex++) {
+
+  const task = completed[taskIndex];
+
+  updateSyncProgress({
+    current: taskIndex,
+    total: completed.length,
+    currentTask:
+      `${task._key}${task.CUSTOMERNAME ? " — " + task.CUSTOMERNAME : ""}`,
+    currentPhoto: "",
+    successful,
+    failed,
+    message:
+      `🔄 Processing task ${taskIndex + 1} of ${completed.length}`
+  });
   const related = photos.filter(p => p.taskKey === task._key);
 
     let allUploaded = true;
 
     for (let i = 0; i < related.length; i++) {
 
-      const p = related[i];
-
-      try {
+    const p = related[i];
+  
+    updateSyncProgress({
+      current: taskIndex,
+      total: completed.length,
+      currentTask:
+        `${task._key}${task.CUSTOMERNAME ? " — " + task.CUSTOMERNAME : ""}`,
+      currentPhoto:
+        `📸 Uploading photo ${i + 1} of ${related.length}`,
+      successful,
+      failed,
+      message:
+        `🔄 Processing task ${taskIndex + 1} of ${completed.length}`
+    });
+  
+    try {
 
         const latestData = task.deliveryData || {};
 
@@ -1064,6 +1268,22 @@ for (const task of completed) {
         console.warn(
           "Verification failed, skipping delete"
         );
+      
+        failed++;
+      
+        updateSyncProgress({
+          current: taskIndex + 1,
+          total: completed.length,
+          currentTask:
+            `${task._key}${task.CUSTOMERNAME ? " — " + task.CUSTOMERNAME : ""}`,
+          currentPhoto:
+            "❌ Verification failed",
+          successful,
+          failed,
+          message:
+            `⚠️ Task ${taskIndex + 1} of ${completed.length} failed`
+        });
+      
         continue;
       }
     
@@ -1073,6 +1293,21 @@ for (const task of completed) {
       }
     
       await deleteTaskFromIndexedDB(task._key);
+
+      successful++;
+
+      updateSyncProgress({
+        current: taskIndex + 1,
+        total: completed.length,
+        currentTask:
+          `${task._key}${task.CUSTOMERNAME ? " — " + task.CUSTOMERNAME : ""}`,
+        currentPhoto:
+          "✅ Task synchronized",
+        successful,
+        failed,
+        message:
+          `🔄 Completed ${taskIndex + 1} of ${completed.length}`
+      });
     
       UPLOAD_QUEUE_COUNT =
         Math.max(
@@ -1082,15 +1317,59 @@ for (const task of completed) {
     
       updateUploadCounter();
     }
+    } else {
+
+      failed++;
+    
+      updateSyncProgress({
+        current: taskIndex + 1,
+        total: completed.length,
+        currentTask:
+          `${task._key}${task.CUSTOMERNAME ? " — " + task.CUSTOMERNAME : ""}`,
+        currentPhoto:
+          "❌ Upload failed",
+        successful,
+        failed,
+        message:
+          `⚠️ Task ${taskIndex + 1} of ${completed.length} failed`
+      });
+    }
   }
 
-  alert("✅ Sync complete.");
+  updateSyncProgress({
+  current: completed.length,
+  total: completed.length,
+  successful,
+  failed,
+  message:
+    failed === 0
+      ? "✅ All tasks synchronized"
+      : "⚠️ Sync finished with some failures"
+});
 
-  if (note) note.style.display = "none";
+if (failed === 0) {
 
-  SYNC_RUNNING = false;
+  alert(
+    `✅ Sync complete!\n\n` +
+    `Successful: ${successful}`
+  );
 
-  loadTasks();
+} else {
+
+  alert(
+    `⚠️ Sync finished.\n\n` +
+    `Successful: ${successful}\n` +
+    `Failed: ${failed}`
+  );
+}
+
+if (note) {
+  note.style.display = "none";
+}
+
+SYNC_RUNNING = false;
+
+await loadTasks();
 };
 
 // 🔒 SAFE WRAPPER (DO NOT MODIFY ORIGINAL LOGIC)
