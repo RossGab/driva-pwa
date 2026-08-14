@@ -492,7 +492,8 @@ import {
 import {
   getDatabase,
   ref,
-  get
+  get,
+  onValue
 } from
 "https://www.gstatic.com/firebasejs/12.9.0/firebase-database.js";
 
@@ -2164,42 +2165,77 @@ window.cancelEdit = function (btn) {
 let map, markers={};
 
 window.toggleLiveMap = async function () {
-  
+
   MAP_VISIBLE = !MAP_VISIBLE;
 
   if (MAP_VISIBLE) {
-    document.getElementById("adminPagination").innerHTML = "";
+    document.getElementById(
+      "adminPagination"
+    ).innerHTML = "";
   }
 
-  mapContainer.style.display = MAP_VISIBLE ? "block" : "none";
-  taskList.style.display = MAP_VISIBLE ? "none" : "block";
+  mapContainer.style.display =
+    MAP_VISIBLE
+      ? "block"
+      : "none";
 
-  // ✅ HIDE SEARCH BAR IN LIVE MAP
-  searchWrapper.style.display = MAP_VISIBLE ? "none" : "block";
+  taskList.style.display =
+    MAP_VISIBLE
+      ? "none"
+      : "block";
 
-  // Optional: also hide BA filters on map
-  baFilters.style.display = MAP_VISIBLE ? "none" : "block";
+  // Hide search while map is visible
+  searchWrapper.style.display =
+    MAP_VISIBLE
+      ? "none"
+      : "block";
+
+  // Hide task BA filters while map is visible
+  baFilters.style.display =
+    MAP_VISIBLE
+      ? "none"
+      : "block";
+
+  // ==========================================
+  // MAP CLOSED
+  // ==========================================
 
   if (!MAP_VISIBLE) {
-    stopMapAutoRefresh();
+
+    // Stop listening to driver GPS updates
+    if (DRIVER_STATUS_UNSUBSCRIBE) {
+
+      DRIVER_STATUS_UNSUBSCRIBE();
+
+      DRIVER_STATUS_UNSUBSCRIBE =
+        null;
+    }
+
     return;
   }
-  
-  startMapAutoRefresh();
 
-  // ✅ apply online filter immediately
-  if (SHOW_ONLINE_ONLY) {
-    refreshMap();
-  }
+  // ==========================================
+  // MAP OPEN
+  // ==========================================
 
   initMap();
-  setTimeout(() => map.invalidateSize(), 200);
 
+  setTimeout(() => {
+
+    map.invalidateSize();
+
+  }, 200);
+
+  // Build task-related information
   buildTaskStatsFromFirestore();
+
   buildDriverBAMapFromFirestore();
+
   buildLiveMapBAFilters();
-  await refreshMap();
-};  
+
+  // Start realtime driver GPS listener
+  startDriverStatusListener();
+};
   
 window.showDriverOpenTasks = function (driverId) {
   FILTER_DRIVER = driverId;
@@ -2213,11 +2249,19 @@ window.showDriverOpenTasks = function (driverId) {
   loadTasks("PENDING");
 };
   
-function initMap(){
-  if(map) return;
-  map=L.map("map").setView([14.5995,120.9842],11);
-  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png").addTo(map);
-  refreshMap();
+function initMap() {
+
+  if (map) return;
+
+  map = L.map("map")
+    .setView(
+      [14.5995, 120.9842],
+      11
+    );
+
+  L.tileLayer(
+    "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+  ).addTo(map);
 }
   
 function getDriverStatus(lastSeen) {
@@ -2373,90 +2417,199 @@ function buildDriverBAMapFromFirestore() {
   });
 }
 
-  
-async function refreshMap() {
-  try {
-    const snap = await withTimeout(
-      getDocs(collection(db, DRIVER_STATUS_COLLECTION)),
-      8000
-    );
+// =====================================================
+// 🗺 LIVE DRIVER LOCATION — REALTIME DATABASE
+// =====================================================
 
-    const data = {};
-    snap.forEach(docSnap => {
-      data[docSnap.id] = docSnap.data() || {};
-    });
+let driverStatusData = {};
+let DRIVER_STATUS_UNSUBSCRIBE = null;
 
-    renderDriverList(data);
+function processDriverStatusData(data = {}) {
 
-    Object.entries(data).forEach(([id, d]) => {
-      if (!driverMatchesBA(id)) {
-        if (markers[id]) {
-          map.removeLayer(markers[id]);
-          delete markers[id];
-        }
-        return;
+  driverStatusData = data || {};
+
+  // Update driver list
+  renderDriverList(driverStatusData);
+
+  // Update map markers
+  Object.entries(driverStatusData).forEach(([id, d]) => {
+
+    // BA filter
+    if (!driverMatchesBA(id)) {
+
+      if (markers[id]) {
+        map.removeLayer(markers[id]);
+        delete markers[id];
       }
 
-      if (d.latitude == null || d.longitude == null) return;
+      return;
+    }
 
-      const pos = [Number(d.latitude), Number(d.longitude)];
-      const status = getDriverStatus(d.lastSeen);
+    // No GPS coordinates
+    if (
+      d.latitude == null ||
+      d.longitude == null
+    ) {
 
-      if (SHOW_ONLINE_ONLY && status.label !== "Active") {
-        if (markers[id]) {
-          map.removeLayer(markers[id]);
-          delete markers[id];
-        }
-        return;
+      if (markers[id]) {
+        map.removeLayer(markers[id]);
+        delete markers[id];
       }
 
-      const icon = L.divIcon({
-        html: `<div style="
+      return;
+    }
+
+    const latitude = Number(d.latitude);
+    const longitude = Number(d.longitude);
+
+    // Invalid GPS
+    if (
+      !Number.isFinite(latitude) ||
+      !Number.isFinite(longitude)
+    ) {
+      return;
+    }
+
+    const pos = [
+      latitude,
+      longitude
+    ];
+
+    const status =
+      getDriverStatus(d.lastSeen);
+
+    // Online-only filter
+    if (
+      SHOW_ONLINE_ONLY &&
+      status.label !== "Active"
+    ) {
+
+      if (markers[id]) {
+        map.removeLayer(markers[id]);
+        delete markers[id];
+      }
+
+      return;
+    }
+
+    const icon = L.divIcon({
+      html: `
+        <div style="
           width:14px;
           height:14px;
           background:${status.color};
           border-radius:50%;
           border:2px solid white;
-        "></div>`,
-        className: ""
-      });
-
-      if (!markers[id]) {
-        markers[id] = L.marker(pos, { icon })
-          .addTo(map)
-          .bindPopup(`
-            <b>${id}</b><br>
-            Status: ${status.label}<br>
-            Last seen: ${d.lastSeen ? new Date(d.lastSeen?.toDate ? d.lastSeen.toDate() : d.lastSeen).toLocaleString() : "—"}
-          `);
-      } else {
-        markers[id].setLatLng(pos);
-        markers[id].setIcon(icon);
-      }
+        "></div>
+      `,
+      className: ""
     });
 
-    Object.keys(markers).forEach(id => {
-      if (!data[id]) {
-        map.removeLayer(markers[id]);
-        delete markers[id];
-      }
-    });
-  } catch (e) {
-    console.error("❌ Firestore driver status load failed:", e);
+    // Create marker
+    if (!markers[id]) {
+
+      markers[id] =
+        L.marker(
+          pos,
+          { icon }
+        )
+        .addTo(map)
+        .bindPopup(`
+          <b>${id}</b><br>
+          Status: ${status.label}<br>
+          Last seen:
+          ${
+            d.lastSeen
+              ? new Date(
+                  d.lastSeen
+                ).toLocaleString()
+              : "—"
+          }
+        `);
+
+    } else {
+
+      // Update marker position
+      markers[id].setLatLng(pos);
+
+      // Update marker status color
+      markers[id].setIcon(icon);
+
+      // Update popup
+      markers[id].setPopupContent(`
+        <b>${id}</b><br>
+        Status: ${status.label}<br>
+        Last seen:
+        ${
+          d.lastSeen
+            ? new Date(
+                d.lastSeen
+              ).toLocaleString()
+            : "—"
+        }
+      `);
+    }
+  });
+
+  // Remove markers for drivers no longer present
+  Object.keys(markers).forEach(id => {
+
+    if (!driverStatusData[id]) {
+
+      map.removeLayer(
+        markers[id]
+      );
+
+      delete markers[id];
+    }
+  });
+}
+
+
+function startDriverStatusListener() {
+
+  // Prevent duplicate listeners
+  if (DRIVER_STATUS_UNSUBSCRIBE) {
+    DRIVER_STATUS_UNSUBSCRIBE();
+    DRIVER_STATUS_UNSUBSCRIBE = null;
   }
+
+  const driverStatusRef =
+    ref(
+      rtdb,
+      "driverStatus"
+    );
+
+  DRIVER_STATUS_UNSUBSCRIBE =
+    onValue(
+      driverStatusRef,
+      snapshot => {
+
+        const data =
+          snapshot.exists()
+            ? snapshot.val()
+            : {};
+
+        console.log(
+          "📡 RTDB driverStatus updated:",
+          data
+        );
+
+        processDriverStatusData(
+          data
+        );
+      },
+      error => {
+
+        console.error(
+          "❌ RTDB driverStatus listener failed:",
+          error
+        );
+      }
+    );
 }
 
-let MAP_REFRESH_TIMER = null;
 
-function startMapAutoRefresh() {
-  if (MAP_REFRESH_TIMER) return;
-
-  MAP_REFRESH_TIMER = setInterval(async () => {
-    if (!MAP_VISIBLE) return;
-    buildTaskStatsFromFirestore();
-    await refreshMap();
-  }, 60000); // 🔥 every 60 seconds
-}
 
 function stopMapAutoRefresh() {
   if (MAP_REFRESH_TIMER) {
