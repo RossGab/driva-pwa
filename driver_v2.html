@@ -382,7 +382,7 @@ import {
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "V.R.0.0.12";
+const VERSION = "V.R.0.0.13";
 const BILLING_CACHE = {};
 window.BILLING_CACHE = BILLING_CACHE;
 const DRIVER_UI_CACHE = {};
@@ -1070,18 +1070,19 @@ document.getElementById("syncBtn").onclick = async () => {
   );
 
   if (!completed.length) {
+    hideSyncProgress();
     alert("No completed tasks to sync.");
     SYNC_RUNNING = false;
     return;
   }
 
   if (!confirm(`Upload ${completed.length} completed tasks?`)) {
+    hideSyncProgress();
     SYNC_RUNNING = false;
     return;
   }
 
   // 🔥 LOAD PHOTOS ONCE
-  await new Promise(r => setTimeout(r, 1000));
 
 const photos = await getAllPhotosFromDB();
 
