@@ -618,11 +618,25 @@ function showLoader(text = "Loading…") {
 }
 
 function reloadAllAdminViews() {
+
   refreshDashboard();
 
   if (MAP_VISIBLE) {
+
+    // Recalculate drivers assigned
+    // to the newly selected date/range
+    buildMapAssignedDriverIds();
+
+    buildTaskStatsFromFirestore();
+
+    buildDriverBAMapFromFirestore();
+
+    buildLiveMapBAFilters();
+
     refreshMap();
+
   } else if (CURRENT_STATUS) {
+
     loadTasks(CURRENT_STATUS);
   }
 }
@@ -2288,7 +2302,13 @@ function renderDriverList(statusData = {}) {
   const list = document.getElementById("driverItems");
   list.innerHTML = "";
 
-  const driverIds = Object.keys(DRIVER_CACHE);
+  const driverIds =
+    Object.keys(DRIVER_CACHE)
+      .filter(driverId =>
+        MAP_ASSIGNED_DRIVER_IDS.has(
+          String(driverId).trim()
+        )
+      );
 
   driverIds.forEach(driverId => {
     const driverInfo = DRIVER_CACHE[driverId];
@@ -2424,6 +2444,116 @@ function buildDriverBAMapFromFirestore() {
 let driverStatusData = {};
 let DRIVER_STATUS_UNSUBSCRIBE = null;
 
+// =====================================================
+// 🗺 DRIVERS ASSIGNED FOR SELECTED MAP DATE
+// =====================================================
+
+let MAP_ASSIGNED_DRIVER_IDS = new Set();
+
+function normalizeMapDate(value) {
+  if (!value) return "";
+
+  if (
+    typeof value === "string" &&
+    /^\d{4}-\d{2}-\d{2}$/.test(value)
+  ) {
+    return value;
+  }
+
+  if (
+    value?.toDate
+  ) {
+    return value
+      .toDate()
+      .toLocaleDateString(
+        "en-CA",
+        {
+          timeZone: "Asia/Manila"
+        }
+      );
+  }
+
+  const d = new Date(value);
+
+  if (isNaN(d.getTime())) {
+    return "";
+  }
+
+  return d.toLocaleDateString(
+    "en-CA",
+    {
+      timeZone: "Asia/Manila"
+    }
+  );
+}
+
+
+function buildMapAssignedDriverIds() {
+
+  MAP_ASSIGNED_DRIVER_IDS =
+    new Set();
+
+  const tasks =
+    window.__FIRESTORE_TASKS__ || [];
+
+  const fromInput =
+    document.getElementById("adminDateFrom");
+
+  const toInput =
+    document.getElementById("adminDateTo");
+
+  const fromDate =
+    fromInput?.value || "";
+
+  const toDate =
+    toInput?.value || fromDate;
+
+  tasks.forEach(task => {
+
+    const driverId =
+      String(
+        task.driverId || ""
+      ).trim();
+
+    if (!driverId) {
+      return;
+    }
+
+    const assignedDate =
+      normalizeMapDate(
+        task.assignedDate
+      );
+
+    if (!assignedDate) {
+      return;
+    }
+
+    // Date range filter
+    if (
+      fromDate &&
+      assignedDate < fromDate
+    ) {
+      return;
+    }
+
+    if (
+      toDate &&
+      assignedDate > toDate
+    ) {
+      return;
+    }
+
+    MAP_ASSIGNED_DRIVER_IDS.add(
+      driverId
+    );
+  });
+
+  console.log(
+    "🗺 Drivers assigned for selected date:",
+    [...MAP_ASSIGNED_DRIVER_IDS]
+  );
+}
+
 function processDriverStatusData(data = {}) {
 
   driverStatusData = data || {};
@@ -2433,6 +2563,23 @@ function processDriverStatusData(data = {}) {
 
   // Update map markers
   Object.entries(driverStatusData).forEach(([id, d]) => {
+
+    // =================================================
+    // 🗺 ONLY PLOT DRIVERS ASSIGNED FOR SELECTED DATE
+    // =================================================
+    if (
+      !MAP_ASSIGNED_DRIVER_IDS.has(
+        String(id).trim()
+      )
+    ) {
+
+      if (markers[id]) {
+        map.removeLayer(markers[id]);
+        delete markers[id];
+      }
+
+      return;
+    }
 
     // BA filter
     if (!driverMatchesBA(id)) {
@@ -2554,16 +2701,47 @@ function processDriverStatusData(data = {}) {
   // Remove markers for drivers no longer present
   Object.keys(markers).forEach(id => {
 
-    if (!driverStatusData[id]) {
+  if (
+    !driverStatusData[id] ||
+    !MAP_ASSIGNED_DRIVER_IDS.has(
+      String(id).trim()
+    )
+  ) {
 
-      map.removeLayer(
-        markers[id]
-      );
+    map.removeLayer(
+      markers[id]
+    );
 
-      delete markers[id];
-    }
-  });
+    delete markers[id];
+  }
+});
 }
+
+function processDriverStatusData(data = {}) {
+
+  // existing code...
+}
+
+
+// =====================================================
+// 🔄 REFRESH MAP FROM CURRENT RTDB DATA
+// =====================================================
+
+function refreshMap() {
+
+  if (!MAP_VISIBLE) return;
+
+  processDriverStatusData(
+    driverStatusData || {}
+  );
+}
+
+
+// =====================================================
+// 📡 START REALTIME DRIVER STATUS LISTENER
+// =====================================================
+
+function startDriverStatusListener() {
 
 
 function startDriverStatusListener() {
@@ -2607,15 +2785,6 @@ function startDriverStatusListener() {
         );
       }
     );
-}
-
-
-
-function stopMapAutoRefresh() {
-  if (MAP_REFRESH_TIMER) {
-    clearInterval(MAP_REFRESH_TIMER);
-    MAP_REFRESH_TIMER = null;
-  }
 }
 
 /* ===== SCROLL TO TOP BUTTON ===== */
