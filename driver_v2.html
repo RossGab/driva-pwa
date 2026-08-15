@@ -120,6 +120,87 @@ button.capture {
 }
 img { width:100%;margin-top:8px;border-radius:6px; }
 </style>
+<!-- ===== DRIVER TASK MAP ===== -->
+<link
+  rel="stylesheet"
+  href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+/>
+
+<style>
+  #driverTaskMapPanel {
+    display: none;
+    background: #fff;
+    border-radius: 10px;
+    overflow: hidden;
+    margin-bottom: 10px;
+  }
+
+  #driverTaskMap {
+    width: 100%;
+    height: calc(100vh - 180px);
+    min-height: 500px;
+  }
+
+  .task-map-marker {
+    background: #1976d2;
+    color: #fff;
+    width: 34px;
+    height: 34px;
+    border-radius: 50% 50% 50% 0;
+    transform: rotate(-45deg);
+    border: 2px solid #fff;
+    box-shadow: 0 2px 6px rgba(0,0,0,.35);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .task-map-marker span {
+    transform: rotate(45deg);
+    font-weight: bold;
+    font-size: 13px;
+  }
+
+  .driver-map-marker {
+    background: #1565c0;
+    color: #fff;
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    border: 3px solid #fff;
+    box-shadow: 0 2px 8px rgba(0,0,0,.4);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+  }
+
+  .task-map-topbar {
+    display: flex;
+    gap: 6px;
+    padding: 8px;
+    background: #fff;
+    border-bottom: 1px solid #ddd;
+  }
+
+  .task-map-topbar button {
+    flex: 1;
+    padding: 10px;
+    border: none;
+    border-radius: 6px;
+    font-weight: bold;
+  }
+
+  .task-map-info {
+    padding: 8px 10px;
+    font-size: 13px;
+    background: #f7f7f7;
+    border-bottom: 1px solid #ddd;
+  }
+</style>
+<script
+  src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js">
+</script>
 </head>
 
 <body>
@@ -342,6 +423,61 @@ img { width:100%;margin-top:8px;border-radius:6px; }
   <b>Job Type</b>
   <div id="jobTypeOptions"></div>
 </div>
+<!-- ===== DRIVER TASK MAP BUTTON ===== -->
+<button
+  id="openTaskMapBtn"
+  style="
+    width:100%;
+    padding:12px;
+    margin-bottom:10px;
+    border:none;
+    border-radius:8px;
+    background:#3498db;
+    color:#fff;
+    font-size:16px;
+    font-weight:bold;
+  "
+>
+  🗺 View Tasks on Map
+</button>
+
+<!-- ===== DRIVER TASK MAP ===== -->
+<div id="driverTaskMapPanel">
+
+  <div class="task-map-topbar">
+
+    <button
+      id="closeTaskMapBtn"
+      style="
+        background:#555;
+        color:#fff;
+      "
+    >
+      ← Back to Tasks
+    </button>
+
+    <button
+      id="centerDriverBtn"
+      style="
+        background:#1976d2;
+        color:#fff;
+      "
+    >
+      🔵 My Location
+    </button>
+
+  </div>
+
+  <div
+    id="taskMapInfo"
+    class="task-map-info"
+  >
+    Loading tasks...
+  </div>
+
+  <div id="driverTaskMap"></div>
+
+</div>
 <div style="display:flex;gap:6px;margin-bottom:10px;">
   <input id="searchBox" placeholder="Search tasks" style="flex:1;">
   
@@ -405,7 +541,7 @@ import {
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "V.R.0.0.15";
+const VERSION = "V.R.0.0.15.1";
 const BILLING_CACHE = {};
 window.BILLING_CACHE = BILLING_CACHE;
 const DRIVER_UI_CACHE = {};
@@ -417,6 +553,14 @@ const FORM_CACHE_KEY = "driverFormCache";
 let ACTIVE_CAPTURE_TASK = null;
 let jobTypeFilterInitialized = false;
 let LAST_KNOWN_GPS = null;
+  // =====================================================
+// 🗺 DRIVER TASK MAP
+// =====================================================
+
+let DRIVER_TASK_MAP = null;
+let DRIVER_TASK_MARKERS = {};
+let DRIVER_LOCATION_MARKER = null;
+let DRIVER_TASK_MAP_VISIBLE = false;
 let LOAD_IN_PROGRESS = false;
 let RENDER_OFFSET = 0;
 let CURRENT_RENDER_LIST = [];
@@ -973,6 +1117,9 @@ function applyFiltersOnly() {
   tasks = sortTasksOfflineSafe(tasks);
 
   renderWithPagination(tasks);
+  if (DRIVER_TASK_MAP_VISIBLE) {
+    renderDriverTaskMap();
+  }
   updateRemainingCounter(tasks);
   updateUploadCounter();
 }
@@ -1900,6 +2047,10 @@ function startGPSTracking(driverId) {
         accuracy: pos.coords.accuracy,
         timestamp: Date.now()
       };
+      // 🗺 Update driver's position on task map
+      if (DRIVER_TASK_MAP_VISIBLE) {
+        updateDriverLocationOnTaskMap();
+      }
 
       // ✅ UPDATE UI HERE
       if (gpsStatus) {
@@ -3659,6 +3810,550 @@ async function updateRemainingCounter(tasks) {
     }
   });
 }
+
+// =====================================================
+// 🗺 DRIVER TASK MAP
+// =====================================================
+
+function initDriverTaskMap() {
+
+  if (DRIVER_TASK_MAP) {
+    return;
+  }
+
+  DRIVER_TASK_MAP = L.map(
+    "driverTaskMap"
+  ).setView(
+    [14.5995, 120.9842],
+    12
+  );
+
+  L.tileLayer(
+    "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+    {
+      maxZoom: 19,
+      attribution: "&copy; OpenStreetMap contributors"
+    }
+  ).addTo(DRIVER_TASK_MAP);
+}
+
+
+function createTaskMapIcon(sequence) {
+
+  const label =
+    sequence !== undefined &&
+    sequence !== null &&
+    String(sequence).trim() !== ""
+      ? String(sequence)
+      : "•";
+
+  return L.divIcon({
+
+    className: "",
+
+    html: `
+      <div class="task-map-marker">
+        <span>${label}</span>
+      </div>
+    `,
+
+    iconSize: [34, 34],
+
+    iconAnchor: [17, 34],
+
+    popupAnchor: [0, -34]
+  });
+}
+
+
+function createDriverMapIcon() {
+
+  return L.divIcon({
+
+    className: "",
+
+    html: `
+      <div class="driver-map-marker">
+        📍
+      </div>
+    `,
+
+    iconSize: [38, 38],
+
+    iconAnchor: [19, 19]
+  });
+}
+
+
+function isValidTaskGPS(task) {
+
+  const lat =
+    Number(task?.LATITUDE);
+
+  const lng =
+    Number(task?.LONGITUDE);
+
+  return (
+    Number.isFinite(lat) &&
+    Number.isFinite(lng) &&
+    lat >= -90 &&
+    lat <= 90 &&
+    lng >= -180 &&
+    lng <= 180
+  );
+}
+
+
+function getDriverTaskMapTasks() {
+
+  /*
+   * CURRENT_RENDER_LIST contains ALL tasks
+   * matching the current date/job/search filters.
+   *
+   * It is NOT limited to the 3 tasks currently
+   * rendered on screen.
+   */
+
+  return Array.isArray(
+    CURRENT_RENDER_LIST
+  )
+    ? CURRENT_RENDER_LIST.filter(
+        t => t && t._key
+      )
+    : [];
+}
+
+
+function updateDriverLocationOnTaskMap() {
+
+  if (
+    !DRIVER_TASK_MAP ||
+    !DRIVER_TASK_MAP_VISIBLE
+  ) {
+    return;
+  }
+
+  if (
+    !LAST_KNOWN_GPS ||
+    !Number.isFinite(
+      Number(LAST_KNOWN_GPS.latitude)
+    ) ||
+    !Number.isFinite(
+      Number(LAST_KNOWN_GPS.longitude)
+    )
+  ) {
+    return;
+  }
+
+  const pos = [
+    Number(LAST_KNOWN_GPS.latitude),
+    Number(LAST_KNOWN_GPS.longitude)
+  ];
+
+  if (!DRIVER_LOCATION_MARKER) {
+
+    DRIVER_LOCATION_MARKER =
+      L.marker(
+        pos,
+        {
+          icon:
+            createDriverMapIcon(),
+          zIndexOffset: 1000
+        }
+      )
+      .addTo(DRIVER_TASK_MAP)
+      .bindPopup(`
+        <b>🔵 Your Location</b><br>
+        Accuracy:
+        ${
+          LAST_KNOWN_GPS.accuracy
+            ? Math.round(
+                LAST_KNOWN_GPS.accuracy
+              ) + " m"
+            : "—"
+        }
+      `);
+
+  } else {
+
+    DRIVER_LOCATION_MARKER
+      .setLatLng(pos);
+
+    DRIVER_LOCATION_MARKER
+      .setPopupContent(`
+        <b>🔵 Your Location</b><br>
+        Accuracy:
+        ${
+          LAST_KNOWN_GPS.accuracy
+            ? Math.round(
+                LAST_KNOWN_GPS.accuracy
+              ) + " m"
+            : "—"
+        }
+      `);
+  }
+}
+
+
+function renderDriverTaskMap() {
+
+  if (!DRIVER_TASK_MAP) {
+    return;
+  }
+
+  // Remove old task markers
+  Object.values(
+    DRIVER_TASK_MARKERS
+  ).forEach(marker => {
+
+    DRIVER_TASK_MAP
+      .removeLayer(marker);
+  });
+
+  DRIVER_TASK_MARKERS = {};
+
+  const tasks =
+    getDriverTaskMapTasks();
+
+  const bounds = [];
+
+  let plotted = 0;
+  let missingGPS = 0;
+
+  tasks.forEach(task => {
+
+    if (!isValidTaskGPS(task)) {
+
+      missingGPS++;
+      return;
+    }
+
+    const lat =
+      Number(task.LATITUDE);
+
+    const lng =
+      Number(task.LONGITUDE);
+
+    const marker =
+      L.marker(
+        [lat, lng],
+        {
+          icon:
+            createTaskMapIcon(
+              task.SEQUENCE
+            )
+        }
+      )
+      .addTo(DRIVER_TASK_MAP);
+
+    const status =
+      resolveStatus(task);
+
+    marker.bindPopup(`
+      <div style="min-width:220px;">
+
+        <b>
+          ${task.CUSTOMERNAME || "—"}
+        </b>
+
+        <br>
+
+        📍 ${task.ADDRESS || "—"}
+
+        <hr style="margin:6px 0;">
+
+        <b>Sequence:</b>
+        ${task.SEQUENCE || "—"}
+
+        <br>
+
+        <b>Account:</b>
+        ${task.ACCOUNTNUMBER || "—"}
+
+        <br>
+
+        <b>Meter:</b>
+        ${task.METERNUMBER || "—"}
+
+        <br>
+
+        <b>MRU:</b>
+        ${task.MRU || "—"}
+
+        <br>
+
+        <b>Job:</b>
+        ${task.JOBTYPE || "—"}
+
+        <br>
+
+        <b>Status:</b>
+        ${status}
+
+        <br><br>
+
+        <button
+          style="
+            width:100%;
+            padding:8px;
+            border:none;
+            border-radius:6px;
+            background:#1976d2;
+            color:white;
+            font-weight:bold;
+          "
+          onclick="openTaskFromMap('${task._key}')"
+        >
+          Open Task
+        </button>
+
+      </div>
+    `);
+
+    DRIVER_TASK_MARKERS[
+      task._key
+    ] = marker;
+
+    bounds.push([lat, lng]);
+
+    plotted++;
+  });
+
+  updateDriverLocationOnTaskMap();
+
+  // Include driver's current location
+  if (
+    LAST_KNOWN_GPS &&
+    Number.isFinite(
+      Number(LAST_KNOWN_GPS.latitude)
+    ) &&
+    Number.isFinite(
+      Number(LAST_KNOWN_GPS.longitude)
+    )
+  ) {
+
+    bounds.push([
+      Number(
+        LAST_KNOWN_GPS.latitude
+      ),
+      Number(
+        LAST_KNOWN_GPS.longitude
+      )
+    ]);
+  }
+
+  if (bounds.length) {
+
+    DRIVER_TASK_MAP.fitBounds(
+      bounds,
+      {
+        padding: [30, 30],
+        maxZoom: 16
+      }
+    );
+
+  } else {
+
+    DRIVER_TASK_MAP.setView(
+      [14.5995, 120.9842],
+      12
+    );
+  }
+
+  const info =
+    document.getElementById(
+      "taskMapInfo"
+    );
+
+  if (info) {
+
+    info.innerHTML =
+      `📍 <b>${plotted}</b> tasks on map`;
+
+    if (missingGPS > 0) {
+
+      info.innerHTML +=
+        ` &nbsp; | &nbsp; ⚠️ ${missingGPS} without GPS`;
+    }
+  }
+}
+
+
+window.openTaskFromMap =
+  function(taskKey) {
+
+    const task =
+      CURRENT_RENDER_LIST.find(
+        t => t._key === taskKey
+      );
+
+    if (!task) {
+      return;
+    }
+
+    // Close map
+    closeDriverTaskMap();
+
+    // Make this task the active capture task
+    // only if your existing task-open behavior
+    // requires it.
+    const target =
+      document.querySelector(
+        `[data-task-key="${taskKey}"]`
+      );
+
+    if (target) {
+
+      target.scrollIntoView({
+        behavior: "smooth",
+        block: "center"
+      });
+
+      return;
+    }
+
+    // Fallback:
+    // re-render the list and scroll after rendering.
+    renderWithPagination(
+      CURRENT_RENDER_LIST
+    );
+
+    setTimeout(() => {
+
+      const el =
+        document.querySelector(
+          `[data-task-key="${taskKey}"]`
+        );
+
+      if (el) {
+
+        el.scrollIntoView({
+          behavior: "smooth",
+          block: "center"
+        });
+      }
+
+    }, 100);
+  };
+
+
+function openDriverTaskMap() {
+
+  if (SYNC_RUNNING) {
+
+    alert(
+      "⏳ Sync is in progress.\n\n" +
+      "Please wait until synchronization is complete."
+    );
+
+    return;
+  }
+
+  DRIVER_TASK_MAP_VISIBLE = true;
+
+  document.getElementById(
+    "driverTaskMapPanel"
+  ).style.display = "block";
+
+  document.getElementById(
+    "openTaskMapBtn"
+  ).style.display = "none";
+
+  document.getElementById(
+    "jobTypeFilter"
+  ).style.display = "none";
+
+  document.getElementById(
+    "searchBox"
+  ).parentElement.style.display =
+    "none";
+
+  document.getElementById(
+    "taskList"
+  ).style.display = "none";
+
+  initDriverTaskMap();
+
+  setTimeout(() => {
+
+    DRIVER_TASK_MAP.invalidateSize();
+
+    renderDriverTaskMap();
+
+  }, 100);
+}
+
+
+function closeDriverTaskMap() {
+
+  DRIVER_TASK_MAP_VISIBLE = false;
+
+  document.getElementById(
+    "driverTaskMapPanel"
+  ).style.display = "none";
+
+  document.getElementById(
+    "openTaskMapBtn"
+  ).style.display = "block";
+
+  document.getElementById(
+    "jobTypeFilter"
+  ).style.display = "block";
+
+  document.getElementById(
+    "searchBox"
+  ).parentElement.style.display =
+    "flex";
+
+  document.getElementById(
+    "taskList"
+  ).style.display = "block";
+}
+
+
+document.getElementById(
+  "openTaskMapBtn"
+).onclick =
+  openDriverTaskMap;
+
+
+document.getElementById(
+  "closeTaskMapBtn"
+).onclick =
+  closeDriverTaskMap;
+
+
+document.getElementById(
+  "centerDriverBtn"
+).onclick =
+  function() {
+
+    if (
+      !DRIVER_TASK_MAP ||
+      !LAST_KNOWN_GPS
+    ) {
+
+      alert(
+        "📍 Current GPS location is not available yet."
+      );
+
+      return;
+    }
+
+    DRIVER_TASK_MAP.setView(
+      [
+        Number(
+          LAST_KNOWN_GPS.latitude
+        ),
+        Number(
+          LAST_KNOWN_GPS.longitude
+        )
+      ],
+      17
+    );
+
+    updateDriverLocationOnTaskMap();
+  };
 const RENDER_CHUNK_SIZE = 3;      // then render 3 per frame
 
 function renderOneTask(t) {
@@ -3676,7 +4371,12 @@ function renderOneTask(t) {
   const status = resolveStatus(t);
 
   const div = document.createElement("div");
-  div.className = `task ${status === "COMPLETED" ? "completed" : ""}`;
+
+  div.className =
+    `task ${status === "COMPLETED" ? "completed" : ""}`;
+  
+  div.dataset.taskKey =
+    t._key;
 
   const hasGPS =
     t.LATITUDE &&
