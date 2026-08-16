@@ -977,7 +977,7 @@ textarea{
   <div>
 
     <h1>
-      🚚 Driva Delivery Template Maker V.R.0.0.10
+      🚚 Driva Delivery Template Maker V.R.0.0.11
     </h1>
 
     <p>
@@ -1537,40 +1537,160 @@ function normalizeForRTDB(m){
     }
 
 
-    /*
-     * Every radio field may contain
-     * conditional child fields.
-     */
-
     if(
-      f.type === "radio"
+      f.type !== "radio"
     ){
 
-      /*
-       * Preserve existing fields.options
-       * exactly as they are.
-       */
+      continue;
 
-      f.fields ||= {
-
-        _order:[],
-
-        options:{}
-
-      };
+    }
 
 
-      f.fields._order ||=
-        Object.keys(
-          f.fields.options ||
-          {}
+    f.fields ||= {
+
+      _order:[],
+
+      options:{}
+
+    };
+
+
+    f.fields.options ||=
+      {};
+
+
+    f.fields._order ||=
+      Object.keys(
+        f.fields.options
+      );
+
+
+    /*
+     * -------------------------------------------------------
+     * MIGRATE OLD child_1 / child_2 / child_3 KEYS
+     * -------------------------------------------------------
+     *
+     * Old Template Maker created:
+     *
+     * child_1
+     * child_2
+     *
+     * The driver then saved those exact keys into Firestore.
+     *
+     * Convert them to keys based on the actual label:
+     *
+     * Locking device used
+     *      ↓
+     * locking_device_used
+     *
+     * Last reading
+     *      ↓
+     * last_reading
+     *
+     * Existing correct keys are left untouched.
+     */
+
+    const oldOrder =
+      [...f.fields._order];
+
+
+    const newOrder = [];
+
+
+    const newOptions = {};
+
+
+    oldOrder.forEach(
+      oldKey => {
+
+        const option =
+          f.fields.options[
+            oldKey
+          ];
+
+
+        if(!option){
+
+          return;
+
+        }
+
+
+        let newKey =
+          oldKey;
+
+
+        /*
+         * Only migrate the old generated
+         * child_N format.
+         */
+
+        if(
+          /^child_\d+$/.test(
+            oldKey
+          )
+        ){
+
+          const generatedKey =
+            slug(
+              option.label
+            );
+
+
+          if(
+            generatedKey &&
+            generatedKey !== "field"
+          ){
+
+            newKey =
+              generatedKey;
+
+          }
+
+        }
+
+
+        /*
+         * Prevent duplicate keys.
+         */
+
+        let baseKey =
+          newKey;
+
+
+        let counter = 2;
+
+
+        while(
+          newOptions[newKey]
+        ){
+
+          newKey =
+            `${baseKey}_${counter++}`;
+
+        }
+
+
+        newOrder.push(
+          newKey
         );
 
 
-      f.fields.options ||=
-        {};
+        newOptions[
+          newKey
+        ] =
+          option;
 
-    }
+      }
+    );
+
+
+    f.fields._order =
+      newOrder;
+
+
+    f.fields.options =
+      newOptions;
 
   }
 
@@ -2553,45 +2673,96 @@ function wireConditionalEditor(
 
     addButton.onclick =
       () => {
-
+    
+        /*
+         * Ask for the actual field label first.
+         *
+         * This allows us to create the correct
+         * RTDB key immediately.
+         */
+    
+        const label =
+          prompt(
+            "Enter the conditional field label:"
+          );
+    
+    
+        if(
+          label === null
+        ){
+    
+          return;
+    
+        }
+    
+    
+        const cleanLabel =
+          label.trim();
+    
+    
+        if(
+          !cleanLabel
+        ){
+    
+          alert(
+            "Field label cannot be blank."
+          );
+    
+          return;
+    
+        }
+    
+    
+        /*
+         * Generate RTDB-safe key from label.
+         *
+         * Example:
+         *
+         * Locking device used
+         *      ↓
+         * locking_device_used
+         */
+    
         let key =
-          `child_${
-            f.fields._order.length + 1
-          }`;
-
-
+          slug(
+            cleanLabel
+          );
+    
+    
+        let counter = 2;
+    
+    
         while(
           f.fields.options[key]
         ){
-
-          key += "_x";
-
+    
+          key =
+            `${slug(cleanLabel)}_${counter++}`;
+    
         }
-
-
+    
+    
         f.fields._order.push(
           key
         );
-
-
+    
+    
         f.fields.options[
           key
         ] = {
-
+    
           label:
-            `Conditional Field ${
-              f.fields._order.length
-            }`,
-
+            cleanLabel,
+    
           required:false,
-
+    
           type:"text"
-
+    
         };
-
-
+    
+    
         render();
-
+    
       };
 
   }
