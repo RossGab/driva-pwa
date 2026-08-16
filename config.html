@@ -1,26 +1,36 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<meta
+  name="viewport"
+  content="width=device-width, initial-scale=1.0"
+>
 
 <title>Driva Delivery Template Maker</title>
 
+
 <style>
+
+/* =========================================================
+   GLOBAL
+   ========================================================= */
 
 *{
   box-sizing:border-box;
 }
 
 :root{
+
   --blue:#087ff5;
-  --blue2:#eaf4ff;
   --border:#d9d9d9;
   --text:#17202a;
   --muted:#6b7280;
   --danger:#d92d20;
   --bg:#f4f5f7;
-  --green:#159947;
+
 }
 
 html{
@@ -28,22 +38,32 @@ html{
 }
 
 body{
+
   margin:0;
+
   font-family:Arial,sans-serif;
+
   background:var(--bg);
+
   color:var(--text);
+
   font-size:13px;
+
 }
 
 button,
 input,
 select,
 textarea{
+
   font:inherit;
+
 }
 
 button{
+
   cursor:pointer;
+
 }
 
 
@@ -52,59 +72,91 @@ button{
    ========================================================= */
 
 .header{
+
   position:sticky;
+
   top:0;
+
   z-index:100;
 
   background:#fff;
+
   border-bottom:1px solid #ddd;
 
   padding:10px 15px;
 
   display:flex;
+
   justify-content:space-between;
+
   align-items:center;
 
   gap:10px;
+
 }
 
 .header h1{
+
   font-size:17px;
+
   margin:0;
+
 }
 
 .header p{
+
   font-size:11px;
+
   color:var(--muted);
+
   margin:3px 0 0;
+
 }
 
 .actions{
+
   display:flex;
+
   gap:6px;
+
 }
 
 .btn{
+
   border:1px solid #ccc;
+
   background:#fff;
+
   border-radius:6px;
+
   padding:7px 10px;
+
 }
 
 .btn.primary{
+
   background:var(--blue);
+
   border-color:var(--blue);
+
   color:#fff;
+
 }
 
 .btn.danger{
+
   color:var(--danger);
+
   border-color:#f2b8b5;
+
 }
 
 .btn.small{
+
   padding:5px 8px;
+
   font-size:11px;
+
 }
 
 
@@ -113,6 +165,7 @@ button{
    ========================================================= */
 
 .layout{
+
   display:grid;
 
   grid-template-columns:
@@ -122,14 +175,16 @@ button{
   align-items:start;
 
   min-height:calc(100vh - 58px);
+
 }
 
 
 /* =========================================================
-   LEFT BUILDER
+   BUILDER
    ========================================================= */
 
 .builder{
+
   padding:12px;
 
   background:#f7f8fa;
@@ -137,14 +192,16 @@ button{
   border-right:1px solid #ddd;
 
   min-width:0;
+
 }
 
 
 /* =========================================================
-   RIGHT PREVIEW
+   PREVIEW
    ========================================================= */
 
 .preview{
+
   padding:12px;
 
   min-width:0;
@@ -156,6 +213,29 @@ button{
   height:calc(100vh - 58px);
 
   overflow:hidden;
+
+}
+
+.preview-title{
+
+  font-size:13px;
+
+  font-weight:bold;
+
+  margin:0 0 8px;
+
+}
+
+.driver-preview-scroll{
+
+  height:calc(100vh - 105px);
+
+  overflow-y:auto;
+
+  overflow-x:hidden;
+
+  padding-right:4px;
+
 }
 
 
@@ -164,27 +244,41 @@ button{
    ========================================================= */
 
 .panel{
+
   background:#fff;
+
   border:1px solid #ddd;
+
   border-radius:9px;
+
   margin-bottom:10px;
+
 }
 
 .panel h2{
+
   font-size:13px;
+
   margin:0;
+
   padding:10px 12px;
+
   border-bottom:1px solid #eee;
+
 }
 
 .panel-body{
+
   padding:11px;
+
 }
 
 label.caption{
+
   display:block;
 
   font-size:10px;
+
   font-weight:bold;
 
   color:#667085;
@@ -192,22 +286,27 @@ label.caption{
   text-transform:uppercase;
 
   margin:0 0 4px;
+
 }
 
 input,
 select,
 textarea{
+
   width:100%;
 
   border:1px solid #c8cdd3;
+
   border-radius:5px;
 
   padding:7px;
 
   background:#fff;
+
 }
 
 .grid2{
+
   display:grid;
 
   grid-template-columns:
@@ -215,30 +314,42 @@ textarea{
     1fr;
 
   gap:7px;
+
 }
 
 .add-row{
+
   display:flex;
+
   gap:6px;
+
 }
 
 .add-row input{
+
   flex:1;
+
 }
 
 
 /* =========================================================
-   DELIVERY METHODS
+   METHODS
    ========================================================= */
 
 .method-list{
+
   display:flex;
+
   flex-direction:column;
+
   gap:5px;
+
 }
 
 .method{
+
   display:flex;
+
   align-items:center;
 
   gap:7px;
@@ -246,35 +357,47 @@ textarea{
   padding:7px 8px;
 
   border:1px solid #ddd;
+
   border-radius:6px;
 
   background:#fff;
+
 }
 
 .method.active{
+
   border-color:#70aef8;
+
   background:#f2f8ff;
+
 }
 
 .method-name{
+
   flex:1;
 
   font-weight:bold;
 
   cursor:pointer;
+
 }
 
 .method-meta{
+
   font-size:10px;
+
   color:#777;
 
   font-weight:normal;
 
   margin-top:2px;
+
 }
 
 .icon{
+
   width:27px;
+
   height:27px;
 
   padding:0;
@@ -284,6 +407,7 @@ textarea{
   background:#fff;
 
   border-radius:5px;
+
 }
 
 
@@ -292,6 +416,7 @@ textarea{
    ========================================================= */
 
 .field{
+
   border:1px solid #ddd;
 
   border-radius:7px;
@@ -301,9 +426,11 @@ textarea{
   overflow:hidden;
 
   background:#fff;
+
 }
 
 .field-head{
+
   display:flex;
 
   align-items:center;
@@ -315,15 +442,19 @@ textarea{
   background:#fafafa;
 
   border-bottom:1px solid #eee;
+
 }
 
 .field-head b{
+
   flex:1;
 
   font-size:12px;
+
 }
 
 .pill{
+
   font-size:10px;
 
   background:#e9ecef;
@@ -333,13 +464,17 @@ textarea{
   border-radius:10px;
 
   color:#555;
+
 }
 
 .field-body{
+
   padding:9px;
+
 }
 
 .req{
+
   display:flex;
 
   align-items:center;
@@ -349,13 +484,17 @@ textarea{
   font-size:11px;
 
   margin-top:7px;
+
 }
 
 .req input{
+
   width:auto;
+
 }
 
 .field-actions{
+
   display:flex;
 
   justify-content:flex-end;
@@ -363,14 +502,16 @@ textarea{
   gap:5px;
 
   margin-top:7px;
+
 }
 
 
 /* =========================================================
-   RADIO EDITOR
+   CONDITIONAL FIELD EDITOR
    ========================================================= */
 
 .radio-editor{
+
   margin-top:9px;
 
   border-left:3px solid #9ac8ff;
@@ -378,9 +519,11 @@ textarea{
   background:#f7fbff;
 
   padding:8px;
+
 }
 
 .radio-title{
+
   font-size:10px;
 
   font-weight:bold;
@@ -388,9 +531,11 @@ textarea{
   color:#52606d;
 
   margin-bottom:7px;
+
 }
 
 .option{
+
   display:grid;
 
   grid-template-columns:
@@ -401,10 +546,13 @@ textarea{
   gap:5px;
 
   margin-bottom:5px;
+
 }
 
 .option button{
+
   width:27px;
+
 }
 
 
@@ -413,6 +561,7 @@ textarea{
    ========================================================= */
 
 .empty{
+
   border:1px dashed #c7cdd4;
 
   padding:18px;
@@ -424,9 +573,11 @@ textarea{
   border-radius:6px;
 
   font-size:11px;
+
 }
 
 .json pre{
+
   margin:0;
 
   background:#111827;
@@ -444,36 +595,36 @@ textarea{
   max-height:300px;
 
   overflow:auto;
+
+}
+
+.note{
+
+  font-size:10px;
+
+  color:#6b7280;
+
+  margin-top:5px;
+
+  line-height:1.4;
+
+}
+
+.status{
+
+  font-size:10px;
+
+  color:#667085;
+
 }
 
 
 /* =========================================================
-   PREVIEW
-   ========================================================= */
-
-.preview-title{
-  font-size:13px;
-
-  font-weight:bold;
-
-  margin:0 0 8px;
-}
-
-.driver-preview-scroll{
-  height:calc(100vh - 105px);
-
-  overflow-y:auto;
-  overflow-x:hidden;
-
-  padding-right:4px;
-}
-
-
-/* =========================================================
-   DRIVER SCREEN
+   DRIVER PREVIEW
    ========================================================= */
 
 .driver-wrap{
+
   width:100%;
 
   max-width:790px;
@@ -488,40 +639,50 @@ textarea{
   border-left:3px solid #ffb000;
 
   position:relative;
+
 }
 
 .driver-top{
+
   padding:9px 12px 7px;
 
   background:#fff;
+
 }
 
 .driver-top .name{
+
   font-weight:bold;
 
   font-size:15px;
+
 }
 
 .driver-top .line{
+
   font-size:11px;
 
   line-height:15px;
+
 }
 
 .driver-top .address{
+
   color:#0867d6;
 
   text-decoration:underline;
 
   font-weight:bold;
+
 }
 
 
 /* =========================================================
-   PHOTO ROW
+   PHOTOS
    ========================================================= */
 
 .photo-row{
+
   display:grid;
 
   grid-template-columns:
@@ -530,9 +691,11 @@ textarea{
   gap:5px;
 
   padding:3px 10px 7px;
+
 }
 
 .photo{
+
   height:32px;
 
   border:0;
@@ -544,10 +707,13 @@ textarea{
   text-align:center;
 
   font-size:11px;
+
 }
 
 .photo.disabled{
+
   color:#bbb;
+
 }
 
 
@@ -556,10 +722,23 @@ textarea{
    ========================================================= */
 
 .driver-form{
+
   padding:0 10px 20px;
+
+}
+
+.delivery-title{
+
+  font-weight:bold;
+
+  font-size:13px;
+
+  margin:3px 0 2px;
+
 }
 
 .driver-label{
+
   font-size:13px;
 
   font-weight:bold;
@@ -567,41 +746,17 @@ textarea{
   display:block;
 
   margin:5px 0 4px;
+
 }
 
 .driver-label.required::after{
+
   content:" *";
 
-  color:#111;
-}
-
-.delivery-title{
-  font-weight:bold;
-
-  font-size:13px;
-
-  margin:3px 0 2px;
-}
-
-.radio-line{
-  display:flex;
-
-  align-items:center;
-
-  gap:4px;
-
-  min-height:19px;
-
-  font-size:13px;
-}
-
-.radio-line input{
-  width:auto;
-
-  margin:0;
 }
 
 .driver-input{
+
   width:100%;
 
   height:27px;
@@ -611,9 +766,11 @@ textarea{
   border:1px solid #777;
 
   border-radius:0;
+
 }
 
 .driver-textarea{
+
   width:100%;
 
   min-height:73px;
@@ -625,51 +782,86 @@ textarea{
   border-radius:0;
 
   padding:5px;
+
 }
 
 
 /* =========================================================
-   RADIO PARENT
+   MAIN DELIVERY METHOD RADIO
    ========================================================= */
 
-/*
- * IMPORTANT:
- *
- * A radio-type field is NOT itself a radio button.
- *
- * Example:
- *
- * C100-Disconnected
- *    ○ Locking device used
- *       [input]
- *    ○ last reading
- *
- * The parent is only the heading.
- */
+.driver-radio-line{
 
-.driver-radio-field{
-  margin:7px 0 7px;
-}
+  display:flex;
 
-.driver-radio-heading{
+  align-items:center;
+
+  gap:4px;
+
+  min-height:19px;
+
   font-size:13px;
 
-  font-weight:bold;
+}
 
-  margin:6px 0 2px;
+.driver-radio-line input{
+
+  width:auto;
+
+  margin:0;
+
 }
 
 
 /* =========================================================
-   RADIO CHILD
+   STATUS RADIO GROUP
    ========================================================= */
 
-.driver-child-option{
-  margin:0;
+.status-radio-group{
+
+  margin-top:7px;
+
 }
 
-.driver-child-input{
-  margin:1px 0 5px 22px;
+.status-option{
+
+  display:flex;
+
+  align-items:center;
+
+  gap:4px;
+
+  min-height:19px;
+
+  font-size:13px;
+
+}
+
+.status-option input{
+
+  width:auto;
+
+  margin:0;
+
+}
+
+
+/* =========================================================
+   CONDITIONAL FIELDS
+   ========================================================= */
+
+.conditional-fields{
+
+  margin:2px 0 6px 0;
+
+  padding-left:0;
+
+}
+
+.conditional-field{
+
+  margin:0 0 5px 0;
+
 }
 
 
@@ -678,6 +870,7 @@ textarea{
    ========================================================= */
 
 .preview-footer{
+
   position:sticky;
 
   bottom:0;
@@ -691,9 +884,11 @@ textarea{
   border-top:1px solid #eee;
 
   text-align:center;
+
 }
 
 .install{
+
   display:inline-block;
 
   background:#087ff5;
@@ -707,41 +902,17 @@ textarea{
   font-weight:bold;
 
   font-size:12px;
+
 }
 
 .submit-preview{
+
   font-size:11px;
 
   color:#aaa;
 
   margin-top:4px;
-}
 
-
-/* =========================================================
-   NOTES / STATUS
-   ========================================================= */
-
-.note{
-  font-size:10px;
-
-  color:#6b7280;
-
-  margin-top:5px;
-
-  line-height:1.4;
-}
-
-.status{
-  font-size:10px;
-
-  color:#667085;
-}
-
-.status.ok{
-  color:var(--green);
-
-  font-weight:bold;
 }
 
 
@@ -752,13 +923,17 @@ textarea{
 @media(max-width:980px){
 
   .layout{
+
     grid-template-columns:1fr;
+
   }
 
   .builder{
+
     border-right:0;
 
     border-bottom:1px solid #ddd;
+
   }
 
   .preview{
@@ -772,29 +947,37 @@ textarea{
     overflow:visible;
 
     padding-top:15px;
+
   }
 
   .driver-preview-scroll{
+
     height:auto;
 
     overflow:visible;
+
   }
 
 }
 
 </style>
+
 </head>
 
 
 <body>
 
 
+<!-- =========================================================
+     HEADER
+     ========================================================= -->
+
 <header class="header">
 
   <div>
 
     <h1>
-      🚚 Driva Delivery Template Maker V.R.0.0.9
+      🚚 Driva Delivery Template Maker V.R.0.0.10
     </h1>
 
     <p>
@@ -838,11 +1021,13 @@ textarea{
 
 
 <!-- =========================================================
-     LEFT BUILDER
+     BUILDER
      ========================================================= -->
 
 <aside class="builder">
 
+
+  <!-- TEMPLATE -->
 
   <section class="panel">
 
@@ -894,6 +1079,8 @@ textarea{
   </section>
 
 
+  <!-- METHODS -->
+
   <section class="panel">
 
     <h2>
@@ -919,6 +1106,8 @@ textarea{
 
   </section>
 
+
+  <!-- FIELDS -->
 
   <section class="panel">
 
@@ -1007,8 +1196,11 @@ textarea{
 
         <div class="note">
 
-          A Radio Group becomes a section heading on the driver screen.
-          Its Child Options become the actual radio buttons.
+          Radio Group fields become one option in the
+          main status radio group.
+
+          Their child fields appear only when that
+          option is selected.
 
         </div>
 
@@ -1024,6 +1216,8 @@ textarea{
 
   </section>
 
+
+  <!-- JSON -->
 
   <section class="panel json">
 
@@ -1056,7 +1250,7 @@ textarea{
 
 
 <!-- =========================================================
-     RIGHT DRIVER PREVIEW
+     DRIVER PREVIEW
      ========================================================= -->
 
 <main class="preview">
@@ -1072,6 +1266,8 @@ textarea{
 
     <div class="driver-wrap">
 
+
+      <!-- DRIVER HEADER -->
 
       <div class="driver-top">
 
@@ -1134,6 +1330,8 @@ textarea{
       </div>
 
 
+      <!-- PHOTOS -->
+
       <div class="photo-row">
 
         <button class="photo">
@@ -1153,11 +1351,15 @@ textarea{
       </div>
 
 
+      <!-- FORM -->
+
       <div
         class="driver-form"
         id="previewContainer"
       ></div>
 
+
+      <!-- FOOTER -->
 
       <div class="preview-footer">
 
@@ -1232,7 +1434,18 @@ const STATE = {
 
   methods:{},
 
-  selectedMethod:null
+  selectedMethod:null,
+
+  /*
+   * Selected status radio per delivery method.
+   *
+   * Example:
+   *
+   * selectedStatus["N1-Received"]
+   * = "c100_disconnected"
+   */
+
+  selectedStatus:{}
 
 };
 
@@ -1274,7 +1487,7 @@ const slug =
 
 
 /* =========================================================
-   SHAPE
+   NORMALIZE METHOD
    ========================================================= */
 
 function shape(m){
@@ -1324,9 +1537,19 @@ function normalizeForRTDB(m){
     }
 
 
+    /*
+     * Every radio field may contain
+     * conditional child fields.
+     */
+
     if(
       f.type === "radio"
     ){
+
+      /*
+       * Preserve existing fields.options
+       * exactly as they are.
+       */
 
       f.fields ||= {
 
@@ -1337,103 +1560,15 @@ function normalizeForRTDB(m){
       };
 
 
-      /*
-       * Legacy format conversion.
-       */
-
-      if(
-        f.fields.options
-      ){
-
-        for(
-          const optionKey
-          of Object.keys(
-            f.fields.options
-          )
-        ){
-
-          const option =
-            f.fields.options[
-              optionKey
-            ];
+      f.fields._order ||=
+        Object.keys(
+          f.fields.options ||
+          {}
+        );
 
 
-          if(
-            option &&
-            option.children &&
-            option.children.fields
-          ){
-
-            const childFields =
-              option.children.fields;
-
-
-            const childOrder =
-              option.children._order ||
-              Object.keys(
-                childFields
-              );
-
-
-            if(
-              !f.fields._order.length
-            ){
-
-              for(
-                const childKey
-                of childOrder
-              ){
-
-                const child =
-                  childFields[
-                    childKey
-                  ];
-
-
-                if(!child){
-                  continue;
-                }
-
-
-                f.fields._order.push(
-                  childKey
-                );
-
-
-                f.fields.options[
-                  childKey
-                ] = {
-
-                  label:
-                    child.label ||
-                    childKey,
-
-                  required:
-                    !!child.required,
-
-                  type:
-                    child.type ||
-                    "text"
-
-                };
-
-              }
-
-            }
-
-
-            delete f.fields.options[
-              optionKey
-            ];
-
-          }
-
-        }
-
-      }
-
-
-      delete f.radioMode;
+      f.fields.options ||=
+        {};
 
     }
 
@@ -1468,7 +1603,98 @@ function current(){
 
 
 /* =========================================================
-   RENDER EVERYTHING
+   GET RADIO FIELDS
+   ========================================================= */
+
+function getRadioFields(
+  method
+){
+
+  if(!method){
+    return [];
+  }
+
+
+  shape(method);
+
+
+  return method._order
+    .map(
+      key =>
+        ({
+          key,
+
+          field:
+            method.fields[key]
+
+        })
+    )
+    .filter(
+      item =>
+        item.field &&
+        item.field.type === "radio"
+    );
+
+}
+
+
+/* =========================================================
+   DEFAULT STATUS
+   ========================================================= */
+
+function getSelectedStatus(
+  methodName,
+  method
+){
+
+  const radios =
+    getRadioFields(
+      method
+    );
+
+
+  if(
+    !radios.length
+  ){
+
+    return null;
+
+  }
+
+
+  const currentSelected =
+    STATE.selectedStatus[
+      methodName
+    ];
+
+
+  if(
+    currentSelected &&
+    method.fields[
+      currentSelected
+    ] &&
+    method.fields[
+      currentSelected
+    ].type === "radio"
+  ){
+
+    return currentSelected;
+
+  }
+
+
+  /*
+   * Match the working driver behavior:
+   * first radio option is selected.
+   */
+
+  return radios[0].key;
+
+}
+
+
+/* =========================================================
+   RENDER
    ========================================================= */
 
 function render(){
@@ -1660,31 +1886,6 @@ function renderMethods(){
 
 
 /* =========================================================
-   METHOD ORDER
-   ========================================================= */
-
-function methodOrder(){
-
-  return Object.keys(
-    STATE.methods
-  );
-
-}
-
-
-function rebuildMethods(
-  entries
-){
-
-  STATE.methods =
-    Object.fromEntries(
-      entries
-    );
-
-}
-
-
-/* =========================================================
    MOVE METHOD
    ========================================================= */
 
@@ -1694,7 +1895,9 @@ function moveMethod(
 ){
 
   const a =
-    methodOrder();
+    Object.keys(
+      STATE.methods
+    );
 
 
   const i =
@@ -1725,14 +1928,15 @@ function moveMethod(
   ];
 
 
-  rebuildMethods(
-    a.map(
-      key => [
-        key,
-        STATE.methods[key]
-      ]
-    )
-  );
+  STATE.methods =
+    Object.fromEntries(
+      a.map(
+        key => [
+          key,
+          STATE.methods[key]
+        ]
+      )
+    );
 
 
   render();
@@ -1770,6 +1974,9 @@ function renderFields(){
   if(!m){
     return;
   }
+
+
+  shape(m);
 
 
   const list =
@@ -1928,7 +2135,7 @@ function renderFields(){
 
           ${
             f.type === "radio"
-              ? radioEditor(f)
+              ? conditionalEditor(f)
               : ""
           }
 
@@ -2076,12 +2283,25 @@ function renderFields(){
           ];
 
 
+          if(
+            STATE.selectedStatus[
+              STATE.selectedMethod
+            ] === key
+          ){
+
+            delete STATE.selectedStatus[
+              STATE.selectedMethod
+            ];
+
+          }
+
+
           render();
 
         };
 
 
-      wireRadio(
+      wireConditionalEditor(
         card,
         f
       );
@@ -2151,10 +2371,12 @@ function moveField(
 
 
 /* =========================================================
-   RADIO EDITOR
+   CONDITIONAL FIELD EDITOR
    ========================================================= */
 
-function radioEditor(f){
+function conditionalEditor(
+  f
+){
 
   f.fields ||= {
 
@@ -2165,12 +2387,20 @@ function radioEditor(f){
   };
 
 
+  f.fields.options ||= {};
+
+  f.fields._order ||= [];
+
+
   return `
 
     <div class="radio-editor">
 
+
       <div class="radio-title">
-        CHILD RADIO OPTIONS
+
+        CONDITIONAL FIELDS
+
       </div>
 
 
@@ -2179,17 +2409,16 @@ function radioEditor(f){
         style="margin-bottom:7px"
       >
 
-        Each child below becomes an actual
-        radio option on the driver screen.
+        These fields appear when this radio
+        option is selected in the driver app.
 
-        Selecting it displays its configured
-        Text or Textarea input.
+        They are NOT additional radio buttons.
 
       </div>
 
 
       ${
-        (f.fields._order || [])
+        f.fields._order
           .map(
             key => {
 
@@ -2208,13 +2437,14 @@ function radioEditor(f){
 
                 <div class="option">
 
+
                   <input
                     data-opt-label="${esc(key)}"
                     value="${esc(
                       option.label ||
                       ""
                     )}"
-                    placeholder="Child option label"
+                    placeholder="Conditional field label"
                   >
 
 
@@ -2251,10 +2481,11 @@ function radioEditor(f){
                   <button
                     class="icon"
                     data-opt-remove="${esc(key)}"
-                    title="Remove child option"
+                    title="Remove conditional field"
                   >
                     ×
                   </button>
+
 
                 </div>
 
@@ -2270,7 +2501,7 @@ function radioEditor(f){
         class="btn small"
         data-add-option
       >
-        ＋ Add Child Option
+        ＋ Add Conditional Field
       </button>
 
     </div>
@@ -2281,10 +2512,10 @@ function radioEditor(f){
 
 
 /* =========================================================
-   WIRE RADIO EDITOR
+   WIRE CONDITIONAL EDITOR
    ========================================================= */
 
-function wireRadio(
+function wireConditionalEditor(
   card,
   f
 ){
@@ -2305,6 +2536,11 @@ function wireRadio(
     options:{}
 
   };
+
+
+  f.fields.options ||= {};
+
+  f.fields._order ||= [];
 
 
   const addButton =
@@ -2343,7 +2579,7 @@ function wireRadio(
         ] = {
 
           label:
-            `Child Option ${
+            `Conditional Field ${
               f.fields._order.length
             }`,
 
@@ -2512,13 +2748,6 @@ window.addDeliveryMethod =
       jt;
 
 
-    Object.values(
-      STATE.methods
-    ).forEach(
-      normalizeForRTDB
-    );
-
-
     if(
       !STATE.methods[name]
     ){
@@ -2536,6 +2765,19 @@ window.addDeliveryMethod =
 
     STATE.selectedMethod =
       name;
+
+
+    if(
+      !STATE.selectedStatus[name]
+    ){
+
+      STATE.selectedStatus[name] =
+        getSelectedStatus(
+          name,
+          STATE.methods[name]
+        );
+
+    }
 
 
     $("deliveryMethodInput")
@@ -2566,6 +2808,11 @@ window.removeMethod =
 
 
     delete STATE.methods[
+      name
+    ];
+
+
+    delete STATE.selectedStatus[
       name
     ];
 
@@ -2620,6 +2867,11 @@ window.duplicateMethod =
           STATE.methods[name]
         )
       );
+
+
+    delete STATE.selectedStatus[
+      copy
+    ];
 
 
     STATE.selectedMethod =
@@ -2733,7 +2985,7 @@ window.addField =
 
 
 /* =========================================================
-   NORMAL DRIVER FIELD
+   CREATE NORMAL FIELD
    ========================================================= */
 
 function createDriverField(
@@ -2825,282 +3077,339 @@ function createDriverField(
 
 
 /* =========================================================
-   RADIO DRIVER FIELD
+   CREATE CONDITIONAL FIELD
    ========================================================= */
 
-/*
- * THIS IS THE IMPORTANT FIX.
- *
- * Given:
- *
- * "c100_disconnected": {
- *   "label": "C100-Disconnected",
- *   "type": "radio",
- *   "fields": {
- *     "_order": [
- *       "child_1",
- *       "child_2"
- *     ],
- *     "options": {
- *       "child_1": {
- *         "label": "Locking device used",
- *         "type": "text"
- *       },
- *       "child_2": {
- *         "label": "last reading",
- *         "type": "text"
- *       }
- *     }
- *   }
- * }
- *
- * Preview becomes:
- *
- * C100-Disconnected
- *   ○ Locking device used
- *      [input]
- *   ○ last reading
- *
- * There is NO radio button beside C100-Disconnected.
- */
-
-function createDriverRadioField(
+function createConditionalField(
   fieldKey,
   field
 ){
 
-  const group =
+  const wrap =
     document.createElement(
       "div"
     );
 
 
-  group.className =
-    "driver-radio-field";
+  wrap.className =
+    "conditional-field";
 
 
-  /* -------------------------------------------------------
-     PARENT HEADING
-     ------------------------------------------------------- */
-
-  const heading =
+  const label =
     document.createElement(
-      "div"
+      "label"
     );
 
 
-  heading.className =
-    "driver-radio-heading";
+  label.className =
+    "driver-label";
 
 
-  heading.textContent =
+  label.textContent =
     field.label ||
     fieldKey;
 
 
-  group.appendChild(
-    heading
-  );
-
-
-  /* -------------------------------------------------------
-     CHILD OPTIONS
-     ------------------------------------------------------- */
-
-  const childOrder =
-    field.fields?._order ||
-    [];
-
-
-  const childOptions =
-    field.fields?.options ||
-    {};
-
-
   if(
-    !childOrder.length
+    field.required
   ){
 
-    return group;
+    label.classList.add(
+      "required"
+    );
 
   }
 
 
-  const childItems = [];
+  wrap.appendChild(
+    label
+  );
 
 
-  childOrder.forEach(
-    (childKey,index) => {
+  if(
+    field.type === "textarea"
+  ){
 
-      const child =
-        childOptions[
-          childKey
-        ];
+    const textarea =
+      document.createElement(
+        "textarea"
+      );
 
 
-      if(!child){
-        return;
-      }
+    textarea.className =
+      "driver-textarea";
 
+
+    wrap.appendChild(
+      textarea
+    );
+
+  }else{
+
+    const input =
+      document.createElement(
+        "input"
+      );
+
+
+    input.type =
+      "text";
+
+
+    input.className =
+      "driver-input";
+
+
+    wrap.appendChild(
+      input
+    );
+
+  }
+
+
+  return wrap;
+
+}
+
+
+/* =========================================================
+   RENDER MAIN STATUS RADIO GROUP
+   ========================================================= */
+
+function createStatusRadioGroup(
+  methodName,
+  method
+){
+
+  const container =
+    document.createElement(
+      "div"
+    );
+
+
+  container.className =
+    "status-radio-group";
+
+
+  const radioFields =
+    getRadioFields(
+      method
+    );
+
+
+  if(
+    !radioFields.length
+  ){
+
+    return container;
+
+  }
+
+
+  let selectedKey =
+    getSelectedStatus(
+      methodName,
+      method
+    );
+
+
+  STATE.selectedStatus[
+    methodName
+  ] =
+    selectedKey;
+
+
+  /*
+   * Store all conditional containers.
+   */
+
+  const conditionalContainers =
+    {};
+
+
+  radioFields.forEach(
+    ({key,field}) => {
 
       /* ---------------------------------------------------
-         CHILD RADIO
+         MAIN RADIO
          --------------------------------------------------- */
 
-      const childLine =
+      const row =
         document.createElement(
           "label"
         );
 
 
-      childLine.className =
-        "radio-line driver-child-option";
+      row.className =
+        "status-option";
 
 
-      const childRadio =
+      const radio =
         document.createElement(
           "input"
         );
 
 
-      childRadio.type =
+      radio.type =
         "radio";
 
 
       /*
-       * All options belonging to the same
-       * parent use the same radio name.
+       * ALL CXX RADIO FIELDS MUST SHARE
+       * ONE RADIO GROUP.
        */
 
-      childRadio.name =
-        `child_${fieldKey}`;
+      radio.name =
+        `status_${methodName}`;
 
 
-      /*
-       * First option selected by default.
-       */
-
-      childRadio.checked =
-        index === 0;
+      radio.checked =
+        key === selectedKey;
 
 
-      const childText =
+      const text =
         document.createElement(
           "span"
         );
 
 
-      childText.textContent =
-        child.label ||
-        childKey;
+      text.textContent =
+        field.label ||
+        key;
 
 
-      childLine.appendChild(
-        childRadio
+      row.appendChild(
+        radio
       );
 
 
-      childLine.appendChild(
-        childText
+      row.appendChild(
+        text
       );
 
 
-      group.appendChild(
-        childLine
+      container.appendChild(
+        row
       );
 
 
       /* ---------------------------------------------------
-         CHILD INPUT
+         CONDITIONAL FIELDS
          --------------------------------------------------- */
 
-      const inputWrap =
+      const conditional =
         document.createElement(
           "div"
         );
 
 
-      inputWrap.className =
-        "driver-child-input";
+      conditional.className =
+        "conditional-fields";
 
 
-      const input =
-        document.createElement(
-          child.type === "textarea"
-            ? "textarea"
-            : "input"
-        );
+      const childOrder =
+        field.fields?._order ||
+        [];
 
 
-      if(
-        child.type === "textarea"
-      ){
-
-        input.className =
-          "driver-textarea";
-
-      }else{
-
-        input.type =
-          "text";
-
-        input.className =
-          "driver-input";
-
-      }
+      const childOptions =
+        field.fields?.options ||
+        {};
 
 
-      inputWrap.appendChild(
-        input
+      /*
+       * IMPORTANT:
+       *
+       * Children are NOT radio buttons.
+       *
+       * They are normal text / textarea
+       * fields shown when their parent
+       * radio is selected.
+       */
+
+      childOrder.forEach(
+        childKey => {
+
+          const child =
+            childOptions[
+              childKey
+            ];
+
+
+          if(!child){
+            return;
+          }
+
+
+          conditional.appendChild(
+            createConditionalField(
+              childKey,
+              child
+            )
+          );
+
+        }
       );
 
 
       /*
-       * First selected option shows its input.
-       * All others are hidden.
+       * No child fields = no conditional
+       * content.
        */
 
-      inputWrap.style.display =
-        index === 0
-          ? "block"
-          : "none";
+      if(
+        !childOrder.length
+      ){
+
+        conditional.style.display =
+          "none";
+
+      }else{
+
+        conditional.style.display =
+          key === selectedKey
+            ? "block"
+            : "none";
+
+      }
 
 
-      group.appendChild(
-        inputWrap
+      conditionalContainers[
+        key
+      ] =
+        conditional;
+
+
+      container.appendChild(
+        conditional
       );
 
 
-      childItems.push({
-
-        radio:
-          childRadio,
-
-        input:
-          inputWrap
-
-      });
-
-
       /* ---------------------------------------------------
-         CHILD RADIO CHANGE
+         CHANGE RADIO
          --------------------------------------------------- */
 
-      childRadio.onchange =
+      radio.onchange =
         () => {
 
-          childItems.forEach(
-            item => {
+          STATE.selectedStatus[
+            methodName
+          ] =
+            key;
 
-              item.input.style.display =
-                "none";
+
+          Object.entries(
+            conditionalContainers
+          ).forEach(
+            ([otherKey,element]) => {
+
+              element.style.display =
+                otherKey === key
+                  ? "block"
+                  : "none";
 
             }
           );
-
-
-          inputWrap.style.display =
-            "block";
 
         };
 
@@ -3108,7 +3417,7 @@ function createDriverRadioField(
   );
 
 
-  return group;
+  return container;
 
 }
 
@@ -3132,10 +3441,6 @@ function renderPreview(){
       "NOV";
 
 
-  /* -------------------------------------------------------
-     NO DELIVERY METHODS
-     ------------------------------------------------------- */
-
   if(
     !Object.keys(
       STATE.methods
@@ -3150,9 +3455,9 @@ function renderPreview(){
   }
 
 
-  /* -------------------------------------------------------
-     DELIVERY METHOD
-     ------------------------------------------------------- */
+  /* =======================================================
+     DELIVERY METHOD RADIO GROUP
+     ======================================================= */
 
   const title =
     document.createElement(
@@ -3173,14 +3478,10 @@ function renderPreview(){
   );
 
 
-  const delivery =
+  const deliveryGroup =
     document.createElement(
       "div"
     );
-
-
-  delivery.className =
-    "driver-radio-group";
 
 
   Object.keys(
@@ -3195,7 +3496,7 @@ function renderPreview(){
 
 
       row.className =
-        "radio-line";
+        "driver-radio-line";
 
 
       const radio =
@@ -3215,18 +3516,6 @@ function renderPreview(){
       radio.checked =
         name ===
         STATE.selectedMethod;
-
-
-      radio.onchange =
-        () => {
-
-          STATE.selectedMethod =
-            name;
-
-
-          render();
-
-        };
 
 
       const text =
@@ -3249,31 +3538,47 @@ function renderPreview(){
       );
 
 
-      delivery.appendChild(
+      deliveryGroup.appendChild(
         row
       );
+
+
+      radio.onchange =
+        () => {
+
+          STATE.selectedMethod =
+            name;
+
+
+          if(
+            !STATE.selectedStatus[name]
+          ){
+
+            STATE.selectedStatus[name] =
+              getSelectedStatus(
+                name,
+                STATE.methods[name]
+              );
+
+          }
+
+
+          render();
+
+        };
 
     }
   );
 
 
   box.appendChild(
-    delivery
+    deliveryGroup
   );
 
 
-  /* -------------------------------------------------------
-     SELECTED METHOD
-     ------------------------------------------------------- */
-
-  if(
-    !STATE.selectedMethod
-  ){
-
-    return;
-
-  }
-
+  /* =======================================================
+     SELECTED DELIVERY METHOD
+     ======================================================= */
 
   const method =
     STATE.methods[
@@ -3289,9 +3594,14 @@ function renderPreview(){
   shape(method);
 
 
-  /* -------------------------------------------------------
-     RENDER IN EXACT _order
-     ------------------------------------------------------- */
+  /*
+   * Normal fields are displayed first.
+   *
+   * Radio fields are NOT rendered here.
+   *
+   * They are rendered together below as
+   * ONE main status radio group.
+   */
 
   method._order.forEach(
     fieldKey => {
@@ -3307,33 +3617,17 @@ function renderPreview(){
       }
 
 
-      /* -----------------------------------------------
-         NORMAL TEXT / TEXTAREA
-         ----------------------------------------------- */
-
       if(
-        field.type !== "radio"
+        field.type === "radio"
       ){
-
-        box.appendChild(
-          createDriverField(
-            fieldKey,
-            field
-          )
-        );
-
 
         return;
 
       }
 
 
-      /* -----------------------------------------------
-         RADIO GROUP
-         ----------------------------------------------- */
-
       box.appendChild(
-        createDriverRadioField(
+        createDriverField(
           fieldKey,
           field
         )
@@ -3342,11 +3636,27 @@ function renderPreview(){
     }
   );
 
+
+  /* =======================================================
+     MAIN STATUS RADIO GROUP
+     ======================================================= */
+
+  const statusGroup =
+    createStatusRadioGroup(
+      STATE.selectedMethod,
+      method
+    );
+
+
+  box.appendChild(
+    statusGroup
+  );
+
 }
 
 
 /* =========================================================
-   JSON PREVIEW
+   JSON
    ========================================================= */
 
 function renderJSON(){
@@ -3487,10 +3797,27 @@ window.loadConfigForEdit =
         null;
 
 
-      Object.values(
+      STATE.selectedStatus =
+        {};
+
+
+      Object.entries(
         STATE.methods
       ).forEach(
-        normalizeForRTDB
+        ([name,method]) => {
+
+          normalizeForRTDB(
+            method
+          );
+
+
+          STATE.selectedStatus[name] =
+            getSelectedStatus(
+              name,
+              method
+            );
+
+        }
       );
 
 
@@ -3544,6 +3871,9 @@ window.resetBuilder =
 
     STATE.selectedMethod =
       null;
+
+    STATE.selectedStatus =
+      {};
 
 
     $("jobTypeInput")
@@ -3607,6 +3937,11 @@ window.saveConfig =
       jt;
 
 
+    /*
+     * Normalize but DO NOT alter
+     * the intended RTDB structure.
+     */
+
     Object.values(
       STATE.methods
     ).forEach(
@@ -3659,7 +3994,7 @@ window.saveConfig =
 
 
 /* =========================================================
-   INITIAL RENDER
+   INITIAL
    ========================================================= */
 
 render();
