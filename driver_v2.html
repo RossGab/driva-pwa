@@ -545,7 +545,7 @@ import {
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "V.R.0.0.15.3";
+const VERSION = "V.R.0.0.15.4";
 const BILLING_CACHE = {};
 window.BILLING_CACHE = BILLING_CACHE;
 const DRIVER_UI_CACHE = {};
@@ -4001,7 +4001,7 @@ function updateDriverLocationOnTaskMap() {
   }
 }
 
-  function renderDriverTaskMap() {
+function renderDriverTaskMap() {
 
   if (!DRIVER_TASK_MAP) {
     return;
@@ -4033,10 +4033,6 @@ function updateDriverLocationOnTaskMap() {
 
     const status = resolveStatus(task);
 
-    // ==========================================
-    // MAP MARKER
-    // ==========================================
-
     const marker = L.marker(
       [lat, lng],
       {
@@ -4046,10 +4042,6 @@ function updateDriverLocationOnTaskMap() {
         )
       }
     ).addTo(DRIVER_TASK_MAP);
-
-    // ==========================================
-    // STATUS LABEL
-    // ==========================================
 
     let statusLabel = "🔵 Pending";
 
@@ -4062,10 +4054,6 @@ function updateDriverLocationOnTaskMap() {
       statusLabel =
         "🔵 Exported — waiting for admin upload";
     }
-
-    // ==========================================
-    // POPUP
-    // ==========================================
 
     marker.bindPopup(`
       <div style="min-width:220px;">
@@ -4135,10 +4123,6 @@ function updateDriverLocationOnTaskMap() {
     plotted++;
   });
 
-  // ==========================================
-  // DRIVER LOCATION
-  // ==========================================
-
   updateDriverLocationOnTaskMap();
 
   if (
@@ -4157,10 +4141,6 @@ function updateDriverLocationOnTaskMap() {
     ]);
   }
 
-  // ==========================================
-  // FIT MAP
-  // ==========================================
-
   if (bounds.length) {
 
     DRIVER_TASK_MAP.fitBounds(
@@ -4178,10 +4158,6 @@ function updateDriverLocationOnTaskMap() {
       12
     );
   }
-
-  // ==========================================
-  // MAP INFO
-  // ==========================================
 
   const info =
     document.getElementById("taskMapInfo");
@@ -4199,64 +4175,9 @@ function updateDriverLocationOnTaskMap() {
   }
 }
 
-  updateDriverLocationOnTaskMap();
 
-  // Include driver's current location
-  if (
-    LAST_KNOWN_GPS &&
-    Number.isFinite(
-      Number(LAST_KNOWN_GPS.latitude)
-    ) &&
-    Number.isFinite(
-      Number(LAST_KNOWN_GPS.longitude)
-    )
-  ) {
-
-    bounds.push([
-      Number(
-        LAST_KNOWN_GPS.latitude
-      ),
-      Number(
-        LAST_KNOWN_GPS.longitude
-      )
-    ]);
-  }
-
-  if (bounds.length) {
-
-    DRIVER_TASK_MAP.fitBounds(
-      bounds,
-      {
-        padding: [30, 30],
-        maxZoom: 16
-      }
-    );
-
-  } else {
-
-    DRIVER_TASK_MAP.setView(
-      [14.5995, 120.9842],
-      12
-    );
-  }
-
-  const info =
-    document.getElementById(
-      "taskMapInfo"
-    );
-
-  if (info) {
-
-    info.innerHTML =
-      `📍 <b>${plotted}</b> tasks on map`;
-
-    if (missingGPS > 0) {
-
-      info.innerHTML +=
-        ` &nbsp; | &nbsp; ⚠️ ${missingGPS} without GPS`;
-    }
-  }
-}
+window.openTaskFromMap =
+  function(taskKey) {
 
 
 window.openTaskFromMap =
