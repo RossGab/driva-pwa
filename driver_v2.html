@@ -545,7 +545,7 @@ import {
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "V.R.0.0.15.2";
+const VERSION = "V.R.0.0.15.3";
 const BILLING_CACHE = {};
 window.BILLING_CACHE = BILLING_CACHE;
 const DRIVER_UI_CACHE = {};
@@ -4001,26 +4001,20 @@ function updateDriverLocationOnTaskMap() {
   }
 }
 
-
-function renderDriverTaskMap() {
+  function renderDriverTaskMap() {
 
   if (!DRIVER_TASK_MAP) {
     return;
   }
 
   // Remove old task markers
-  Object.values(
-    DRIVER_TASK_MARKERS
-  ).forEach(marker => {
-
-    DRIVER_TASK_MAP
-      .removeLayer(marker);
+  Object.values(DRIVER_TASK_MARKERS).forEach(marker => {
+    DRIVER_TASK_MAP.removeLayer(marker);
   });
 
   DRIVER_TASK_MARKERS = {};
 
-  const tasks =
-    getDriverTaskMapTasks();
+  const tasks = getDriverTaskMapTasks();
 
   const bounds = [];
 
@@ -4030,31 +4024,48 @@ function renderDriverTaskMap() {
   tasks.forEach(task => {
 
     if (!isValidTaskGPS(task)) {
-
       missingGPS++;
       return;
     }
 
-    const lat =
-      Number(task.LATITUDE);
-
-    const lng =
-      Number(task.LONGITUDE);
+    const lat = Number(task.LATITUDE);
+    const lng = Number(task.LONGITUDE);
 
     const status = resolveStatus(task);
 
-    const marker =
-      L.marker(
-        [lat, lng],
-        {
-          icon:
-            createTaskMapIcon(
-              task.SEQUENCE,
-              status
-            )
-        }
-      )
-      .addTo(DRIVER_TASK_MAP);
+    // ==========================================
+    // MAP MARKER
+    // ==========================================
+
+    const marker = L.marker(
+      [lat, lng],
+      {
+        icon: createTaskMapIcon(
+          task.SEQUENCE,
+          status
+        )
+      }
+    ).addTo(DRIVER_TASK_MAP);
+
+    // ==========================================
+    // STATUS LABEL
+    // ==========================================
+
+    let statusLabel = "🔵 Pending";
+
+    if (status === "SYNC_PENDING") {
+      statusLabel =
+        "🟢 Completed locally — waiting for sync";
+    }
+
+    if (status === "EXPORTED") {
+      statusLabel =
+        "🔵 Exported — waiting for admin upload";
+    }
+
+    // ==========================================
+    // POPUP
+    // ==========================================
 
     marker.bindPopup(`
       <div style="min-width:220px;">
@@ -4094,72 +4105,8 @@ function renderDriverTaskMap() {
 
         <br>
 
-        let statusLabel = "🔵 Pending";
-
-if (status === "SYNC_PENDING") {
-  statusLabel = "🟢 Completed locally — waiting for sync";
-}
-
-marker.bindPopup(`
-  <div style="min-width:220px;">
-
-    <b>
-      ${task.CUSTOMERNAME || "—"}
-    </b>
-
-    <br>
-
-    📍 ${task.ADDRESS || "—"}
-
-    <hr style="margin:6px 0;">
-
-    <b>Sequence:</b>
-    ${task.SEQUENCE || "—"}
-
-    <br>
-
-    <b>Account:</b>
-    ${task.ACCOUNTNUMBER || "—"}
-
-    <br>
-
-    <b>Meter:</b>
-    ${task.METERNUMBER || "—"}
-
-    <br>
-
-    <b>MRU:</b>
-    ${task.MRU || "—"}
-
-    <br>
-
-    <b>Job:</b>
-    ${task.JOBTYPE || "—"}
-
-    <br>
-
-    <b>Status:</b>
-    ${statusLabel}
-
-    <br><br>
-
-    <button
-      style="
-        width:100%;
-        padding:8px;
-        border:none;
-        border-radius:6px;
-        background:#1976d2;
-        color:white;
-        font-weight:bold;
-      "
-      onclick="openTaskFromMap('${task._key}')"
-    >
-      Open Task
-    </button>
-
-  </div>
-`);
+        <b>Status:</b>
+        ${statusLabel}
 
         <br><br>
 
@@ -4181,14 +4128,76 @@ marker.bindPopup(`
       </div>
     `);
 
-    DRIVER_TASK_MARKERS[
-      task._key
-    ] = marker;
+    DRIVER_TASK_MARKERS[task._key] = marker;
 
     bounds.push([lat, lng]);
 
     plotted++;
   });
+
+  // ==========================================
+  // DRIVER LOCATION
+  // ==========================================
+
+  updateDriverLocationOnTaskMap();
+
+  if (
+    LAST_KNOWN_GPS &&
+    Number.isFinite(
+      Number(LAST_KNOWN_GPS.latitude)
+    ) &&
+    Number.isFinite(
+      Number(LAST_KNOWN_GPS.longitude)
+    )
+  ) {
+
+    bounds.push([
+      Number(LAST_KNOWN_GPS.latitude),
+      Number(LAST_KNOWN_GPS.longitude)
+    ]);
+  }
+
+  // ==========================================
+  // FIT MAP
+  // ==========================================
+
+  if (bounds.length) {
+
+    DRIVER_TASK_MAP.fitBounds(
+      bounds,
+      {
+        padding: [30, 30],
+        maxZoom: 16
+      }
+    );
+
+  } else {
+
+    DRIVER_TASK_MAP.setView(
+      [14.5995, 120.9842],
+      12
+    );
+  }
+
+  // ==========================================
+  // MAP INFO
+  // ==========================================
+
+  const info =
+    document.getElementById("taskMapInfo");
+
+  if (info) {
+
+    info.innerHTML =
+      `📍 <b>${plotted}</b> tasks on map`;
+
+    if (missingGPS > 0) {
+
+      info.innerHTML +=
+        ` &nbsp; | &nbsp; ⚠️ ${missingGPS} without GPS`;
+    }
+  }
+}
 
   updateDriverLocationOnTaskMap();
 
