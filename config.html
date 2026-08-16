@@ -3,10 +3,18 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
 <title>Driva Delivery Template Maker</title>
 
 <style>
-*{box-sizing:border-box}
+
+/* =========================================================
+   GLOBAL
+   ========================================================= */
+
+*{
+  box-sizing:border-box;
+}
 
 :root{
   --blue:#087ff5;
@@ -19,6 +27,10 @@
   --green:#159947;
 }
 
+html{
+  scroll-behavior:smooth;
+}
+
 body{
   margin:0;
   font-family:Arial,sans-serif;
@@ -27,7 +39,10 @@ body{
   font-size:13px;
 }
 
-button,input,select,textarea{
+button,
+input,
+select,
+textarea{
   font:inherit;
 }
 
@@ -35,16 +50,25 @@ button{
   cursor:pointer;
 }
 
+
+/* =========================================================
+   HEADER
+   ========================================================= */
+
 .header{
   position:sticky;
   top:0;
-  z-index:20;
+  z-index:100;
+
   background:#fff;
   border-bottom:1px solid #ddd;
-  padding:11px 15px;
+
+  padding:10px 15px;
+
   display:flex;
   justify-content:space-between;
   align-items:center;
+
   gap:10px;
 }
 
@@ -87,23 +111,67 @@ button{
   font-size:11px;
 }
 
+
+/* =========================================================
+   MAIN LAYOUT
+   ========================================================= */
+
 .layout{
   display:grid;
-  grid-template-columns:470px minmax(430px,1fr);
-  min-height:calc(100vh - 60px);
+
+  grid-template-columns:
+    470px
+    minmax(430px,1fr);
+
+  align-items:start;
+
+  min-height:calc(100vh - 58px);
 }
+
+
+/* =========================================================
+   LEFT BUILDER
+   IMPORTANT:
+   No independent overflow here.
+   Browser/page handles scrolling.
+   ========================================================= */
 
 .builder{
   padding:12px;
-  overflow:auto;
+
   background:#f7f8fa;
+
   border-right:1px solid #ddd;
+
+  min-width:0;
 }
+
+
+/* =========================================================
+   RIGHT PREVIEW
+   ========================================================= */
 
 .preview{
   padding:12px;
-  overflow:auto;
+
+  min-width:0;
+
+  /*
+   * Keeps the preview visible while the left builder
+   * continues scrolling.
+   */
+  position:sticky;
+  top:58px;
+
+  height:calc(100vh - 58px);
+
+  overflow:hidden;
 }
+
+
+/* =========================================================
+   PANELS
+   ========================================================= */
 
 .panel{
   background:#fff;
@@ -125,24 +193,37 @@ button{
 
 label.caption{
   display:block;
+
   font-size:10px;
   font-weight:bold;
+
   color:#667085;
+
   text-transform:uppercase;
+
   margin:0 0 4px;
 }
 
-input,select,textarea{
+input,
+select,
+textarea{
   width:100%;
+
   border:1px solid #c8cdd3;
   border-radius:5px;
+
   padding:7px;
+
   background:#fff;
 }
 
 .grid2{
   display:grid;
-  grid-template-columns:1fr 1fr;
+
+  grid-template-columns:
+    1fr
+    1fr;
+
   gap:7px;
 }
 
@@ -155,6 +236,11 @@ input,select,textarea{
   flex:1;
 }
 
+
+/* =========================================================
+   DELIVERY METHODS
+   ========================================================= */
+
 .method-list{
   display:flex;
   flex-direction:column;
@@ -164,10 +250,14 @@ input,select,textarea{
 .method{
   display:flex;
   align-items:center;
+
   gap:7px;
+
   padding:7px 8px;
+
   border:1px solid #ddd;
   border-radius:6px;
+
   background:#fff;
 }
 
@@ -178,53 +268,80 @@ input,select,textarea{
 
 .method-name{
   flex:1;
+
   font-weight:bold;
+
   cursor:pointer;
 }
 
 .method-meta{
   font-size:10px;
   color:#777;
+
   font-weight:normal;
+
   margin-top:2px;
 }
 
 .icon{
   width:27px;
   height:27px;
+
   padding:0;
+
   border:1px solid #ddd;
+
   background:#fff;
+
   border-radius:5px;
 }
 
+
+/* =========================================================
+   FIELD EDITOR
+   ========================================================= */
+
 .field{
   border:1px solid #ddd;
+
   border-radius:7px;
+
   margin-bottom:7px;
+
   overflow:hidden;
+
   background:#fff;
 }
 
 .field-head{
   display:flex;
+
   align-items:center;
+
   gap:6px;
+
   padding:8px;
+
   background:#fafafa;
+
   border-bottom:1px solid #eee;
 }
 
 .field-head b{
   flex:1;
+
   font-size:12px;
 }
 
 .pill{
   font-size:10px;
+
   background:#e9ecef;
+
   padding:3px 6px;
+
   border-radius:10px;
+
   color:#555;
 }
 
@@ -234,9 +351,13 @@ input,select,textarea{
 
 .req{
   display:flex;
+
   align-items:center;
+
   gap:5px;
+
   font-size:11px;
+
   margin-top:7px;
 }
 
@@ -246,29 +367,49 @@ input,select,textarea{
 
 .field-actions{
   display:flex;
+
   justify-content:flex-end;
+
   gap:5px;
+
   margin-top:7px;
 }
 
+
+/* =========================================================
+   RADIO EDITOR
+   ========================================================= */
+
 .radio-editor{
   margin-top:9px;
+
   border-left:3px solid #9ac8ff;
+
   background:#f7fbff;
+
   padding:8px;
 }
 
 .radio-title{
   font-size:10px;
+
   font-weight:bold;
+
   color:#52606d;
+
   margin-bottom:7px;
 }
 
 .option{
   display:grid;
-  grid-template-columns:1fr 92px 27px;
+
+  grid-template-columns:
+    1fr
+    92px
+    27px;
+
   gap:5px;
+
   margin-bottom:5px;
 }
 
@@ -276,79 +417,152 @@ input,select,textarea{
   width:27px;
 }
 
+
+/* =========================================================
+   EMPTY / JSON
+   ========================================================= */
+
 .empty{
   border:1px dashed #c7cdd4;
+
   padding:18px;
+
   text-align:center;
+
   color:#7a828c;
+
   border-radius:6px;
+
   font-size:11px;
 }
 
 .json pre{
   margin:0;
+
   background:#111827;
+
   color:#dbeafe;
+
   border-radius:5px;
+
   padding:9px;
+
   font-size:9px;
+
   line-height:1.45;
-  max-height:240px;
+
+  max-height:300px;
+
   overflow:auto;
 }
 
-/* REALISTIC DRIVER PREVIEW */
+
+/* =========================================================
+   PREVIEW TITLE
+   ========================================================= */
 
 .preview-title{
   font-size:13px;
+
   font-weight:bold;
+
   margin:0 0 8px;
 }
 
+
+/* =========================================================
+   DRIVER PREVIEW CONTAINER
+   ========================================================= */
+
+.driver-preview-scroll{
+  height:calc(100vh - 105px);
+
+  overflow-y:auto;
+  overflow-x:hidden;
+
+  padding-right:4px;
+}
+
+
+/* =========================================================
+   DRIVER SCREEN
+   ========================================================= */
+
 .driver-wrap{
+  width:100%;
+
   max-width:790px;
+
   margin:0 auto;
+
   background:#fff;
-  min-height:calc(100vh - 90px);
-  box-shadow:0 0 7px rgba(0,0,0,.12);
+
+  box-shadow:
+    0 0 7px rgba(0,0,0,.12);
+
   border-left:3px solid #ffb000;
+
   position:relative;
 }
 
+
+/* =========================================================
+   DRIVER HEADER
+   ========================================================= */
+
 .driver-top{
   padding:9px 12px 7px;
+
   background:#fff;
 }
 
 .driver-top .name{
   font-weight:bold;
+
   font-size:15px;
 }
 
 .driver-top .line{
   font-size:11px;
+
   line-height:15px;
 }
 
 .driver-top .address{
   color:#0867d6;
+
   text-decoration:underline;
+
   font-weight:bold;
 }
 
+
+/* =========================================================
+   PHOTO ROW
+   ========================================================= */
+
 .photo-row{
   display:grid;
-  grid-template-columns:repeat(3,1fr);
+
+  grid-template-columns:
+    repeat(3,1fr);
+
   gap:5px;
+
   padding:3px 10px 7px;
 }
 
 .photo{
   height:32px;
+
   border:0;
+
   background:#f1f1f1;
+
   border-radius:5px;
+
   text-align:center;
+
   font-size:11px;
 }
 
@@ -356,145 +570,283 @@ input,select,textarea{
   color:#bbb;
 }
 
+
+/* =========================================================
+   DRIVER FORM
+   ========================================================= */
+
 .driver-form{
   padding:0 10px 20px;
 }
 
 .driver-label{
   font-size:13px;
+
   font-weight:bold;
+
   display:block;
+
   margin:5px 0 4px;
 }
 
 .driver-label.required::after{
   content:" *";
+
   color:#111;
 }
 
 .delivery-title{
   font-weight:bold;
+
   font-size:13px;
+
   margin:3px 0 2px;
 }
 
 .radio-line{
   display:flex;
+
   align-items:center;
+
   gap:4px;
+
   min-height:19px;
+
   font-size:13px;
 }
 
 .radio-line input{
   width:auto;
+
   margin:0;
 }
 
 .driver-input{
+  width:100%;
+
   height:27px;
+
   padding:4px 6px;
+
   border:1px solid #777;
+
   border-radius:0;
 }
 
 .driver-textarea{
+  width:100%;
+
   min-height:73px;
+
   resize:vertical;
+
   border:1px solid #777;
+
   border-radius:0;
+
   padding:5px;
 }
 
+
+/*
+ * Matches the actual driver screen indentation.
+ */
 .conditional{
-  margin:4px 0 5px 22px;
+  margin:2px 0 5px 22px;
 }
 
-.driver-radio-group{
-  margin-bottom:7px;
+
+/* =========================================================
+   TOP LEVEL RADIO FIELD
+   ========================================================= */
+
+.driver-radio-field{
+  margin:2px 0 5px;
 }
+
+
+/*
+ * Top-level radio option.
+ */
+.driver-radio-option{
+  margin:0;
+}
+
+
+/*
+ * Child radio option.
+ */
+.driver-child-option{
+  margin:0;
+}
+
+
+/*
+ * Input associated with the selected child option.
+ */
+.driver-child-input{
+  margin:1px 0 5px 22px;
+}
+
+
+/* =========================================================
+   FOOTER
+   ========================================================= */
 
 .preview-footer{
   position:sticky;
+
   bottom:0;
-  background:rgba(255,255,255,.94);
+
+  z-index:5;
+
+  background:rgba(255,255,255,.96);
+
   padding:5px 0;
+
   border-top:1px solid #eee;
+
   text-align:center;
 }
 
 .install{
   display:inline-block;
+
   background:#087ff5;
+
   color:#fff;
+
   border-radius:8px;
+
   padding:11px 80px;
+
   font-weight:bold;
+
   font-size:12px;
 }
 
 .submit-preview{
   font-size:11px;
+
   color:#aaa;
+
   margin-top:4px;
 }
 
+
+/* =========================================================
+   NOTES / STATUS
+   ========================================================= */
+
 .note{
   font-size:10px;
+
   color:#6b7280;
+
   margin-top:5px;
+
   line-height:1.4;
 }
 
 .status{
   font-size:10px;
+
   color:#667085;
 }
 
 .status.ok{
   color:var(--green);
+
   font-weight:bold;
 }
 
+
+/* =========================================================
+   MOBILE
+   ========================================================= */
+
 @media(max-width:980px){
+
   .layout{
     grid-template-columns:1fr;
   }
 
   .builder{
     border-right:0;
+
     border-bottom:1px solid #ddd;
   }
 
   .preview{
-    min-height:850px;
+
+    position:relative;
+
+    top:auto;
+
+    height:auto;
+
+    overflow:visible;
+
+    padding-top:15px;
   }
+
+  .driver-preview-scroll{
+    height:auto;
+
+    overflow:visible;
+  }
+
 }
+
 </style>
 </head>
 
+
 <body>
+
+
+<!-- =========================================================
+     HEADER
+     ========================================================= -->
 
 <header class="header">
 
   <div>
-    <h1>🚚 Driva Delivery Template Maker V.R.0.0.7</h1>
+
+    <h1>
+      🚚 Driva Delivery Template Maker V.R.0.0.8
+    </h1>
+
     <p>
-      Build the form on the left. The right side behaves like the actual driver screen.
+      Build the form on the left.
+      The right side behaves like the actual driver screen.
     </p>
+
   </div>
+
 
   <div class="actions">
 
-    <button class="btn" onclick="loadConfigForEdit()">
+    <button
+      class="btn"
+      onclick="loadConfigForEdit()"
+    >
       ✏️ Load
     </button>
 
-    <button class="btn" onclick="resetBuilder()">
+
+    <button
+      class="btn"
+      onclick="resetBuilder()"
+    >
       🧹 New
     </button>
 
-    <button class="btn primary" onclick="saveConfig()">
+
+    <button
+      class="btn primary"
+      onclick="saveConfig()"
+    >
       💾 Save
     </button>
 
@@ -503,19 +855,28 @@ input,select,textarea{
 </header>
 
 
+<!-- =========================================================
+     MAIN
+     ========================================================= -->
+
 <div class="layout">
 
-<!-- ========================================================= -->
-<!-- BUILDER -->
-<!-- ========================================================= -->
+
+<!-- =========================================================
+     LEFT BUILDER
+     ========================================================= -->
 
 <aside class="builder">
+
 
   <!-- TEMPLATE -->
 
   <section class="panel">
 
-    <h2>1. Template</h2>
+    <h2>
+      1. Template
+    </h2>
+
 
     <div class="panel-body">
 
@@ -523,16 +884,20 @@ input,select,textarea{
         Job Type
       </label>
 
+
       <input
         id="jobTypeInput"
         placeholder="e.g. NOV"
       >
 
+
       <div style="height:8px"></div>
+
 
       <label class="caption">
         Add Delivery Method
       </label>
+
 
       <div class="add-row">
 
@@ -540,6 +905,7 @@ input,select,textarea{
           id="deliveryMethodInput"
           placeholder="e.g. N1-Received"
         >
+
 
         <button
           class="btn primary"
@@ -560,12 +926,16 @@ input,select,textarea{
   <section class="panel">
 
     <h2>
+
       2. Delivery Methods
+
       <span
         class="status"
         id="methodCount"
       ></span>
+
     </h2>
+
 
     <div class="panel-body">
 
@@ -584,11 +954,18 @@ input,select,textarea{
   <section class="panel">
 
     <h2>
+
       3. Fields for
-      <span id="selectedMethodLabel">—</span>
+
+      <span id="selectedMethodLabel">
+        —
+      </span>
+
     </h2>
 
+
     <div class="panel-body">
+
 
       <div
         id="fieldEmpty"
@@ -603,13 +980,16 @@ input,select,textarea{
         style="display:none"
       >
 
+
         <div class="grid2">
+
 
           <div>
 
             <label class="caption">
               Field Label
             </label>
+
 
             <input
               id="newFieldLabel"
@@ -624,6 +1004,7 @@ input,select,textarea{
             <label class="caption">
               Field Type
             </label>
+
 
             <select id="newFieldType">
 
@@ -657,8 +1038,12 @@ input,select,textarea{
 
         <div class="note">
 
-          Radio fields match the existing driver/RTDB format.
-          Each radio field can contain nested child fields.
+          Radio fields match the existing RTDB format.
+
+          Each radio field can contain child options.
+
+          Each child option can have a text or textarea
+          input that appears when that option is selected.
 
         </div>
 
@@ -683,6 +1068,7 @@ input,select,textarea{
 
       Generated Configuration
 
+
       <button
         class="btn small"
         style="float:right"
@@ -693,6 +1079,7 @@ input,select,textarea{
 
     </h2>
 
+
     <div class="panel-body">
 
       <pre id="jsonPreview">{}</pre>
@@ -701,110 +1088,133 @@ input,select,textarea{
 
   </section>
 
+
 </aside>
 
 
-<!-- ========================================================= -->
-<!-- DRIVER PREVIEW -->
-<!-- ========================================================= -->
+<!-- =========================================================
+     RIGHT PREVIEW
+     ========================================================= -->
 
 <main class="preview">
+
 
   <p class="preview-title">
     👀 Live Driver Preview
   </p>
 
 
-  <div class="driver-wrap">
+  <div class="driver-preview-scroll">
 
 
-    <!-- DRIVER HEADER -->
+    <div class="driver-wrap">
 
-    <div class="driver-top">
 
-      <div class="name">
-        Name_test
+      <!-- DRIVER HEADER -->
+
+      <div class="driver-top">
+
+        <div class="name">
+          Name_test
+        </div>
+
+
+        <div class="line">
+          📍
+
+          <span class="address">
+            Address1
+          </span>
+        </div>
+
+
+        <div class="line">
+          Account #: 11223
+        </div>
+
+
+        <div class="line">
+          MRU: 548
+        </div>
+
+
+        <div class="line">
+          Meter #: 12345
+        </div>
+
+
+        <div class="line">
+          DMZ: CU814
+        </div>
+
+
+        <div class="line">
+          Sequence: 1100
+        </div>
+
+
+        <div class="line">
+
+          Job Type:
+
+          <span id="previewJobType">
+            NOV
+          </span>
+
+        </div>
+
+
+        <div class="line">
+          Status: PENDING
+        </div>
+
       </div>
 
-      <div class="line">
-        📍
-        <span class="address">
-          Address1
+
+      <!-- PHOTOS -->
+
+      <div class="photo-row">
+
+        <button class="photo">
+          📷 Photo 1
+        </button>
+
+
+        <button class="photo disabled">
+          📷 Photo 2
+        </button>
+
+
+        <button class="photo disabled">
+          📷 Photo 3
+        </button>
+
+      </div>
+
+
+      <!-- DYNAMIC DRIVER FORM -->
+
+      <div
+        class="driver-form"
+        id="previewContainer"
+      ></div>
+
+
+      <!-- FOOTER -->
+
+      <div class="preview-footer">
+
+        <span class="install">
+          📲 Install Driver App
         </span>
+
+
+        <div class="submit-preview">
+          ☑ Submit Task
+        </div>
+
       </div>
 
-      <div class="line">
-        Account #: 11223
-      </div>
-
-      <div class="line">
-        MRU: 548
-      </div>
-
-      <div class="line">
-        Meter #: 12345
-      </div>
-
-      <div class="line">
-        DMZ: CU814
-      </div>
-
-      <div class="line">
-        Sequence: 1100
-      </div>
-
-      <div class="line">
-        Job Type:
-        <span id="previewJobType">
-          NOV
-        </span>
-      </div>
-
-      <div class="line">
-        Status: PENDING
-      </div>
-
-    </div>
-
-
-    <!-- PHOTOS -->
-
-    <div class="photo-row">
-
-      <button class="photo">
-        📷 Photo 1
-      </button>
-
-      <button class="photo disabled">
-        📷 Photo 2
-      </button>
-
-      <button class="photo disabled">
-        📷 Photo 3
-      </button>
-
-    </div>
-
-
-    <!-- DYNAMIC FORM -->
-
-    <div
-      class="driver-form"
-      id="previewContainer"
-    ></div>
-
-
-    <!-- FOOTER -->
-
-    <div class="preview-footer">
-
-      <span class="install">
-        📲 Install Driver App
-      </span>
-
-      <div class="submit-preview">
-        ☑ Submit Task
-      </div>
 
     </div>
 
@@ -815,39 +1225,48 @@ input,select,textarea{
 </div>
 
 
-<!-- ========================================================= -->
-<!-- FIREBASE + APPLICATION -->
-<!-- ========================================================= -->
+<!-- =========================================================
+     FIREBASE
+     ========================================================= -->
 
 <script type="module">
 
+
 import {
   initializeApp
-} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+}
+from
+"https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+
 
 import {
   getDatabase,
   ref,
   update,
   get
-} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+}
+from
+"https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
 
 /* =========================================================
-   FIREBASE
+   FIREBASE CONFIG
    ========================================================= */
 
-const app = initializeApp({
+const app =
+  initializeApp({
 
-  apiKey:
-    "AIzaSyDFW61pnwLvh6HGKWt10zLYNr860fI8vkg",
+    apiKey:
+      "AIzaSyDFW61pnwLvh6HGKWt10zLYNr860fI8vkg",
 
-  databaseURL:
-    "https://driva-pwa-default-rtdb.firebaseio.com"
+    databaseURL:
+      "https://driva-pwa-default-rtdb.firebaseio.com"
 
-});
+  });
 
-const db = getDatabase(app);
+
+const db =
+  getDatabase(app);
 
 
 /* =========================================================
@@ -856,11 +1275,11 @@ const db = getDatabase(app);
 
 const STATE = {
 
-  jobType: "",
+  jobType:"",
 
-  methods: {},
+  methods:{},
 
-  selectedMethod: null
+  selectedMethod:null
 
 };
 
@@ -869,33 +1288,50 @@ const STATE = {
    HELPERS
    ========================================================= */
 
-const $ = id =>
-  document.getElementById(id);
+const $ =
+  id =>
+    document.getElementById(id);
 
 
-const esc = value =>
-  String(value ?? "")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
+const esc =
+  value =>
+    String(value ?? "")
+      .replaceAll("&","&amp;")
+      .replaceAll("<","&lt;")
+      .replaceAll(">","&gt;")
+      .replaceAll('"',"&quot;")
+      .replaceAll("'","&#039;");
 
 
-const slug = value =>
+const slug =
+  value =>
 
-  String(value || "field")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "_")
-    .replace(/^_+|_+$/g, "")
-    || ("field_" + Date.now());
+    String(value || "field")
+      .toLowerCase()
+      .replace(
+        /[^a-z0-9]+/g,
+        "_"
+      )
+      .replace(
+        /^_+|_+$/g,
+        ""
+      )
+      ||
+      ("field_" + Date.now());
 
 
 /* =========================================================
-   SHAPE
+   NORMALIZE METHOD
    ========================================================= */
 
 function shape(m){
+
+  if(!m){
+    return {
+      _order:[],
+      fields:{}
+    };
+  }
 
   m._order ||= [];
 
@@ -907,48 +1343,59 @@ function shape(m){
 
 
 /* =========================================================
-   NORMALIZE RTDB FORMAT
+   NORMALIZE RTDB
    ========================================================= */
 
 function normalizeForRTDB(m){
 
   shape(m);
 
-  for(const key of Object.keys(m.fields)){
 
-    const f = m.fields[key];
+  for(
+    const key of Object.keys(m.fields)
+  ){
+
+    const f =
+      m.fields[key];
+
 
     if(!f){
       continue;
     }
 
 
-    if(f.type === "radio"){
+    if(
+      f.type === "radio"
+    ){
 
       f.fields ||= {
-        _order: [],
-        options: {}
+
+        _order:[],
+
+        options:{}
+
       };
 
 
       /*
-       * Convert older Template Maker format:
-       *
-       * fields.options.<option>.children.fields.*
-       *
-       * into:
-       *
-       * fields.options.<childKey>
+       * Convert older format if it exists.
        */
 
-      if(f.fields.options){
+      if(
+        f.fields.options
+      ){
 
         for(
-          const optionKey of Object.keys(f.fields.options)
+          const optionKey
+          of Object.keys(
+            f.fields.options
+          )
         ){
 
           const option =
-            f.fields.options[optionKey];
+            f.fields.options[
+              optionKey
+            ];
 
 
           if(
@@ -963,17 +1410,24 @@ function normalizeForRTDB(m){
 
             const childOrder =
               option.children._order ||
-              Object.keys(childFields);
+              Object.keys(
+                childFields
+              );
 
 
-            if(!f.fields._order.length){
+            if(
+              !f.fields._order.length
+            ){
 
               for(
-                const childKey of childOrder
+                const childKey
+                of childOrder
               ){
 
                 const child =
-                  childFields[childKey];
+                  childFields[
+                    childKey
+                  ];
 
 
                 if(!child){
@@ -986,7 +1440,9 @@ function normalizeForRTDB(m){
                 );
 
 
-                f.fields.options[childKey] = {
+                f.fields.options[
+                  childKey
+                ] = {
 
                   label:
                     child.label ||
@@ -1006,7 +1462,9 @@ function normalizeForRTDB(m){
             }
 
 
-            delete f.fields.options[optionKey];
+            delete f.fields.options[
+              optionKey
+            ];
 
           }
 
@@ -1021,6 +1479,7 @@ function normalizeForRTDB(m){
 
   }
 
+
   return m;
 
 }
@@ -1032,15 +1491,24 @@ function normalizeForRTDB(m){
 
 function current(){
 
-  return STATE.selectedMethod
-    ? STATE.methods[STATE.selectedMethod]
-    : null;
+  if(
+    !STATE.selectedMethod
+  ){
+
+    return null;
+
+  }
+
+
+  return STATE.methods[
+    STATE.selectedMethod
+  ] || null;
 
 }
 
 
 /* =========================================================
-   RENDER EVERYTHING
+   RENDER
    ========================================================= */
 
 function render(){
@@ -1053,14 +1521,17 @@ function render(){
 
   renderJSON();
 
+
   $("methodCount").textContent =
-    `(${Object.keys(STATE.methods).length})`;
+    `(${Object.keys(
+      STATE.methods
+    ).length})`;
 
 }
 
 
 /* =========================================================
-   METHODS
+   RENDER METHODS
    ========================================================= */
 
 function renderMethods(){
@@ -1068,11 +1539,14 @@ function renderMethods(){
   const box =
     $("methodsContainer");
 
+
   box.innerHTML = "";
 
 
   const entries =
-    Object.entries(STATE.methods);
+    Object.entries(
+      STATE.methods
+    );
 
 
   if(!entries.length){
@@ -1085,104 +1559,138 @@ function renderMethods(){
   }
 
 
-  entries.forEach(([name, m]) => {
+  entries.forEach(
+    ([name,m]) => {
 
-    shape(m);
-
-
-    const row =
-      document.createElement("div");
+      shape(m);
 
 
-    row.className =
-      "method" +
-      (
-        name === STATE.selectedMethod
-          ? " active"
-          : ""
-      );
+      const row =
+        document.createElement(
+          "div"
+        );
 
 
-    row.innerHTML = `
+      row.className =
+        "method" +
+        (
+          name ===
+          STATE.selectedMethod
+            ? " active"
+            : ""
+        );
 
-      <div class="method-name">
 
-        ${esc(name)}
+      row.innerHTML = `
 
-        <div class="method-meta">
+        <div class="method-name">
 
-          ${m._order.length}
-          field${m._order.length === 1 ? "" : "s"}
+          ${esc(name)}
+
+          <div class="method-meta">
+
+            ${m._order.length}
+
+            field${
+
+              m._order.length === 1
+                ? ""
+                : "s"
+
+            }
+
+          </div>
 
         </div>
 
-      </div>
 
-      <button
-        class="icon"
-        title="Move up"
-      >
-        ↑
-      </button>
-
-      <button
-        class="icon"
-        title="Move down"
-      >
-        ↓
-      </button>
-
-      <button
-        class="icon"
-        title="Duplicate"
-      >
-        ⧉
-      </button>
-
-      <button
-        class="icon"
-        title="Delete"
-      >
-        ×
-      </button>
-
-    `;
+        <button
+          class="icon"
+          title="Move up"
+        >
+          ↑
+        </button>
 
 
-    row.querySelector(
-      ".method-name"
-    ).onclick = () => {
-
-      STATE.selectedMethod = name;
-
-      render();
-
-    };
+        <button
+          class="icon"
+          title="Move down"
+        >
+          ↓
+        </button>
 
 
-    const buttons =
-      row.querySelectorAll("button");
+        <button
+          class="icon"
+          title="Duplicate"
+        >
+          ⧉
+        </button>
 
 
-    buttons[0].onclick =
-      () => moveMethod(name, -1);
+        <button
+          class="icon"
+          title="Delete"
+        >
+          ×
+        </button>
+
+      `;
 
 
-    buttons[1].onclick =
-      () => moveMethod(name, 1);
+      row.querySelector(
+        ".method-name"
+      ).onclick =
+        () => {
+
+          STATE.selectedMethod =
+            name;
+
+          render();
+
+        };
 
 
-    buttons[2].onclick =
-      () => duplicateMethod(name);
+      const buttons =
+        row.querySelectorAll(
+          "button"
+        );
 
 
-    buttons[3].onclick =
-      () => removeMethod(name);
+      buttons[0].onclick =
+        () =>
+          moveMethod(
+            name,
+            -1
+          );
 
 
-    box.appendChild(row);
+      buttons[1].onclick =
+        () =>
+          moveMethod(
+            name,
+            1
+          );
 
-  });
+
+      buttons[2].onclick =
+        () =>
+          duplicateMethod(
+            name
+          );
+
+
+      buttons[3].onclick =
+        () =>
+          removeMethod(
+            name
+          );
+
+
+      box.appendChild(row);
+
+    }
+  );
 
 }
 
@@ -1193,15 +1701,21 @@ function renderMethods(){
 
 function methodOrder(){
 
-  return Object.keys(STATE.methods);
+  return Object.keys(
+    STATE.methods
+  );
 
 }
 
 
-function rebuildMethods(entries){
+function rebuildMethods(
+  entries
+){
 
   STATE.methods =
-    Object.fromEntries(entries);
+    Object.fromEntries(
+      entries
+    );
 
 }
 
@@ -1210,32 +1724,50 @@ function rebuildMethods(entries){
    MOVE METHOD
    ========================================================= */
 
-function moveMethod(name, delta){
+function moveMethod(
+  name,
+  delta
+){
 
   const a =
     methodOrder();
 
+
   const i =
     a.indexOf(name);
+
 
   const j =
     i + delta;
 
 
-  if(j < 0 || j >= a.length){
+  if(
+    j < 0 ||
+    j >= a.length
+  ){
+
     return;
+
   }
 
 
-  [a[i], a[j]] =
-    [a[j], a[i]];
+  [
+    a[i],
+    a[j]
+  ] =
+  [
+    a[j],
+    a[i]
+  ];
 
 
   rebuildMethods(
-    a.map(k => [
-      k,
-      STATE.methods[k]
-    ])
+    a.map(
+      key => [
+        key,
+        STATE.methods[key]
+      ]
+    )
   );
 
 
@@ -1245,7 +1777,7 @@ function moveMethod(name, delta){
 
 
 /* =========================================================
-   FIELDS
+   RENDER FIELDS
    ========================================================= */
 
 function renderFields(){
@@ -1255,15 +1787,20 @@ function renderFields(){
 
 
   $("fieldEmpty").style.display =
-    m ? "none" : "block";
+    m
+      ? "none"
+      : "block";
 
 
   $("fieldEditor").style.display =
-    m ? "block" : "none";
+    m
+      ? "block"
+      : "none";
 
 
   $("selectedMethodLabel").textContent =
-    STATE.selectedMethod || "—";
+    STATE.selectedMethod ||
+    "—";
 
 
   if(!m){
@@ -1274,10 +1811,13 @@ function renderFields(){
   const list =
     $("fieldList");
 
+
   list.innerHTML = "";
 
 
-  if(!m._order.length){
+  if(
+    !m._order.length
+  ){
 
     list.innerHTML =
       '<div class="empty">No fields. Add one above.</div>';
@@ -1287,247 +1827,309 @@ function renderFields(){
   }
 
 
-  m._order.forEach((key) => {
+  m._order.forEach(
+    key => {
 
-    const f =
-      m.fields[key];
+      const f =
+        m.fields[key];
 
 
-    if(!f){
-      return;
-    }
-
-
-    const card =
-      document.createElement("div");
-
-    card.className =
-      "field";
-
-
-    card.innerHTML = `
-
-      <div class="field-head">
-
-        <b>
-          ${esc(f.label || key)}
-        </b>
-
-        <span class="pill">
-          ${esc(f.type)}
-        </span>
-
-      </div>
-
-
-      <div class="field-body">
-
-        <div class="grid2">
-
-          <div>
-
-            <label class="caption">
-              Label
-            </label>
-
-            <input
-              data-label
-              value="${esc(f.label || "")}"
-            >
-
-          </div>
-
-
-          <div>
-
-            <label class="caption">
-              Type
-            </label>
-
-            <select data-type>
-
-              <option
-                value="text"
-                ${f.type === "text" ? "selected" : ""}
-              >
-                Text
-              </option>
-
-              <option
-                value="textarea"
-                ${f.type === "textarea" ? "selected" : ""}
-              >
-                Textarea
-              </option>
-
-              <option
-                value="radio"
-                ${f.type === "radio" ? "selected" : ""}
-              >
-                Radio Group
-              </option>
-
-            </select>
-
-          </div>
-
-        </div>
-
-
-        <label class="req">
-
-          <input
-            data-required
-            type="checkbox"
-            ${f.required ? "checked" : ""}
-          >
-
-          Required
-
-        </label>
-
-
-        ${
-          f.type === "radio"
-            ? radioEditor(f)
-            : ""
-        }
-
-
-        <div class="field-actions">
-
-          <button
-            class="btn small"
-            data-up
-          >
-            ↑
-          </button>
-
-          <button
-            class="btn small"
-            data-down
-          >
-            ↓
-          </button>
-
-          <button
-            class="btn small danger"
-            data-remove
-          >
-            Remove
-          </button>
-
-        </div>
-
-      </div>
-
-    `;
-
-
-    card.querySelector(
-      "[data-label]"
-    ).onchange = e => {
-
-      f.label =
-        e.target.value.trim() ||
-        f.label;
-
-      render();
-
-    };
-
-
-    card.querySelector(
-      "[data-type]"
-    ).onchange = e => {
-
-      f.type =
-        e.target.value;
-
-
-      if(f.type === "radio"){
-
-        f.fields ||= {
-
-          _order: [],
-
-          options: {}
-
-        };
-
-      }else{
-
-        delete f.fields;
-
-      }
-
-
-      render();
-
-    };
-
-
-    card.querySelector(
-      "[data-required]"
-    ).onchange = e => {
-
-      f.required =
-        e.target.checked;
-
-      renderPreview();
-
-      renderJSON();
-
-    };
-
-
-    card.querySelector(
-      "[data-up]"
-    ).onclick = () =>
-      moveField(key, -1);
-
-
-    card.querySelector(
-      "[data-down]"
-    ).onclick = () =>
-      moveField(key, 1);
-
-
-    card.querySelector(
-      "[data-remove]"
-    ).onclick = () => {
-
-      if(
-        !confirm(
-          `Remove "${f.label}"?`
-        )
-      ){
-
+      if(!f){
         return;
-
       }
 
 
-      m._order =
-        m._order.filter(
-          k => k !== key
+      const card =
+        document.createElement(
+          "div"
         );
 
 
-      delete m.fields[key];
+      card.className =
+        "field";
 
 
-      render();
+      card.innerHTML = `
 
-    };
+        <div class="field-head">
+
+          <b>
+            ${esc(
+              f.label ||
+              key
+            )}
+          </b>
 
 
-    wireRadio(card, f);
+          <span class="pill">
+
+            ${esc(
+              f.type
+            )}
+
+          </span>
+
+        </div>
 
 
-    list.appendChild(card);
+        <div class="field-body">
 
-  });
+          <div class="grid2">
+
+
+            <div>
+
+              <label class="caption">
+                Label
+              </label>
+
+
+              <input
+                data-label
+                value="${esc(
+                  f.label ||
+                  ""
+                )}"
+              >
+
+            </div>
+
+
+            <div>
+
+              <label class="caption">
+                Type
+              </label>
+
+
+              <select data-type>
+
+                <option
+                  value="text"
+                  ${
+                    f.type === "text"
+                      ? "selected"
+                      : ""
+                  }
+                >
+                  Text
+                </option>
+
+
+                <option
+                  value="textarea"
+                  ${
+                    f.type === "textarea"
+                      ? "selected"
+                      : ""
+                  }
+                >
+                  Textarea
+                </option>
+
+
+                <option
+                  value="radio"
+                  ${
+                    f.type === "radio"
+                      ? "selected"
+                      : ""
+                  }
+                >
+                  Radio Group
+                </option>
+
+              </select>
+
+            </div>
+
+          </div>
+
+
+          <label class="req">
+
+            <input
+              data-required
+              type="checkbox"
+              ${
+                f.required
+                  ? "checked"
+                  : ""
+              }
+            >
+
+            Required
+
+          </label>
+
+
+          ${
+            f.type === "radio"
+              ? radioEditor(f)
+              : ""
+          }
+
+
+          <div class="field-actions">
+
+            <button
+              class="btn small"
+              data-up
+            >
+              ↑
+            </button>
+
+
+            <button
+              class="btn small"
+              data-down
+            >
+              ↓
+            </button>
+
+
+            <button
+              class="btn small danger"
+              data-remove
+            >
+              Remove
+            </button>
+
+          </div>
+
+        </div>
+
+      `;
+
+
+      card.querySelector(
+        "[data-label]"
+      ).onchange =
+        e => {
+
+          f.label =
+            e.target.value.trim() ||
+            f.label;
+
+
+          render();
+
+        };
+
+
+      card.querySelector(
+        "[data-type]"
+      ).onchange =
+        e => {
+
+          f.type =
+            e.target.value;
+
+
+          if(
+            f.type === "radio"
+          ){
+
+            f.fields ||= {
+
+              _order:[],
+
+              options:{}
+
+            };
+
+          }else{
+
+            delete f.fields;
+
+          }
+
+
+          render();
+
+        };
+
+
+      card.querySelector(
+        "[data-required]"
+      ).onchange =
+        e => {
+
+          f.required =
+            e.target.checked;
+
+
+          renderPreview();
+
+          renderJSON();
+
+        };
+
+
+      card.querySelector(
+        "[data-up]"
+      ).onclick =
+        () =>
+          moveField(
+            key,
+            -1
+          );
+
+
+      card.querySelector(
+        "[data-down]"
+      ).onclick =
+        () =>
+          moveField(
+            key,
+            1
+          );
+
+
+      card.querySelector(
+        "[data-remove]"
+      ).onclick =
+        () => {
+
+          if(
+            !confirm(
+              `Remove "${f.label}"?`
+            )
+          ){
+
+            return;
+
+          }
+
+
+          m._order =
+            m._order.filter(
+              k => k !== key
+            );
+
+
+          delete m.fields[
+            key
+          ];
+
+
+          render();
+
+        };
+
+
+      wireRadio(
+        card,
+        f
+      );
+
+
+      list.appendChild(
+        card
+      );
+
+    }
+  );
 
 }
 
@@ -1536,14 +2138,25 @@ function renderFields(){
    MOVE FIELD
    ========================================================= */
 
-function moveField(key, delta){
+function moveField(
+  key,
+  delta
+){
 
   const m =
     current();
 
 
+  if(!m){
+    return;
+  }
+
+
   const i =
-    m._order.indexOf(key);
+    m._order.indexOf(
+      key
+    );
+
 
   const j =
     i + delta;
@@ -1559,8 +2172,14 @@ function moveField(key, delta){
   }
 
 
-  [m._order[i], m._order[j]] =
-    [m._order[j], m._order[i]];
+  [
+    m._order[i],
+    m._order[j]
+  ] =
+  [
+    m._order[j],
+    m._order[i]
+  ];
 
 
   render();
@@ -1576,9 +2195,9 @@ function radioEditor(f){
 
   f.fields ||= {
 
-    _order: [],
+    _order:[],
 
-    options: {}
+    options:{}
 
   };
 
@@ -1587,8 +2206,11 @@ function radioEditor(f){
 
     <div class="radio-editor">
 
+
       <div class="radio-title">
-        FIELDS SHOWN WHEN THIS RADIO IS SELECTED
+
+        CHILD RADIO OPTIONS
+
       </div>
 
 
@@ -1597,64 +2219,90 @@ function radioEditor(f){
         style="margin-bottom:7px"
       >
 
-        This matches the existing RTDB format.
-        Example: C100-Disconnected can reveal
-        "Locking device used" and "Last reading".
+        Each child below becomes a selectable
+        radio option on the driver screen.
+
+        When selected, its configured Text or
+        Textarea field appears underneath it.
 
       </div>
 
 
       ${
         (f.fields._order || [])
-          .map(k => {
+          .map(
+            key => {
 
-            const o =
-              f.fields.options[k];
-
-            return `
-
-              <div class="option">
-
-                <input
-                  data-opt-label="${esc(k)}"
-                  value="${esc(o?.label || "")}"
-                  placeholder="Child field label"
-                >
+              const option =
+                f.fields.options[
+                  key
+                ];
 
 
-                <select
-                  data-opt-type="${esc(k)}"
-                >
+              if(!option){
+                return "";
+              }
 
-                  <option
-                    value="text"
-                    ${o?.type === "text" ? "selected" : ""}
+
+              return `
+
+                <div class="option">
+
+
+                  <input
+                    data-opt-label="${esc(key)}"
+                    value="${esc(
+                      option.label ||
+                      ""
+                    )}"
+                    placeholder="Child option label"
                   >
-                    Text
-                  </option>
 
-                  <option
-                    value="textarea"
-                    ${o?.type === "textarea" ? "selected" : ""}
+
+                  <select
+                    data-opt-type="${esc(key)}"
                   >
-                    Textarea
-                  </option>
 
-                </select>
+                    <option
+                      value="text"
+                      ${
+                        option.type === "text"
+                          ? "selected"
+                          : ""
+                      }
+                    >
+                      Text
+                    </option>
 
 
-                <button
-                  class="icon"
-                  data-opt-remove="${esc(k)}"
-                >
-                  ×
-                </button>
+                    <option
+                      value="textarea"
+                      ${
+                        option.type === "textarea"
+                          ? "selected"
+                          : ""
+                      }
+                    >
+                      Textarea
+                    </option>
 
-              </div>
+                  </select>
 
-            `;
 
-          })
+                  <button
+                    class="icon"
+                    data-opt-remove="${esc(key)}"
+                    title="Remove child option"
+                  >
+                    ×
+                  </button>
+
+                </div>
+
+              `;
+
+            }
+          )
           .join("")
       }
 
@@ -1663,7 +2311,7 @@ function radioEditor(f){
         class="btn small"
         data-add-option
       >
-        ＋ Add Child Field
+        ＋ Add Child Option
       </button>
 
     </div>
@@ -1677,18 +2325,25 @@ function radioEditor(f){
    WIRE RADIO EDITOR
    ========================================================= */
 
-function wireRadio(card, f){
+function wireRadio(
+  card,
+  f
+){
 
-  if(f.type !== "radio"){
+  if(
+    f.type !== "radio"
+  ){
+
     return;
+
   }
 
 
   f.fields ||= {
 
-    _order: [],
+    _order:[],
 
-    options: {}
+    options:{}
 
   };
 
@@ -1701,130 +2356,152 @@ function wireRadio(card, f){
 
   if(addButton){
 
-    addButton.onclick = () => {
+    addButton.onclick =
+      () => {
 
-      let key =
-        `child_${f.fields._order.length + 1}`;
-
-
-      while(
-        f.fields.options[key]
-      ){
-
-        key += "_x";
-
-      }
+        let key =
+          `child_${
+            f.fields._order.length + 1
+          }`;
 
 
-      f.fields._order.push(key);
+        while(
+          f.fields.options[key]
+        ){
+
+          key += "_x";
+
+        }
 
 
-      f.fields.options[key] = {
+        f.fields._order.push(
+          key
+        );
 
-        label:
-          `Child Field ${f.fields._order.length}`,
 
-        required:false,
+        f.fields.options[key] = {
 
-        type:"text"
+          label:
+            `Child Option ${
+              f.fields._order.length
+            }`,
+
+          required:false,
+
+          type:"text"
+
+        };
+
+
+        render();
 
       };
-
-
-      render();
-
-    };
 
   }
 
 
   card.querySelectorAll(
     "[data-opt-label]"
-  ).forEach(input => {
+  ).forEach(
+    input => {
 
-    input.onchange = () => {
+      input.onchange =
+        () => {
 
-      const key =
-        input.dataset.optLabel;
-
-
-      const child =
-        f.fields.options[key];
+          const key =
+            input.dataset.optLabel;
 
 
-      if(!child){
-        return;
-      }
+          const child =
+            f.fields.options[
+              key
+            ];
 
 
-      child.label =
-        input.value.trim() ||
-        child.label;
+          if(!child){
+            return;
+          }
 
 
-      render();
+          child.label =
+            input.value.trim() ||
+            child.label;
 
-    };
 
-  });
+          render();
+
+        };
+
+    }
+  );
 
 
   card.querySelectorAll(
     "[data-opt-type]"
-  ).forEach(select => {
+  ).forEach(
+    select => {
 
-    select.onchange = () => {
+      select.onchange =
+        () => {
 
-      const key =
-        select.dataset.optType;
-
-
-      const child =
-        f.fields.options[key];
+          const key =
+            select.dataset.optType;
 
 
-      if(!child){
-        return;
-      }
+          const child =
+            f.fields.options[
+              key
+            ];
 
 
-      child.type =
-        select.value;
+          if(!child){
+            return;
+          }
 
 
-      renderPreview();
+          child.type =
+            select.value;
 
-      renderJSON();
 
-    };
+          renderPreview();
 
-  });
+          renderJSON();
+
+        };
+
+    }
+  );
 
 
   card.querySelectorAll(
     "[data-opt-remove]"
-  ).forEach(button => {
+  ).forEach(
+    button => {
 
-    button.onclick = () => {
+      button.onclick =
+        () => {
 
-      const key =
-        button.dataset.optRemove;
-
-
-      f.fields._order =
-        f.fields._order.filter(
-          k => k !== key
-        );
+          const key =
+            button.dataset.optRemove;
 
 
-      delete f.fields.options[key];
+          f.fields._order =
+            f.fields._order.filter(
+              k => k !== key
+            );
 
 
-      render();
+          delete f.fields.options[
+            key
+          ];
 
-    };
 
-  });
+          render();
+
+        };
+
+    }
+  );
 
 }
 
@@ -1833,252 +2510,647 @@ function wireRadio(card, f){
    ADD DELIVERY METHOD
    ========================================================= */
 
-window.addDeliveryMethod = () => {
+window.addDeliveryMethod =
+  () => {
 
-  const jt =
-    $("jobTypeInput")
-      .value
-      .trim();
+    const jt =
+      $("jobTypeInput")
+        .value
+        .trim();
 
 
-  const name =
+    const name =
+      $("deliveryMethodInput")
+        .value
+        .trim();
+
+
+    if(!jt){
+
+      alert(
+        "Enter Job Type first."
+      );
+
+      return;
+
+    }
+
+
+    if(!name){
+
+      alert(
+        "Enter Delivery Method."
+      );
+
+      return;
+
+    }
+
+
+    STATE.jobType =
+      jt;
+
+
+    Object.values(
+      STATE.methods
+    ).forEach(
+      normalizeForRTDB
+    );
+
+
+    if(
+      !STATE.methods[name]
+    ){
+
+      STATE.methods[name] = {
+
+        _order:[],
+
+        fields:{}
+
+      };
+
+    }
+
+
+    STATE.selectedMethod =
+      name;
+
+
     $("deliveryMethodInput")
-      .value
-      .trim();
+      .value = "";
 
 
-  if(!jt){
+    render();
 
-    alert(
-      "Enter Job Type first."
-    );
-
-    return;
-
-  }
-
-
-  if(!name){
-
-    alert(
-      "Enter Delivery Method."
-    );
-
-    return;
-
-  }
-
-
-  STATE.jobType =
-    jt;
-
-
-  Object.values(
-    STATE.methods
-  ).forEach(
-    normalizeForRTDB
-  );
-
-
-  if(!STATE.methods[name]){
-
-    STATE.methods[name] = {
-
-      _order: [],
-
-      fields: {}
-
-    };
-
-  }
-
-
-  STATE.selectedMethod =
-    name;
-
-
-  $("deliveryMethodInput").value =
-    "";
-
-
-  render();
-
-};
+  };
 
 
 /* =========================================================
    REMOVE METHOD
    ========================================================= */
 
-window.removeMethod = name => {
+window.removeMethod =
+  name => {
 
-  if(
-    !confirm(
-      `Delete "${name}"?`
-    )
-  ){
+    if(
+      !confirm(
+        `Delete "${name}"?`
+      )
+    ){
 
-    return;
+      return;
 
-  }
-
-
-  delete STATE.methods[name];
+    }
 
 
-  if(
-    STATE.selectedMethod === name
-  ){
-
-    STATE.selectedMethod =
-      Object.keys(
-        STATE.methods
-      )[0] || null;
-
-  }
+    delete STATE.methods[
+      name
+    ];
 
 
-  render();
+    if(
+      STATE.selectedMethod === name
+    ){
 
-};
+      STATE.selectedMethod =
+        Object.keys(
+          STATE.methods
+        )[0] || null;
+
+    }
+
+
+    render();
+
+  };
 
 
 /* =========================================================
    DUPLICATE METHOD
    ========================================================= */
 
-window.duplicateMethod = name => {
+window.duplicateMethod =
+  name => {
 
-  let copy =
-    name + " Copy";
-
-  let n = 2;
-
-
-  while(
-    STATE.methods[copy]
-  ){
-
-    copy =
-      name +
-      " Copy " +
-      n++;
-
-  }
+    let copy =
+      name + " Copy";
 
 
-  STATE.methods[copy] =
-    JSON.parse(
-      JSON.stringify(
-        STATE.methods[name]
-      )
-    );
+    let n = 2;
 
 
-  STATE.selectedMethod =
-    copy;
+    while(
+      STATE.methods[copy]
+    ){
+
+      copy =
+        name +
+        " Copy " +
+        n++;
+
+    }
 
 
-  render();
+    STATE.methods[copy] =
+      JSON.parse(
+        JSON.stringify(
+          STATE.methods[name]
+        )
+      );
 
-};
+
+    STATE.selectedMethod =
+      copy;
+
+
+    render();
+
+  };
 
 
 /* =========================================================
    ADD FIELD
    ========================================================= */
 
-window.addField = () => {
+window.addField =
+  () => {
 
-  const m =
-    current();
+    const m =
+      current();
 
 
-  if(!m){
+    if(!m){
 
-    alert(
-      "Select a delivery method."
+      alert(
+        "Select a delivery method."
+      );
+
+      return;
+
+    }
+
+
+    const label =
+      $("newFieldLabel")
+        .value
+        .trim();
+
+
+    const type =
+      $("newFieldType")
+        .value;
+
+
+    if(!label){
+
+      alert(
+        "Enter Field Label."
+      );
+
+      return;
+
+    }
+
+
+    let key =
+      slug(label);
+
+
+    let n = 2;
+
+
+    while(
+      m.fields[key]
+    ){
+
+      key =
+        `${slug(label)}_${n++}`;
+
+    }
+
+
+    m._order.push(
+      key
     );
 
-    return;
 
-  }
+    m.fields[key] = {
+
+      label,
+
+      type,
+
+      required:false
+
+    };
 
 
-  const label =
+    if(
+      type === "radio"
+    ){
+
+      m.fields[key].fields = {
+
+        _order:[],
+
+        options:{}
+
+      };
+
+    }
+
+
     $("newFieldLabel")
-      .value
-      .trim();
+      .value = "";
 
 
-  const type =
-    $("newFieldType")
-      .value;
-
-
-  if(!label){
-
-    alert(
-      "Enter Field Label."
-    );
-
-    return;
-
-  }
-
-
-  let key =
-    slug(label);
-
-  let n = 2;
-
-
-  while(m.fields[key]){
-
-    key =
-      `${slug(label)}_${n++}`;
-
-  }
-
-
-  m._order.push(key);
-
-
-  m.fields[key] = {
-
-    label,
-
-    type,
-
-    required:false
+    render();
 
   };
 
 
-  if(type === "radio"){
+/* =========================================================
+   CREATE NORMAL DRIVER FIELD
+   ========================================================= */
 
-    m.fields[key].fields = {
+function createDriverField(
+  fieldKey,
+  field
+){
 
-      _order: [],
+  const wrap =
+    document.createElement(
+      "div"
+    );
 
-      options: {}
 
-    };
+  const label =
+    document.createElement(
+      "label"
+    );
+
+
+  label.className =
+    "driver-label";
+
+
+  label.textContent =
+    field.label ||
+    fieldKey;
+
+
+  if(
+    field.required
+  ){
+
+    label.classList.add(
+      "required"
+    );
 
   }
 
 
-  $("newFieldLabel").value =
-    "";
+  wrap.appendChild(
+    label
+  );
 
 
-  render();
+  if(
+    field.type === "textarea"
+  ){
 
-};
+    const textarea =
+      document.createElement(
+        "textarea"
+      );
+
+
+    textarea.className =
+      "driver-textarea";
+
+
+    wrap.appendChild(
+      textarea
+    );
+
+  }else{
+
+    const input =
+      document.createElement(
+        "input"
+      );
+
+
+    input.type =
+      "text";
+
+
+    input.className =
+      "driver-input";
+
+
+    wrap.appendChild(
+      input
+    );
+
+  }
+
+
+  return wrap;
+
+}
 
 
 /* =========================================================
-   RENDER PREVIEW
+   CREATE RADIO FIELD
+   ========================================================= */
+
+function createDriverRadioField(
+  fieldKey,
+  field
+){
+
+  const group =
+    document.createElement(
+      "div"
+    );
+
+
+  group.className =
+    "driver-radio-field";
+
+
+  /*
+   * This is the top-level radio itself.
+   *
+   * Example:
+   *
+   * C100-Disconnected
+   */
+
+  const topLine =
+    document.createElement(
+      "label"
+    );
+
+
+  topLine.className =
+    "radio-line driver-radio-option";
+
+
+  const topRadio =
+    document.createElement(
+      "input"
+    );
+
+
+  topRadio.type =
+    "radio";
+
+
+  /*
+   * Each top-level radio field has its
+   * own independent radio group.
+   */
+
+  topRadio.name =
+    `top_${fieldKey}`;
+
+
+  const topText =
+    document.createElement(
+      "span"
+    );
+
+
+  topText.textContent =
+    field.label ||
+    fieldKey;
+
+
+  topLine.appendChild(
+    topRadio
+  );
+
+
+  topLine.appendChild(
+    topText
+  );
+
+
+  group.appendChild(
+    topLine
+  );
+
+
+  /*
+   * Child options
+   */
+
+  const childOrder =
+    field.fields?._order ||
+    [];
+
+
+  const childOptions =
+    field.fields?.options ||
+    {};
+
+
+  if(
+    !childOrder.length
+  ){
+
+    return group;
+
+  }
+
+
+  const childItems = [];
+
+
+  childOrder.forEach(
+    (childKey,index) => {
+
+      const child =
+        childOptions[
+          childKey
+        ];
+
+
+      if(!child){
+        return;
+      }
+
+
+      /*
+       * Child radio
+       */
+
+      const childLine =
+        document.createElement(
+          "label"
+        );
+
+
+      childLine.className =
+        "radio-line driver-child-option";
+
+
+      const childRadio =
+        document.createElement(
+          "input"
+        );
+
+
+      childRadio.type =
+        "radio";
+
+
+      childRadio.name =
+        `child_${fieldKey}`;
+
+
+      /*
+       * First child selected by default.
+       */
+
+      childRadio.checked =
+        index === 0;
+
+
+      const childText =
+        document.createElement(
+          "span"
+        );
+
+
+      childText.textContent =
+        child.label ||
+        childKey;
+
+
+      childLine.appendChild(
+        childRadio
+      );
+
+
+      childLine.appendChild(
+        childText
+      );
+
+
+      group.appendChild(
+        childLine
+      );
+
+
+      /*
+       * Child input
+       */
+
+      const childInputWrap =
+        document.createElement(
+          "div"
+        );
+
+
+      childInputWrap.className =
+        "driver-child-input";
+
+
+      const childInput =
+        document.createElement(
+          child.type === "textarea"
+            ? "textarea"
+            : "input"
+        );
+
+
+      if(
+        child.type === "textarea"
+      ){
+
+        childInput.className =
+          "driver-textarea";
+
+      }else{
+
+        childInput.type =
+          "text";
+
+        childInput.className =
+          "driver-input";
+
+      }
+
+
+      childInputWrap.appendChild(
+        childInput
+      );
+
+
+      /*
+       * Only selected child gets
+       * its input displayed.
+       */
+
+      childInputWrap.style.display =
+        index === 0
+          ? "block"
+          : "none";
+
+
+      group.appendChild(
+        childInputWrap
+      );
+
+
+      childItems.push({
+
+        radio:
+          childRadio,
+
+        input:
+          childInputWrap
+
+      });
+
+
+      /*
+       * Child selection
+       */
+
+      childRadio.onchange =
+        () => {
+
+          childItems.forEach(
+            item => {
+
+              item.input.style.display =
+                "none";
+
+            }
+          );
+
+
+          childInputWrap.style.display =
+            "block";
+
+        };
+
+    }
+  );
+
+
+  return group;
+
+}
+
+
+/* =========================================================
+   RENDER DRIVER PREVIEW
    ========================================================= */
 
 function renderPreview(){
@@ -2090,9 +3162,15 @@ function renderPreview(){
   box.innerHTML = "";
 
 
-  $("previewJobType").textContent =
-    STATE.jobType || "NOV";
+  $("previewJobType")
+    .textContent =
+      STATE.jobType ||
+      "NOV";
 
+
+  /*
+   * No methods
+   */
 
   if(
     !Object.keys(
@@ -2108,24 +3186,34 @@ function renderPreview(){
   }
 
 
-  /* -------------------------------------------------------
-     DELIVERY METHOD
-     ------------------------------------------------------- */
+  /*
+   * DELIVERY METHOD
+   */
 
   const title =
-    document.createElement("div");
+    document.createElement(
+      "div"
+    );
+
 
   title.className =
     "delivery-title";
 
+
   title.textContent =
     "Delivery Method";
 
-  box.appendChild(title);
+
+  box.appendChild(
+    title
+  );
 
 
   const delivery =
-    document.createElement("div");
+    document.createElement(
+      "div"
+    );
+
 
   delivery.className =
     "driver-radio-group";
@@ -2133,426 +3221,157 @@ function renderPreview(){
 
   Object.keys(
     STATE.methods
-  ).forEach(name => {
+  ).forEach(
+    name => {
 
-    const row =
-      document.createElement("label");
-
-    row.className =
-      "radio-line";
-
-
-    const input =
-      document.createElement("input");
-
-    input.type =
-      "radio";
-
-    input.name =
-      "delivery_preview";
-
-    input.checked =
-      name === STATE.selectedMethod;
+      const row =
+        document.createElement(
+          "label"
+        );
 
 
-    input.onchange = () => {
+      row.className =
+        "radio-line";
 
-      STATE.selectedMethod =
+
+      const radio =
+        document.createElement(
+          "input"
+        );
+
+
+      radio.type =
+        "radio";
+
+
+      radio.name =
+        "delivery_preview";
+
+
+      radio.checked =
+        name ===
+        STATE.selectedMethod;
+
+
+      radio.onchange =
+        () => {
+
+          STATE.selectedMethod =
+            name;
+
+          render();
+
+        };
+
+
+      const text =
+        document.createElement(
+          "span"
+        );
+
+
+      text.textContent =
         name;
 
-      render();
 
-    };
-
-
-    row.appendChild(input);
+      row.appendChild(
+        radio
+      );
 
 
-    row.appendChild(
-      document.createTextNode(
-        " " + name
-      )
-    );
+      row.appendChild(
+        text
+      );
 
 
-    delivery.appendChild(row);
+      delivery.appendChild(
+        row
+      );
 
-  });
+    }
+  );
 
 
-  box.appendChild(delivery);
+  box.appendChild(
+    delivery
+  );
 
 
-  if(!STATE.selectedMethod){
+  /*
+   * Selected delivery method
+   */
+
+  if(
+    !STATE.selectedMethod
+  ){
+
     return;
+
   }
 
 
-  const m =
+  const method =
     STATE.methods[
       STATE.selectedMethod
     ];
 
 
-  if(!m){
+  if(!method){
     return;
   }
 
 
-  /* -------------------------------------------------------
-     NORMAL FIELDS + RADIO FIELDS
-     ------------------------------------------------------- */
-
-  const radioFields = [];
+  shape(method);
 
 
-  m._order.forEach(key => {
+  /*
+   * Render fields in EXACT _order.
+   */
 
-    const f =
-      m.fields[key];
+  method._order.forEach(
+    fieldKey => {
 
-
-    if(!f){
-      return;
-    }
-
-
-    /* -----------------------------------------------------
-       RADIO FIELD
-       ----------------------------------------------------- */
-
-    if(f.type === "radio"){
-
-      radioFields.push({
-
-        key,
-
-        field:f
-
-      });
+      const field =
+        method.fields[
+          fieldKey
+        ];
 
 
-      return;
-
-    }
-
-
-    /* -----------------------------------------------------
-       TEXT / TEXTAREA
-       ----------------------------------------------------- */
-
-    const wrap =
-      document.createElement("div");
+      if(!field){
+        return;
+      }
 
 
-    const label =
-      document.createElement("label");
+      /*
+       * Normal field
+       */
 
-    label.className =
-      "driver-label";
+      if(
+        field.type !== "radio"
+      ){
 
-    label.textContent =
-      f.label || key;
-
-
-    if(f.required){
-
-      label.classList.add(
-        "required"
-      );
-
-    }
-
-
-    wrap.appendChild(label);
-
-
-    if(f.type === "textarea"){
-
-      const textarea =
-        document.createElement(
-          "textarea"
+        box.appendChild(
+          createDriverField(
+            fieldKey,
+            field
+          )
         );
 
-      textarea.className =
-        "driver-textarea";
 
+        return;
 
-      wrap.appendChild(
-        textarea
-      );
+      }
 
-    }else{
 
-      const input =
-        document.createElement(
-          "input"
-        );
-
-      input.type =
-        "text";
-
-      input.className =
-        "driver-input";
-
-
-      wrap.appendChild(
-        input
-      );
-
-    }
-
-
-    box.appendChild(
-      wrap
-    );
-
-  });
-
-
-  /* -------------------------------------------------------
-     RADIO FIELDS
-     ------------------------------------------------------- */
-
-  if(!radioFields.length){
-    return;
-  }
-
-
-  radioFields.forEach(
-    ({key, field}) => {
-
-      const group =
-        document.createElement(
-          "div"
-        );
-
-      group.className =
-        "driver-radio-group";
-
-
-      const groupTitle =
-        document.createElement(
-          "div"
-        );
-
-      groupTitle.className =
-        "driver-label";
-
-      groupTitle.textContent =
-        field.label || key;
-
-
-      group.appendChild(
-        groupTitle
-      );
-
-
-      const childWrappers = [];
-
-
-      const childOrder =
-        field.fields?._order || [];
-
-
-      const childOptions =
-        field.fields?.options || {};
-
-
-      childOrder.forEach(
-        (childKey, index) => {
-
-          const child =
-            childOptions[
-              childKey
-            ];
-
-
-          if(!child){
-            return;
-          }
-
-
-          /* ------------------------------------------------
-             RADIO OPTION
-             ------------------------------------------------ */
-
-          const radioLine =
-            document.createElement(
-              "label"
-            );
-
-          radioLine.className =
-            "radio-line";
-
-
-          const radio =
-            document.createElement(
-              "input"
-            );
-
-          radio.type =
-            "radio";
-
-          radio.name =
-            `preview_${key}`;
-
-
-          /*
-           * The first child option is selected by default.
-           */
-
-          radio.checked =
-            index === 0;
-
-
-          const radioText =
-            document.createElement(
-              "span"
-            );
-
-          radioText.textContent =
-            child.label ||
-            childKey;
-
-
-          radioLine.appendChild(
-            radio
-          );
-
-          radioLine.appendChild(
-            radioText
-          );
-
-
-          group.appendChild(
-            radioLine
-          );
-
-
-          /* ------------------------------------------------
-             CHILD FIELD
-             ------------------------------------------------ */
-
-          const childWrap =
-            document.createElement(
-              "div"
-            );
-
-          childWrap.className =
-            "conditional";
-
-
-          const childLabel =
-            document.createElement(
-              "label"
-            );
-
-          childLabel.className =
-            "driver-label";
-
-          childLabel.textContent =
-            child.label ||
-            childKey;
-
-
-          if(child.required){
-
-            childLabel.classList.add(
-              "required"
-            );
-
-          }
-
-
-          childWrap.appendChild(
-            childLabel
-          );
-
-
-          if(child.type === "textarea"){
-
-            const textarea =
-              document.createElement(
-                "textarea"
-              );
-
-            textarea.className =
-              "driver-textarea";
-
-
-            childWrap.appendChild(
-              textarea
-            );
-
-          }else{
-
-            const input =
-              document.createElement(
-                "input"
-              );
-
-            input.type =
-              "text";
-
-            input.className =
-              "driver-input";
-
-
-            childWrap.appendChild(
-              input
-            );
-
-          }
-
-
-          childWrap.style.display =
-            index === 0
-              ? "block"
-              : "none";
-
-
-          group.appendChild(
-            childWrap
-          );
-
-
-          childWrappers.push({
-
-            radio,
-
-            childWrap
-
-          });
-
-
-          /* ------------------------------------------------
-             RADIO CHANGE
-             ------------------------------------------------ */
-
-          radio.onchange = () => {
-
-            childWrappers.forEach(
-              item => {
-
-                item.childWrap.style.display =
-                  "none";
-
-              }
-            );
-
-
-            childWrap.style.display =
-              "block";
-
-          };
-
-        }
-      );
-
+      /*
+       * Radio field
+       */
 
       box.appendChild(
-        group
+        createDriverRadioField(
+          fieldKey,
+          field
+        )
       );
 
     }
@@ -2562,25 +3381,29 @@ function renderPreview(){
 
 
 /* =========================================================
-   JSON PREVIEW
+   JSON
    ========================================================= */
 
 function renderJSON(){
 
   const output = {
 
-    [STATE.jobType || "JOBTYPE"]:
+    [
+      STATE.jobType ||
+      "JOBTYPE"
+    ]:
       STATE.methods
 
   };
 
 
-  $("jsonPreview").textContent =
-    JSON.stringify(
-      output,
-      null,
-      2
-    );
+  $("jsonPreview")
+    .textContent =
+      JSON.stringify(
+        output,
+        null,
+        2
+      );
 
 }
 
@@ -2589,82 +3412,223 @@ function renderJSON(){
    COPY JSON
    ========================================================= */
 
-window.copyJSON = async () => {
+window.copyJSON =
+  async () => {
 
-  const output = {
+    const output = {
 
-    [STATE.jobType || "JOBTYPE"]:
-      STATE.methods
+      [
+        STATE.jobType ||
+        "JOBTYPE"
+      ]:
+        STATE.methods
+
+    };
+
+
+    try{
+
+      await navigator.clipboard.writeText(
+        JSON.stringify(
+          output,
+          null,
+          2
+        )
+      );
+
+
+      alert(
+        "JSON copied."
+      );
+
+    }catch(error){
+
+      console.error(
+        error
+      );
+
+
+      alert(
+        "Unable to copy JSON."
+      );
+
+    }
 
   };
-
-
-  try{
-
-    await navigator.clipboard.writeText(
-      JSON.stringify(
-        output,
-        null,
-        2
-      )
-    );
-
-
-    alert(
-      "JSON copied."
-    );
-
-  }catch(e){
-
-    console.error(e);
-
-    alert(
-      "Unable to copy JSON."
-    );
-
-  }
-
-};
 
 
 /* =========================================================
    LOAD CONFIG
    ========================================================= */
 
-window.loadConfigForEdit = async () => {
+window.loadConfigForEdit =
+  async () => {
 
-  const jt =
-    $("jobTypeInput")
-      .value
-      .trim();
-
-
-  if(!jt){
-
-    alert(
-      "Enter Job Type."
-    );
-
-    return;
-
-  }
+    const jt =
+      $("jobTypeInput")
+        .value
+        .trim();
 
 
-  try{
+    if(!jt){
 
-    const snap =
-      await get(
-        ref(
-          db,
-          `config/driverUI/jobTypes/${jt}/deliveryMethods`
-        )
+      alert(
+        "Enter Job Type."
+      );
+
+      return;
+
+    }
+
+
+    try{
+
+      const snap =
+        await get(
+          ref(
+            db,
+            `config/driverUI/jobTypes/${jt}/deliveryMethods`
+          )
+        );
+
+
+      if(
+        !snap.exists()
+      ){
+
+        alert(
+          `No configuration found for ${jt}.`
+        );
+
+        return;
+
+      }
+
+
+      STATE.jobType =
+        jt;
+
+
+      STATE.methods =
+        snap.val() ||
+        {};
+
+
+      STATE.selectedMethod =
+        Object.keys(
+          STATE.methods
+        )[0] ||
+        null;
+
+
+      Object.values(
+        STATE.methods
+      ).forEach(
+        normalizeForRTDB
       );
 
 
-    if(!snap.exists()){
+      render();
+
 
       alert(
-        `No configuration found for ${jt}.`
+        "Configuration loaded."
+      );
+
+    }catch(error){
+
+      console.error(
+        error
+      );
+
+
+      alert(
+        "Failed to load configuration. Check Firebase access."
+      );
+
+    }
+
+  };
+
+
+/* =========================================================
+   RESET
+   ========================================================= */
+
+window.resetBuilder =
+  () => {
+
+    if(
+      !confirm(
+        "Clear current template?"
+      )
+    ){
+
+      return;
+
+    }
+
+
+    STATE.jobType =
+      "";
+
+    STATE.methods =
+      {};
+
+    STATE.selectedMethod =
+      null;
+
+
+    $("jobTypeInput")
+      .value = "";
+
+
+    $("deliveryMethodInput")
+      .value = "";
+
+
+    $("newFieldLabel")
+      .value = "";
+
+
+    render();
+
+  };
+
+
+/* =========================================================
+   SAVE
+   ========================================================= */
+
+window.saveConfig =
+  async () => {
+
+    const jt =
+      $("jobTypeInput")
+        .value
+        .trim() ||
+      STATE.jobType;
+
+
+    if(!jt){
+
+      alert(
+        "Enter Job Type."
+      );
+
+      return;
+
+    }
+
+
+    if(
+      !Object.keys(
+        STATE.methods
+      ).length
+    ){
+
+      alert(
+        "Add at least one delivery method."
       );
 
       return;
@@ -2676,16 +3640,6 @@ window.loadConfigForEdit = async () => {
       jt;
 
 
-    STATE.methods =
-      snap.val() || {};
-
-
-    STATE.selectedMethod =
-      Object.keys(
-        STATE.methods
-      )[0] || null;
-
-
     Object.values(
       STATE.methods
     ).forEach(
@@ -2693,159 +3647,52 @@ window.loadConfigForEdit = async () => {
     );
 
 
-    render();
+    try{
+
+      await update(
+
+        ref(
+          db,
+          `config/driverUI/jobTypes/${jt}`
+        ),
+
+        {
+
+          deliveryMethods:
+            STATE.methods,
+
+          updatedAt:
+            new Date()
+              .toISOString()
+
+        }
+
+      );
 
 
-    alert(
-      "Configuration loaded."
-    );
-
-  }catch(e){
-
-    console.error(e);
-
-    alert(
-      "Failed to load configuration. Check Firebase access."
-    );
-
-  }
-
-};
+      alert(
+        "✅ Configuration saved."
+      );
 
 
-/* =========================================================
-   RESET BUILDER
-   ========================================================= */
+    }catch(error){
 
-window.resetBuilder = () => {
-
-  if(
-    !confirm(
-      "Clear current template?"
-    )
-  ){
-
-    return;
-
-  }
+      console.error(
+        error
+      );
 
 
-  STATE.jobType =
-    "";
+      alert(
+        "❌ Save failed. Check Firebase permissions."
+      );
 
-  STATE.methods =
-    {};
+    }
 
-  STATE.selectedMethod =
-    null;
-
-
-  $("jobTypeInput").value =
-    "";
-
-  $("deliveryMethodInput").value =
-    "";
-
-  $("newFieldLabel").value =
-    "";
-
-
-  render();
-
-};
+  };
 
 
 /* =========================================================
-   SAVE CONFIG
-   ========================================================= */
-
-window.saveConfig = async () => {
-
-  const jt =
-    $("jobTypeInput")
-      .value
-      .trim() ||
-    STATE.jobType;
-
-
-  if(!jt){
-
-    alert(
-      "Enter Job Type."
-    );
-
-    return;
-
-  }
-
-
-  if(
-    !Object.keys(
-      STATE.methods
-    ).length
-  ){
-
-    alert(
-      "Add at least one delivery method."
-    );
-
-    return;
-
-  }
-
-
-  STATE.jobType =
-    jt;
-
-
-  Object.values(
-    STATE.methods
-  ).forEach(
-    normalizeForRTDB
-  );
-
-
-  try{
-
-    await update(
-
-      ref(
-        db,
-        `config/driverUI/jobTypes/${jt}`
-      ),
-
-      {
-
-        deliveryMethods:
-          STATE.methods,
-
-        updatedAt:
-          new Date().toISOString()
-
-      }
-
-    );
-
-
-    alert(
-      "✅ Configuration saved."
-    );
-
-  }catch(e){
-
-    console.error(e);
-
-    alert(
-      "❌ Save failed. Check Firebase permissions."
-    );
-
-  }
-
-};
-
-
-/* =========================================================
-   INITIAL RENDER
+   INITIAL
    ========================================================= */
 
 render();
