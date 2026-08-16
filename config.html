@@ -1,103 +1,477 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Driver UI Configuration Builder</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Driver Template Maker V0.0.0</title>
 
 <style>
-body { font-family: Arial, sans-serif; background:#f3f3f3; padding:12px; }
-h2 { text-align:center; }
+:root{
+  --bg:#eef2f7;
+  --card:#fff;
+  --border:#d8dee8;
+  --text:#182230;
+  --muted:#667085;
+  --primary:#2563eb;
+  --primary-soft:#eff6ff;
+  --danger:#dc2626;
+  --success:#16a34a;
+  --shadow:0 8px 28px rgba(16,24,40,.08);
+  --radius:14px;
+}
 
-.card {
+*{box-sizing:border-box}
+body{
+  margin:0;
+  font-family:Inter,Arial,sans-serif;
+  background:var(--bg);
+  color:var(--text);
+}
+
+button,input,select,textarea{font:inherit}
+button{cursor:pointer}
+
+.app-header{
+  position:sticky;
+  top:0;
+  z-index:20;
   background:#fff;
-  padding:14px;
-  border-radius:10px;
-  box-shadow:0 0 4px rgba(0,0,0,.1);
-  margin-bottom:12px;
-}
-
-input, select {
-  width:100%;
-  padding:8px;
-  margin-top:4px;
-  border-radius:6px;
-  border:1px solid #ccc;
-}
-
-button {
-  margin-top:8px;
-  padding:8px;
-  border:none;
-  border-radius:6px;
-  cursor:pointer;
-}
-
-.primary { background:#007bff; color:#fff; }
-.secondary { background:#555; color:#fff; }
-.danger { background:#c0392b; color:#fff; }
-
-.method-box {
-  border:1px solid #ddd;
-  border-radius:8px;
-  padding:10px;
-  margin-top:10px;
-}
-
-.field-box {
-  margin-top:10px;
-  padding:10px;
-  border-top:1px dashed #ccc;
-}
-
-.child-box {
-  margin-left:12px;
-  margin-top:8px;
-  padding-left:8px;
-  border-left:3px solid #ddd;
-}
-
-.required-row {
+  border-bottom:1px solid var(--border);
+  padding:14px 20px;
   display:flex;
   align-items:center;
-  gap:6px;
+  justify-content:space-between;
+  gap:16px;
+}
+.app-title h1{font-size:19px;margin:0}
+.app-title p{font-size:12px;color:var(--muted);margin:3px 0 0}
+.header-actions{display:flex;gap:8px;flex-wrap:wrap}
+
+.btn{
+  border:1px solid var(--border);
+  background:#fff;
+  color:var(--text);
+  border-radius:9px;
+  padding:9px 13px;
+}
+.btn:hover{background:#f8fafc}
+.btn.primary{background:var(--primary);border-color:var(--primary);color:#fff}
+.btn.danger{background:#fff;border-color:#fecaca;color:var(--danger)}
+.btn.small{padding:6px 9px;font-size:12px}
+
+.workspace{
+  display:grid;
+  grid-template-columns:minmax(330px, 520px) minmax(420px, 1fr);
+  min-height:calc(100vh - 70px);
+}
+
+.builder{
+  background:#f8fafc;
+  border-right:1px solid var(--border);
+  padding:18px;
+  overflow:auto;
+}
+
+.preview-area{
+  padding:18px;
+  overflow:auto;
+  background:#e8edf4;
+}
+
+.panel{
+  background:var(--card);
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+  box-shadow:var(--shadow);
+  margin-bottom:14px;
+}
+.panel-header{
+  padding:13px 15px;
+  border-bottom:1px solid var(--border);
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+}
+.panel-header h2{font-size:14px;margin:0}
+.panel-body{padding:14px}
+
+label.caption{
+  display:block;
+  font-size:11px;
+  font-weight:700;
+  color:var(--muted);
+  text-transform:uppercase;
+  letter-spacing:.04em;
+  margin-bottom:5px;
+}
+
+input,select,textarea{
+  width:100%;
+  border:1px solid #cbd5e1;
+  border-radius:8px;
+  padding:9px 10px;
+  background:#fff;
+  outline:none;
+}
+input:focus,select:focus,textarea:focus{
+  border-color:var(--primary);
+  box-shadow:0 0 0 3px rgba(37,99,235,.1);
+}
+
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+.stack{display:flex;flex-direction:column;gap:10px}
+
+.methods{
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+}
+.method-item{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  border:1px solid var(--border);
+  border-radius:10px;
+  padding:9px;
+  background:#fff;
+}
+.method-item.active{
+  border-color:#93c5fd;
+  background:var(--primary-soft);
+}
+.method-main{flex:1;min-width:0}
+.method-name{
+  font-weight:700;
   font-size:13px;
-  margin-top:4px;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+.method-meta{font-size:11px;color:var(--muted);margin-top:2px}
+.icon-btn{
+  width:30px;height:30px;padding:0;
+  border:1px solid var(--border);
+  background:#fff;
+  border-radius:7px;
+}
+.icon-btn.danger{color:var(--danger)}
+
+.field-list{display:flex;flex-direction:column;gap:9px}
+.field-card{
+  border:1px solid var(--border);
+  border-radius:11px;
+  background:#fff;
+  overflow:hidden;
+}
+.field-card-header{
+  padding:10px 11px;
+  display:flex;
+  align-items:center;
+  gap:8px;
+  background:#fafbfc;
+  border-bottom:1px solid var(--border);
+}
+.drag{color:#98a2b3;font-size:16px}
+.field-title{font-size:13px;font-weight:700;flex:1}
+.type-pill{
+  font-size:10px;
+  padding:3px 7px;
+  border-radius:999px;
+  background:#e2e8f0;
+  color:#475467;
+}
+.field-card-body{padding:11px}
+.field-grid{
+  display:grid;
+  grid-template-columns:1fr 110px;
+  gap:8px;
+}
+.check-row{
+  display:flex;
+  align-items:center;
+  gap:7px;
+  font-size:12px;
+  margin-top:9px;
+}
+.check-row input{width:auto}
+.field-actions{
+  display:flex;
+  justify-content:flex-end;
+  gap:6px;
+  margin-top:9px;
+}
+
+.radio-options{
+  margin-top:10px;
+  padding:10px;
+  border-left:3px solid #93c5fd;
+  background:#f8fbff;
+  border-radius:7px;
+}
+.radio-options-title{
+  font-size:11px;font-weight:700;color:#475467;margin-bottom:7px;
+}
+.option-row{
+  display:grid;
+  grid-template-columns:1fr 100px 30px;
+  gap:6px;
+  margin-bottom:6px;
+}
+.option-row:last-child{margin-bottom:0}
+
+.empty{
+  padding:24px 10px;
+  text-align:center;
+  color:var(--muted);
+  font-size:12px;
+  border:1px dashed #cbd5e1;
+  border-radius:10px;
+}
+
+.phone-stage{
+  max-width:470px;
+  margin:0 auto;
+}
+.preview-toolbar{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  margin-bottom:12px;
+}
+.preview-toolbar h2{font-size:14px;margin:0}
+.preview-toolbar span{font-size:11px;color:var(--muted)}
+
+.phone{
+  background:#f4f6f8;
+  border:8px solid #1f2937;
+  border-radius:30px;
+  box-shadow:0 18px 50px rgba(15,23,42,.2);
+  overflow:hidden;
+  min-height:720px;
+}
+.phone-top{
+  background:#fff;
+  padding:13px 16px;
+  border-bottom:1px solid #dfe3e8;
+}
+.phone-top .brand{
+  font-weight:800;
+  font-size:15px;
+}
+.phone-top .sub{
+  font-size:11px;color:#667085;margin-top:2px;
+}
+.driver-screen{
+  padding:14px;
+}
+.driver-method{
+  background:#fff;
+  border-radius:12px;
+  border:1px solid #e0e5eb;
+  padding:13px;
+  margin-bottom:10px;
+}
+.driver-method h3{
+  margin:0 0 13px;
+  font-size:14px;
+}
+.driver-field{margin-bottom:12px}
+.driver-label{
+  display:block;
+  font-size:12px;
+  font-weight:700;
+  margin-bottom:5px;
+}
+.req{color:#dc2626}
+.driver-input,
+.driver-textarea,
+.driver-select{
+  width:100%;
+  background:#fff;
+  border:1px solid #cfd6df;
+  border-radius:8px;
+  padding:9px 10px;
+  font-size:12px;
+}
+.driver-textarea{min-height:68px;resize:none}
+.driver-radio{
+  display:flex;
+  align-items:center;
+  gap:7px;
+  font-size:12px;
+  padding:7px 0;
+}
+.driver-radio input{width:auto}
+.radio-child{
+  margin:3px 0 7px 25px;
+  padding:8px;
+  border-left:2px solid #dbe4ef;
+}
+.driver-footer{
+  margin-top:16px;
+  display:flex;
+  gap:8px;
+}
+.driver-footer button{
+  flex:1;
+  border:0;
+  border-radius:9px;
+  padding:10px;
+  font-weight:700;
+  font-size:12px;
+}
+.driver-footer .save{background:var(--primary);color:#fff}
+.driver-footer .cancel{background:#e5e7eb;color:#374151}
+
+.json-panel pre{
+  margin:0;
+  max-height:300px;
+  overflow:auto;
+  background:#0f172a;
+  color:#dbeafe;
+  padding:12px;
+  border-radius:9px;
+  font-size:10px;
+  line-height:1.5;
+}
+
+.status{
+  font-size:11px;
+  color:var(--muted);
+}
+.status.ok{color:var(--success);font-weight:700}
+
+@media(max-width:1050px){
+  .workspace{grid-template-columns:1fr}
+  .builder{border-right:0;border-bottom:1px solid var(--border)}
+  .preview-area{min-height:800px}
+}
+@media(max-width:600px){
+  .app-header{align-items:flex-start;flex-direction:column}
+  .grid2,.field-grid{grid-template-columns:1fr}
+  .option-row{grid-template-columns:1fr 100px 30px}
+  .builder,.preview-area{padding:10px}
 }
 </style>
 </head>
 
 <body>
 
-<h2>⚙ Driver UI Dynamic Configuration Builder V5.5</h2>
-
-<div class="card">
-  <label>Job Type</label>
-  <input id="jobTypeInput" placeholder="e.g. BOV">
-
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px;">
-    <button class="secondary" onclick="loadConfigForEdit()">✏️ Load / Edit Config</button>
-    <button class="secondary" onclick="resetBuilder()">🧹 New Config</button>
+<header class="app-header">
+  <div class="app-title">
+    <h1>🚚 Driver Template Maker</h1>
+    <p>Build the delivery form visually and preview it like the driver screen.</p>
   </div>
+  <div class="header-actions">
+    <button class="btn" onclick="loadConfigForEdit()">✏️ Load</button>
+    <button class="btn" onclick="resetBuilder()">🧹 New</button>
+    <button class="btn primary" onclick="saveConfig()">💾 Save</button>
+  </div>
+</header>
 
-  <label style="margin-top:10px">Delivery Method</label>
-  <input id="deliveryMethodInput" placeholder="e.g. N1-Received">
+<div class="workspace">
 
-  <button class="secondary" onclick="addDeliveryMethod()">➕ Add Delivery Method</button>
-</div>
+  <!-- BUILDER -->
+  <aside class="builder">
 
-<div class="card">
-  <h3>Delivery Methods</h3>
-  <div id="methodsContainer"></div>
-</div>
+    <section class="panel">
+      <div class="panel-header">
+        <h2>1. Template</h2>
+        <span class="status" id="statusText">Not saved</span>
+      </div>
+      <div class="panel-body stack">
+        <div>
+          <label class="caption">Job Type</label>
+          <input id="jobTypeInput" placeholder="e.g. BOV">
+        </div>
 
-<div class="card">
-  <h3>👀 Live Driver UI Preview</h3>
-  <div id="previewContainer"></div>
-</div>
+        <div>
+          <label class="caption">New Delivery Method</label>
+          <div style="display:flex;gap:7px">
+            <input id="deliveryMethodInput" placeholder="e.g. N1-Received">
+            <button class="btn primary" style="white-space:nowrap" onclick="addDeliveryMethod()">＋ Add</button>
+          </div>
+        </div>
+      </div>
+    </section>
 
-<div class="card">
-  <button class="primary" onclick="saveConfig()">💾 Save Configuration</button>
+    <section class="panel">
+      <div class="panel-header">
+        <h2>2. Delivery Methods</h2>
+        <span class="status" id="methodCount">0 methods</span>
+      </div>
+      <div class="panel-body">
+        <div id="methodsContainer" class="methods"></div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header">
+        <h2>3. Fields</h2>
+        <span class="status" id="selectedMethodLabel">Select a method</span>
+      </div>
+      <div class="panel-body">
+
+        <div id="fieldEditorEmpty" class="empty">
+          Select a delivery method above to configure its fields.
+        </div>
+
+        <div id="fieldEditor" style="display:none">
+          <div class="grid2" style="margin-bottom:10px">
+            <div>
+              <label class="caption">Field Label</label>
+              <input id="newFieldLabel" placeholder="e.g. Received By">
+            </div>
+            <div>
+              <label class="caption">Field Type</label>
+              <select id="newFieldType">
+                <option value="text">Text</option>
+                <option value="textarea">Textarea</option>
+                <option value="radio">Radio Button</option>
+              </select>
+            </div>
+          </div>
+          <button class="btn primary" onclick="addField()">＋ Add Field</button>
+
+          <div id="fieldList" class="field-list" style="margin-top:12px"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel json-panel">
+      <div class="panel-header">
+        <h2>Generated Configuration</h2>
+        <button class="btn small" onclick="copyJSON()">Copy JSON</button>
+      </div>
+      <div class="panel-body">
+        <pre id="jsonPreview">{}</pre>
+      </div>
+    </section>
+
+  </aside>
+
+  <!-- DRIVER PREVIEW -->
+  <main class="preview-area">
+    <div class="phone-stage">
+      <div class="preview-toolbar">
+        <div>
+          <h2>👀 Live Driver Preview</h2>
+          <span id="previewSubtitle">Changes appear here immediately</span>
+        </div>
+        <span>Driver view</span>
+      </div>
+
+      <div class="phone">
+        <div class="phone-top">
+          <div class="brand">DRIVA</div>
+          <div class="sub" id="phoneJobType">Delivery Form</div>
+        </div>
+        <div class="driver-screen" id="previewContainer"></div>
+      </div>
+    </div>
+  </main>
+
 </div>
 
 <script type="module">
@@ -112,372 +486,561 @@ const db = getDatabase(app);
 
 const STATE = {
   jobType: "",
-  methods: {}
+  methods: {},
+  selectedMethod: null
 };
 
-window.loadConfigForEdit = async function () {
-  const jobType = jobTypeInput.value.trim();
-  if (!jobType) return alert("Enter Job Type to edit");
+const $ = id => document.getElementById(id);
 
-  const snap = await get(
-    ref(db, `config/driverUI/jobTypes/${jobType}/deliveryMethods`)
-  );
+function slugify(value, fallback="field"){
+  const key = String(value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+  return key || `${fallback}_${Date.now()}`;
+}
 
-  if (!snap.exists()) {
-    alert("❌ No configuration found for " + jobType);
+function escapeHTML(value){
+  return String(value ?? "")
+    .replaceAll("&","&amp;")
+    .replaceAll("<","&lt;")
+    .replaceAll(">","&gt;")
+    .replaceAll('"',"&quot;")
+    .replaceAll("'","&#039;");
+}
+
+function selectedMethod(){
+  return STATE.selectedMethod && STATE.methods[STATE.selectedMethod]
+    ? STATE.methods[STATE.selectedMethod]
+    : null;
+}
+
+function ensureMethodShape(method){
+  method._order ||= [];
+  method.fields ||= {};
+  return method;
+}
+
+function renderAll(){
+  renderMethods();
+  renderFields();
+  renderPreview();
+  renderJSON();
+  updateCounts();
+}
+
+function renderMethods(){
+  const box = $("methodsContainer");
+  box.innerHTML = "";
+
+  const entries = Object.entries(STATE.methods);
+
+  if(!entries.length){
+    box.innerHTML = `<div class="empty">No delivery methods yet.<br>Add one above.</div>`;
     return;
   }
 
-  STATE.jobType = jobType;
-  STATE.methods = snap.val() || {};
+  entries.forEach(([method, obj])=>{
+    ensureMethodShape(obj);
 
-  renderMethods();
-  renderPreview();
+    const item = document.createElement("div");
+    item.className = "method-item" + (STATE.selectedMethod === method ? " active" : "");
 
-  alert("✏️ Loaded configuration for editing");
-};
-
-window.resetBuilder = function () {
-  if (!confirm("Clear current configuration?")) return;
-
-  STATE.jobType = "";
-  STATE.methods = {};
-
-  jobTypeInput.value = "";
-  deliveryMethodInput.value = "";
-
-  renderMethods();
-  renderPreview();
-};
-
-window.addDeliveryMethod = function () {
-  const jobType = jobTypeInput.value.trim();
-  const method = deliveryMethodInput.value.trim();
-
-  if (!jobType || !method) {
-    alert("Job Type and Delivery Method are required");
-    return;
-  }
-
-  STATE.jobType = jobType;
-
-  if (!STATE.methods[method]) {
-    STATE.methods[method] = { _order: [], fields: {} };
-  }
-
-  deliveryMethodInput.value = "";
-  renderMethods();
-  renderPreview();
-};
-
-function renderMethods() {
-  methodsContainer.innerHTML = "";
-
-  Object.entries(STATE.methods).forEach(([method, fields]) => {
-    const div = document.createElement("div");
-    div.className = "method-box";
-
-    div.innerHTML = `
-      <b>${method}</b>
-      <button class="danger" style="float:right" onclick="removeDeliveryMethod('${method}')">❌</button>
-
-      <input class="field-label" placeholder="Field label (e.g. Received by, C100-Disconnected)">
-      <select class="field-type">
-        <option value="text">Text</option>
-        <option value="textarea">Textarea</option>
-        <option value="radio">Radio Button</option>
-      </select>
-
-      <button class="secondary addField">➕ Add Field</button>
-
-      <div class="field-list"></div>
+    item.innerHTML = `
+      <div class="method-main" onclick="selectMethod('${escapeHTML(method)}')" style="cursor:pointer">
+        <div class="method-name">${escapeHTML(method)}</div>
+        <div class="method-meta">${obj._order.length} field${obj._order.length===1?"":"s"}</div>
+      </div>
+      <button class="icon-btn" title="Duplicate" onclick="duplicateMethod('${escapeHTML(method)}')">⧉</button>
+      <button class="icon-btn danger" title="Delete" onclick="removeDeliveryMethod('${escapeHTML(method)}')">×</button>
     `;
 
-    const list = div.querySelector(".field-list");
-
-    fields._order.forEach(key => {
-      const f = fields.fields[key];
-      list.innerHTML += renderField(method, key, f);
-    });
-
-    div.querySelector(".addField").onclick = () => {
-      const label = div.querySelector(".field-label").value.trim();
-      const type = div.querySelector(".field-type").value;
-
-      if (!label) return alert("Field label required");
-
-      const key = label.toLowerCase().replace(/[^a-z0-9]+/g,"_");
-
-      const methodObj = STATE.methods[method];
-
-      methodObj._order.push(key);
-      
-      methodObj.fields[key] = {
-        label,
-        type,
-        required:false,
-        ...(type==="radio" ? { fields:{ _order: [], options:{} } } : {})
-      };
-
-      renderMethods();
-      renderPreview();
-    };
-
-    methodsContainer.appendChild(div);
+    box.appendChild(item);
   });
 }
 
-  function renderPreview() {
-  const box = document.getElementById("previewContainer");
+window.selectMethod = function(method){
+  STATE.selectedMethod = method;
+  renderAll();
+};
+
+window.addDeliveryMethod = function(){
+  const jobType = $("jobTypeInput").value.trim();
+  const method = $("deliveryMethodInput").value.trim();
+
+  if(!jobType) return alert("Enter a Job Type first.");
+  if(!method) return alert("Enter a Delivery Method.");
+
+  STATE.jobType = jobType;
+
+  if(!STATE.methods[method]){
+    STATE.methods[method] = {_order:[], fields:{}};
+  }
+
+  STATE.selectedMethod = method;
+  $("deliveryMethodInput").value = "";
+  setStatus("Editing");
+  renderAll();
+};
+
+window.removeDeliveryMethod = function(method){
+  if(!confirm(`Delete "${method}"?`)) return;
+  delete STATE.methods[method];
+
+  if(STATE.selectedMethod === method){
+    STATE.selectedMethod = Object.keys(STATE.methods)[0] || null;
+  }
+
+  renderAll();
+};
+
+window.duplicateMethod = function(method){
+  const source = JSON.parse(JSON.stringify(STATE.methods[method]));
+  let copy = `${method} Copy`;
+  let n = 2;
+  while(STATE.methods[copy]) copy = `${method} Copy ${n++}`;
+
+  STATE.methods[copy] = source;
+  STATE.selectedMethod = copy;
+  renderAll();
+};
+
+window.addField = function(){
+  const methodObj = selectedMethod();
+  if(!methodObj) return alert("Select a delivery method first.");
+
+  const label = $("newFieldLabel").value.trim();
+  const type = $("newFieldType").value;
+
+  if(!label) return alert("Enter a field label.");
+
+  let key = slugify(label);
+  let n = 2;
+  while(methodObj.fields[key]) key = `${slugify(label)}_${n++}`;
+
+  methodObj._order.push(key);
+  methodObj.fields[key] = {
+    label,
+    type,
+    required:false
+  };
+
+  if(type === "radio"){
+    methodObj.fields[key].fields = {
+      _order: [],
+      options: {}
+    };
+  }
+
+  $("newFieldLabel").value = "";
+  setStatus("Editing");
+  renderAll();
+};
+
+function renderFields(){
+  const methodObj = selectedMethod();
+
+  $("fieldEditorEmpty").style.display = methodObj ? "none" : "block";
+  $("fieldEditor").style.display = methodObj ? "block" : "none";
+  $("selectedMethodLabel").textContent = STATE.selectedMethod || "Select a method";
+
+  if(!methodObj) return;
+
+  const list = $("fieldList");
+  list.innerHTML = "";
+
+  if(!methodObj._order.length){
+    list.innerHTML = `<div class="empty">No fields yet.<br>Add the first field above.</div>`;
+    return;
+  }
+
+  methodObj._order.forEach((key, index)=>{
+    const f = methodObj.fields[key];
+    if(!f) return;
+
+    const card = document.createElement("div");
+    card.className = "field-card";
+
+    card.innerHTML = `
+      <div class="field-card-header">
+        <span class="drag">☰</span>
+        <span class="field-title">${escapeHTML(f.label || key)}</span>
+        <span class="type-pill">${escapeHTML(f.type)}</span>
+      </div>
+
+      <div class="field-card-body">
+        <div class="field-grid">
+          <div>
+            <label class="caption">Label</label>
+            <input value="${escapeHTML(f.label || "")}" data-label>
+          </div>
+          <div>
+            <label class="caption">Type</label>
+            <select data-type>
+              <option value="text" ${f.type==="text"?"selected":""}>Text</option>
+              <option value="textarea" ${f.type==="textarea"?"selected":""}>Textarea</option>
+              <option value="radio" ${f.type==="radio"?"selected":""}>Radio</option>
+            </select>
+          </div>
+        </div>
+
+        <label class="check-row">
+          <input type="checkbox" data-required ${f.required ? "checked" : ""}>
+          Required field
+        </label>
+
+        ${f.type==="radio" ? renderRadioEditor(key,f) : ""}
+
+        <div class="field-actions">
+          <button class="btn small" data-up>↑</button>
+          <button class="btn small" data-down>↓</button>
+          <button class="btn small danger" data-remove>Remove</button>
+        </div>
+      </div>
+    `;
+
+    card.querySelector("[data-label]").addEventListener("change", e=>{
+      f.label = e.target.value.trim() || f.label;
+      setStatus("Editing");
+      renderAll();
+    });
+
+    card.querySelector("[data-type]").addEventListener("change", e=>{
+      const newType = e.target.value;
+
+      if(newType === "radio" && f.type !== "radio"){
+        f.fields = {_order:[], options:{}};
+      }
+      if(newType !== "radio"){
+        delete f.fields;
+      }
+
+      f.type = newType;
+      setStatus("Editing");
+      renderAll();
+    });
+
+    card.querySelector("[data-required]").addEventListener("change", e=>{
+      f.required = e.target.checked;
+      setStatus("Editing");
+      renderPreview();
+      renderJSON();
+    });
+
+    card.querySelector("[data-remove]").onclick = ()=>{
+      if(!confirm(`Remove "${f.label}"?`)) return;
+      methodObj._order = methodObj._order.filter(k=>k!==key);
+      delete methodObj.fields[key];
+      renderAll();
+    };
+
+    card.querySelector("[data-up]").onclick = ()=>{
+      if(index===0) return;
+      [methodObj._order[index-1],methodObj._order[index]] =
+      [methodObj._order[index],methodObj._order[index-1]];
+      renderAll();
+    };
+
+    card.querySelector("[data-down]").onclick = ()=>{
+      if(index===methodObj._order.length-1) return;
+      [methodObj._order[index+1],methodObj._order[index]] =
+      [methodObj._order[index],methodObj._order[index+1]];
+      renderAll();
+    };
+
+    list.appendChild(card);
+  });
+}
+
+function renderRadioEditor(fieldKey, field){
+  const radio = field.fields || {_order:[],options:{}};
+  field.fields = radio;
+
+  const options = radio._order.map((key,index)=>{
+    const o = radio.options[key];
+
+    return `
+      <div class="option-row">
+        <input data-opt-label="${escapeHTML(key)}" value="${escapeHTML(o.label || "")}" placeholder="Option label">
+        <select data-opt-type="${escapeHTML(key)}">
+          <option value="text" ${o.type==="text"?"selected":""}>Text</option>
+          <option value="textarea" ${o.type==="textarea"?"selected":""}>Textarea</option>
+        </select>
+        <button class="icon-btn danger" data-opt-remove="${escapeHTML(key)}">×</button>
+      </div>
+    `;
+  }).join("");
+
+  return `
+    <div class="radio-options">
+      <div class="radio-options-title">RADIO OPTIONS</div>
+      ${options || `<div class="status">No radio options yet.</div>`}
+      <button class="btn small" onclick="addRadioOption('${escapeHTML(fieldKey)}')">＋ Add Option</button>
+    </div>
+  `;
+}
+
+document.addEventListener("change", e=>{
+  const field = selectedMethod()?.fields[e.target.closest("[data-field-key]")?.dataset.fieldKey];
+});
+
+window.addRadioOption = function(fieldKey){
+  const f = selectedMethod()?.fields[fieldKey];
+  if(!f) return;
+
+  f.fields ||= {_order:[],options:{}};
+
+  let key = `option_${f.fields._order.length+1}`;
+  while(f.fields.options[key]) key += "_x";
+
+  f.fields._order.push(key);
+  f.fields.options[key] = {
+    label:`Option ${f.fields._order.length}`,
+    type:"text",
+    required:false
+  };
+
+  renderAll();
+};
+
+function renderPreview(){
+  const box = $("previewContainer");
   box.innerHTML = "";
 
-  Object.entries(STATE.methods).forEach(([method, mObj]) => {
-    const section = document.createElement("div");
-    section.className = "method-box";
+  $("phoneJobType").textContent = STATE.jobType
+    ? `${STATE.jobType} · Delivery Form`
+    : "Delivery Form";
 
-    section.innerHTML = `<b>${method}</b>`;
+  const entries = Object.entries(STATE.methods);
 
-    mObj._order.forEach(key => {
+  if(!entries.length){
+    box.innerHTML = `
+      <div class="empty" style="background:#fff;margin-top:20px">
+        Add a delivery method to see the driver form.
+      </div>`;
+    return;
+  }
+
+  entries.forEach(([method,mObj])=>{
+    const section = document.createElement("section");
+    section.className = "driver-method";
+
+    section.innerHTML = `<h3>${escapeHTML(method)}</h3>`;
+
+    mObj._order.forEach(key=>{
       const f = mObj.fields[key];
+      if(!f) return;
 
       const row = document.createElement("div");
-      row.style.marginTop = "8px";
+      row.className = "driver-field";
 
-      let html = `<label>${f.label}${f.required ? " *" : ""}</label>`;
+      row.innerHTML = `
+        <label class="driver-label">
+          ${escapeHTML(f.label || key)}
+          ${f.required ? `<span class="req"> *</span>` : ""}
+        </label>
+      `;
 
-      if (f.type === "text") {
-        html += `<input placeholder="${f.label}" />`;
-      }
-
-      if (f.type === "textarea") {
-        html += `<textarea rows="2" placeholder="${f.label}"></textarea>`;
-      }
-
-      if (f.type === "radio") {
-        html += `<div style="margin-top:4px">`;
-
-        f.fields._order.forEach(rk => {
+      if(f.type === "text"){
+        row.innerHTML += `<input class="driver-input" placeholder="${escapeHTML(f.label || "")}">`;
+      }else if(f.type === "textarea"){
+        row.innerHTML += `<textarea class="driver-textarea" placeholder="${escapeHTML(f.label || "")}"></textarea>`;
+      }else if(f.type === "radio"){
+        const wrap = document.createElement("div");
+        (f.fields?._order || []).forEach(rk=>{
           const rf = f.fields.options[rk];
+          const option = document.createElement("div");
 
-          html += `
-            <div style="margin-left:10px;margin-top:4px">
-              <label>
-                <input type="radio" name="${key}">
-                ${rf.label}
-              </label>
-              ${renderPreviewChild(rf)}
-            </div>
+          option.innerHTML = `
+            <label class="driver-radio">
+              <input type="radio" name="preview_${escapeHTML(key)}">
+              <span>${escapeHTML(rf.label || rk)}</span>
+            </label>
           `;
-        });
 
-        html += `</div>`;
+          if(rf.type === "text"){
+            option.innerHTML += `
+              <div class="radio-child">
+                <input class="driver-input" placeholder="${escapeHTML(rf.label || "")}">
+              </div>`;
+          }else if(rf.type === "textarea"){
+            option.innerHTML += `
+              <div class="radio-child">
+                <textarea class="driver-textarea" placeholder="${escapeHTML(rf.label || "")}"></textarea>
+              </div>`;
+          }
+
+          wrap.appendChild(option);
+        });
+        row.appendChild(wrap);
       }
 
-      row.innerHTML = html;
       section.appendChild(row);
     });
 
     box.appendChild(section);
   });
-}
 
-function renderPreviewChild(rf) {
-  if (rf.type === "text") {
-    return `<input style="margin-top:4px" placeholder="${rf.label}"/>`;
-  }
-
-  if (rf.type === "textarea") {
-    return `<textarea rows="2" style="margin-top:4px" placeholder="${rf.label}"></textarea>`;
-  }
-
-  return "";
-}
-
-function renderField(method, key, f) {
-  return `
-    <div class="field-box">
-      <b>${f.label}</b> (${f.type})
-
-      <label class="required-row">
-        <input type="checkbox" ${f.required?"checked":""}
-          onchange="toggleRequired('${method}','${key}',this.checked)">
-        Required
-      </label>
-
-      ${f.type==="radio" ? renderRadioChildren(method,key,f) : ""}
-
-      <button class="danger" onclick="removeField('${method}','${key}')">❌ Remove</button>
-    </div>
+  const footer = document.createElement("div");
+  footer.className = "driver-footer";
+  footer.innerHTML = `
+    <button class="cancel">Cancel</button>
+    <button class="save">Submit</button>
   `;
+  box.appendChild(footer);
+
+  $("previewSubtitle").textContent =
+    STATE.selectedMethod
+      ? `Editing: ${STATE.selectedMethod}`
+      : "All delivery methods";
 }
 
-function renderRadioChildren(method, key, f) {
-  const order = f.fields?._order || [];
-  const options = f.fields?.options || {};
-
-  return `
-    <div class="child-box">
-      <b>Radio Options</b>
-
-      ${order.map(ck => {
-        const cf = options[ck];
-
-        return `
-          <div style="margin-top:6px">
-            <input
-              placeholder="Option label"
-              value="${cf.label || ""}"
-              onchange="updateChildLabel('${method}','${key}','${ck}',this.value)"
-            >
-
-            <select
-              onchange="updateChildType('${method}','${key}','${ck}',this.value)">
-              <option value="text" ${cf.type==="text"?"selected":""}>Text</option>
-              <option value="textarea" ${cf.type==="textarea"?"selected":""}>Textarea</option>
-            </select>
-
-            <label class="required-row">
-              <input
-                type="checkbox"
-                ${cf.required ? "checked" : ""}
-                onchange="updateChildRequired('${method}','${key}','${ck}',this.checked)">
-              Required
-            </label>
-
-            <button
-              class="danger"
-              onclick="removeChild('${method}','${key}','${ck}')">
-              ❌
-            </button>
-          </div>
-        `;
-      }).join("")}
-
-      <button
-        class="secondary"
-        onclick="addChild('${method}','${key}')">
-        ➕ Add Radio Option
-      </button>
-    </div>
-  `;
+function renderJSON(){
+  $("jsonPreview").textContent = JSON.stringify({
+    [STATE.jobType || "JOBTYPE"]: STATE.methods
+  },null,2);
 }
 
-/* ---------- Actions ---------- */
-
-window.removeDeliveryMethod = m => { delete STATE.methods[m]; renderMethods(); renderPreview();};
-
-window.toggleRequired = (m,f,v) => {
-  STATE.methods[m].fields[f].required = v;
-};
-
-window.addChild = (m,f) => {
-  const k = "tmp_" + Date.now();
-
-  const obj = STATE.methods[m].fields[f].fields;
-
-  obj._order.push(k);
-
-  obj.options[k] = {
-    label: "",
-    type: "text",
-    required: false
-  };
-
-  renderMethods();
-  renderPreview();
-};
-
-window.removeChild = (m,f,k) => {
-  const obj = STATE.methods[m].fields[f].fields;
-
-  obj._order = obj._order.filter(x => x !== k);
-  delete obj.options[k];
-
-  renderMethods();
-  renderPreview();
-};
-
-window.updateChildLabel = (m,f,k,v) => {
-  if (!v) return;
-
-  const newKey = v
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "_")
-    .replace(/^_|_$/g, "");
-
-  const obj = STATE.methods[m].fields[f].fields;
-
-  // If already same key, just update label
-  if (k === newKey) {
-    obj.options[k].label = v;
-    return;
-  }
-
-  // Prevent overwrite
-  if (obj.options[newKey]) {
-    alert("This option already exists.");
-    return;
-  }
-
-  // Replace key in order list
-  const idx = obj._order.indexOf(k);
-  obj._order[idx] = newKey;
-
-  // Move data
-  obj.options[newKey] = { ...obj.options[k], label: v };
-  delete obj.options[k];
-
-  renderMethods();
-  renderPreview();
-};
-window.updateChildType = (m,f,k,v) => {
-  STATE.methods[m].fields[f].fields.options[k].type = v;
-};
-
-window.updateChildRequired = (m,f,k,v) => {
-  STATE.methods[m].fields[f].fields.options[k].required = v;
-};
-
-
- function cleanForFirebase(methods) {
-  const out = {};
-
-  for (const [m, mObj] of Object.entries(methods)) {
-    const res = {};
-    mObj._order.forEach(k=>{
-      const f = mObj.fields[k];
-
-      if (f.type === "radio") {
-        const rf = {};
-        f.fields._order.forEach(rk=>{
-          rf[rk] = f.fields.options[rk];
-        });
-        res[k] = { ...f, fields: rf };
-      } else {
-        res[k] = f;
-      }
-    });
-    out[m] = res;
-  }
-  return out;
+function updateCounts(){
+  const methods = Object.keys(STATE.methods).length;
+  $("methodCount").textContent = `${methods} method${methods===1?"":"s"}`;
 }
 
-  
-/* ---------- SAVE ---------- */
+function setStatus(text){
+  $("statusText").textContent = text;
+  $("statusText").className = "status" + (text==="Saved" ? " ok" : "");
+}
 
-window.saveConfig = async function() {
-  if (!STATE.jobType) return alert("Nothing to save");
+window.copyJSON = async function(){
+  await navigator.clipboard.writeText(JSON.stringify({
+    [STATE.jobType || "JOBTYPE"]: STATE.methods
+  },null,2));
+  setStatus("Copied");
+};
 
-  await update(
-    ref(db, `config/driverUI/jobTypes/${STATE.jobType}`),
-    {
-      deliveryMethods: STATE.methods,
-      updatedAt: new Date().toISOString()
+window.loadConfigForEdit = async function(){
+  const jobType = $("jobTypeInput").value.trim();
+  if(!jobType) return alert("Enter Job Type to load.");
+
+  try{
+    const snap = await get(
+      ref(db, `config/driverUI/jobTypes/${jobType}/deliveryMethods`)
+    );
+
+    if(!snap.exists()){
+      alert(`No configuration found for ${jobType}.`);
+      return;
     }
+
+    STATE.jobType = jobType;
+    STATE.methods = snap.val() || {};
+    STATE.selectedMethod = Object.keys(STATE.methods)[0] || null;
+
+    Object.values(STATE.methods).forEach(ensureMethodShape);
+
+    setStatus("Loaded");
+    renderAll();
+  }catch(err){
+    console.error(err);
+    alert("Failed to load configuration. Check Firebase access.");
+  }
+};
+
+window.resetBuilder = function(){
+  if(!confirm("Start a new template? Unsaved changes will be cleared.")) return;
+
+  STATE.jobType = "";
+  STATE.methods = {};
+  STATE.selectedMethod = null;
+
+  $("jobTypeInput").value = "";
+  $("deliveryMethodInput").value = "";
+  $("newFieldLabel").value = "";
+
+  setStatus("Not saved");
+  renderAll();
+};
+
+window.saveConfig = async function(){
+  const jobType = $("jobTypeInput").value.trim() || STATE.jobType;
+
+  if(!jobType) return alert("Enter a Job Type.");
+  if(!Object.keys(STATE.methods).length) return alert("Add at least one delivery method.");
+
+  STATE.jobType = jobType;
+
+  try{
+    await update(
+      ref(db, `config/driverUI/jobTypes/${STATE.jobType}`),
+      {
+        deliveryMethods: STATE.methods,
+        updatedAt: new Date().toISOString()
+      }
+    );
+
+    setStatus("Saved");
+    renderAll();
+    alert("✅ Configuration saved.");
+  }catch(err){
+    console.error(err);
+    alert("❌ Save failed. Check Firebase permissions.");
+  }
+};
+
+/*
+  Radio option editing is delegated here because option rows are created dynamically.
+*/
+$("fieldList").addEventListener("change", e=>{
+  const labelKey = e.target.dataset.optLabel;
+  const typeKey = e.target.dataset.optType;
+
+  if(labelKey){
+    const field = selectedMethod()?.fields;
+    const radioField = field && Object.values(field).find(f =>
+      f?.fields?.options?.[labelKey]
+    );
+
+    if(radioField){
+      const option = radioField.fields.options[labelKey];
+      option.label = e.target.value.trim() || option.label;
+      renderAll();
+    }
+  }
+
+  if(typeKey){
+    const field = selectedMethod()?.fields;
+    const radioField = field && Object.values(field).find(f =>
+      f?.fields?.options?.[typeKey]
+    );
+
+    if(radioField){
+      radioField.fields.options[typeKey].type = e.target.value;
+      renderPreview();
+      renderJSON();
+    }
+  }
+});
+
+$("fieldList").addEventListener("click", e=>{
+  const key = e.target.dataset.optRemove;
+  if(!key) return;
+
+  const fields = selectedMethod()?.fields || {};
+  const radioField = Object.values(fields).find(f =>
+    f?.fields?.options?.[key]
   );
 
-  alert("✅ Configuration saved with ordering preserved");
-};
+  if(!radioField) return;
+
+  radioField.fields._order =
+    radioField.fields._order.filter(k=>k!==key);
+
+  delete radioField.fields.options[key];
+
+  renderAll();
+});
+
+renderAll();
 </script>
 
 </body>
