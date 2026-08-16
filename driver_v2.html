@@ -155,6 +155,10 @@ img { width:100%;margin-top:8px;border-radius:6px; }
     justify-content: center;
   }
 
+  .task-map-marker.local-completed {
+    background: #28a745;
+}
+
   .task-map-marker span {
     transform: rotate(45deg);
     font-weight: bold;
@@ -541,7 +545,7 @@ import {
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "V.R.0.0.15.1";
+const VERSION = "V.R.0.0.15.2";
 const BILLING_CACHE = {};
 window.BILLING_CACHE = BILLING_CACHE;
 const DRIVER_UI_CACHE = {};
@@ -3838,7 +3842,7 @@ function initDriverTaskMap() {
 }
 
 
-function createTaskMapIcon(sequence) {
+function createTaskMapIcon(sequence, status) {
 
   const label =
     sequence !== undefined &&
@@ -3847,12 +3851,15 @@ function createTaskMapIcon(sequence) {
       ? String(sequence)
       : "•";
 
+  const completedLocally =
+    status === "SYNC_PENDING";
+
   return L.divIcon({
 
     className: "",
 
     html: `
-      <div class="task-map-marker">
+      <div class="task-map-marker ${completedLocally ? "local-completed" : ""}">
         <span>${label}</span>
       </div>
     `,
@@ -4034,20 +4041,20 @@ function renderDriverTaskMap() {
     const lng =
       Number(task.LONGITUDE);
 
+    const status = resolveStatus(task);
+
     const marker =
       L.marker(
         [lat, lng],
         {
           icon:
             createTaskMapIcon(
-              task.SEQUENCE
+              task.SEQUENCE,
+              status
             )
         }
       )
       .addTo(DRIVER_TASK_MAP);
-
-    const status =
-      resolveStatus(task);
 
     marker.bindPopup(`
       <div style="min-width:220px;">
@@ -4087,8 +4094,72 @@ function renderDriverTaskMap() {
 
         <br>
 
-        <b>Status:</b>
-        ${status}
+        let statusLabel = "🔵 Pending";
+
+if (status === "SYNC_PENDING") {
+  statusLabel = "🟢 Completed locally — waiting for sync";
+}
+
+marker.bindPopup(`
+  <div style="min-width:220px;">
+
+    <b>
+      ${task.CUSTOMERNAME || "—"}
+    </b>
+
+    <br>
+
+    📍 ${task.ADDRESS || "—"}
+
+    <hr style="margin:6px 0;">
+
+    <b>Sequence:</b>
+    ${task.SEQUENCE || "—"}
+
+    <br>
+
+    <b>Account:</b>
+    ${task.ACCOUNTNUMBER || "—"}
+
+    <br>
+
+    <b>Meter:</b>
+    ${task.METERNUMBER || "—"}
+
+    <br>
+
+    <b>MRU:</b>
+    ${task.MRU || "—"}
+
+    <br>
+
+    <b>Job:</b>
+    ${task.JOBTYPE || "—"}
+
+    <br>
+
+    <b>Status:</b>
+    ${statusLabel}
+
+    <br><br>
+
+    <button
+      style="
+        width:100%;
+        padding:8px;
+        border:none;
+        border-radius:6px;
+        background:#1976d2;
+        color:white;
+        font-weight:bold;
+      "
+      onclick="openTaskFromMap('${task._key}')"
+    >
+      Open Task
+    </button>
+
+  </div>
+`);
 
         <br><br>
 
