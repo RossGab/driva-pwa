@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Driva Delivery Template Maker v.R.0.0.1</title>
+<title>Driva Delivery Template Maker V.0.0.2</title>
 <style>
 *{box-sizing:border-box}
 :root{
@@ -329,7 +329,7 @@ function radioEditor(f){
       <label><input type="radio" name="mode_${esc(f.label)}" data-simple ${simple?"checked":""}> Simple options</label>
       <label><input type="radio" name="mode_${esc(f.label)}" data-conditional ${!simple?"checked":""}> Conditional fields</label>
     </div>
-    <div class="radio-title">OPTIONS</div>
+    <div class="radio-title">OPTIONS — each row below is a radio choice</div>
     ${f.fields._order.map(k=>{
       const o=f.fields.options[k];
       return `<div class="option">
@@ -348,13 +348,22 @@ function radioEditor(f){
 
 function wireRadio(card,f){
   if(f.type!=="radio")return;
-  card.querySelector("[data-simple]").onchange=()=>{f.radioMode="simple";f.fields._order.forEach(k=>{delete f.fields.options[k].type});render()};
-  card.querySelector("[data-conditional]").onchange=()=>{f.radioMode="conditional";f.fields._order.forEach(k=>{f.fields.options[k].type ||= "text"});render()};
+  card.querySelector("[data-simple]").onchange=()=>{f.radioMode="simple";render()};
+  card.querySelector("[data-conditional]").onchange=()=>{f.radioMode="conditional";
+    f.fields._order.forEach(k=>{
+      f.fields.options[k].type ||= "text";
+      f.fields.options[k].required ||= false;
+    });
+    render()};
   card.querySelector("[data-add-option]").onclick=()=>{
     let k="option_"+(f.fields._order.length+1);
     while(f.fields.options[k])k+="_x";
     f.fields._order.push(k);
-    f.fields.options[k]={label:`Option ${f.fields._order.length}`,type:"text",required:false};
+    f.fields.options[k]={
+      label:`Option ${f.fields._order.length}`,
+      type:"text",
+      required:false
+    };
     render();
   };
   card.querySelectorAll("[data-opt-label]").forEach(input=>{
@@ -405,7 +414,10 @@ window.addField=()=>{
   let key=slug(label),n=2;
   while(m.fields[key])key=`${slug(label)}_${n++}`;
   m._order.push(key);m.fields[key]={label,type,required:false};
-  if(type==="radio")m.fields[key].fields={_order:[],options:{}};
+  if(type==="radio"){
+  m.fields[key].fields={_order:[],options:{}};
+  m.fields[key].radioMode="simple";
+}
   $("newFieldLabel").value="";render();
 };
 
@@ -416,7 +428,10 @@ function renderPreview(){
     box.innerHTML='<div class="empty">Add a delivery method to preview the real form.</div>';return;
   }
 
-  const title=document.createElement("div");title.className="delivery-title";title.textContent="Delivery Method";box.appendChild(title);
+  const title=document.createElement("div");
+  title.className="delivery-title";
+  title.textContent="Delivery Method";
+  box.appendChild(title);
 
   const delivery=document.createElement("div");delivery.className="driver-radio-group";
   Object.keys(STATE.methods).forEach((name,i)=>{
@@ -447,14 +462,22 @@ function renderPreview(){
           if(f.radioMode==="conditional"){
             if(o.type==="textarea")child.innerHTML=`<textarea class="driver-textarea" placeholder="${esc(o.label||"")}"></textarea>`;
             else child.innerHTML=`<input class="driver-input" placeholder="${esc(o.label||"")}">`;
+          }else{
+            child.style.display="none";
           }
+
           const radio=line.querySelector("input");
           radio.onchange=()=>{
-            group.querySelectorAll(".conditional").forEach(x=>x.style.display="none");
-            if(f.radioMode==="conditional")child.style.display="block";
+            if(f.radioMode==="conditional"){
+              group.querySelectorAll(".conditional").forEach(x=>x.style.display="none");
+              child.style.display="block";
+            }
           };
-          if(idx!==0)child.style.display="none";
-          group.appendChild(line);group.appendChild(child);
+
+          if(f.radioMode==="conditional" && idx!==0)child.style.display="none";
+
+          group.appendChild(line);
+          if(f.radioMode==="conditional")group.appendChild(child);
         });
         wrap.appendChild(group);
       }else{
