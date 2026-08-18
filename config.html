@@ -1002,7 +1002,7 @@ textarea{
   <div>
 
     <h1>
-      🚚 Driva Delivery Template Maker V.R.0.0.13
+      🚚 Driva Delivery Template Maker V.R.0.0.14
     </h1>
 
     <p>
@@ -2374,21 +2374,28 @@ function renderFields(){
         };
 
 
-      card.querySelector(
-        "[data-required]"
-      ).onchange =
-        e => {
-
-          f.required =
-            e.target.checked;
-
-
-          renderPreview();
-
-          renderJSON();
-
-        };
-
+      const requiredCheckbox =
+        card.querySelector(
+          "[data-required]"
+        );
+      
+      
+      if(requiredCheckbox){
+      
+        requiredCheckbox.onchange =
+          e => {
+      
+            f.required =
+              e.target.checked;
+      
+      
+            renderPreview();
+      
+            renderJSON();
+      
+          };
+      
+      }
 
       card.querySelector(
         "[data-up]"
