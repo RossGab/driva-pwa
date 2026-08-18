@@ -539,13 +539,38 @@ textarea{
   display:grid;
 
   grid-template-columns:
-    1fr
+    minmax(0,1fr)
     92px
+    auto
     27px;
+
+  align-items:center;
 
   gap:5px;
 
   margin-bottom:5px;
+
+}
+
+.option .child-required{
+
+  display:flex;
+
+  align-items:center;
+
+  gap:3px;
+
+  white-space:nowrap;
+
+  font-size:10px;
+
+}
+
+.option .child-required input{
+
+  width:auto;
+
+  margin:0;
 
 }
 
@@ -977,7 +1002,7 @@ textarea{
   <div>
 
     <h1>
-      🚚 Driva Delivery Template Maker V.R.0.0.11
+      🚚 Driva Delivery Template Maker V.R.0.0.12
     </h1>
 
     <p>
@@ -1544,7 +1569,11 @@ function normalizeForRTDB(m){
       continue;
 
     }
-
+    /*
+     * Radio groups themselves are never required.
+     * Required belongs to their conditional children.
+     */
+    f.required = false;
 
     f.fields ||= {
 
@@ -2236,20 +2265,27 @@ function renderFields(){
           </div>
 
 
-          <label class="req">
-
-            <input
-              data-required
-              type="checkbox"
-              ${
-                f.required
-                  ? "checked"
-                  : ""
-              }
-            >
-
-            Required
-
+          ${
+            f.type !== "radio"
+              ? `
+                <label class="req">
+          
+                  <input
+                    data-required
+                    type="checkbox"
+                    ${
+                      f.required
+                        ? "checked"
+                        : ""
+                    }
+                  >
+          
+                  Required
+          
+                </label>
+              `
+              : ""
+          }
           </label>
 
 
@@ -2568,10 +2604,10 @@ function conditionalEditor(
                   >
 
 
-                  <select
+                 <select
                     data-opt-type="${esc(key)}"
                   >
-
+                  
                     <option
                       value="text"
                       ${
@@ -2582,8 +2618,8 @@ function conditionalEditor(
                     >
                       Text
                     </option>
-
-
+                  
+                  
                     <option
                       value="textarea"
                       ${
@@ -2594,10 +2630,27 @@ function conditionalEditor(
                     >
                       Textarea
                     </option>
-
+                  
                   </select>
-
-
+                  
+                  
+                  <label class="child-required">
+                  
+                    <input
+                      type="checkbox"
+                      data-opt-required="${esc(key)}"
+                      ${
+                        option.required
+                          ? "checked"
+                          : ""
+                      }
+                    >
+                  
+                    Required
+                  
+                  </label>
+                  
+                  
                   <button
                     class="icon"
                     data-opt-remove="${esc(key)}"
@@ -2839,6 +2892,42 @@ function wireConditionalEditor(
 
     }
   );
+
+  card.querySelectorAll(
+  "[data-opt-required]"
+).forEach(
+  checkbox => {
+
+    checkbox.onchange =
+      () => {
+
+        const key =
+          checkbox.dataset.optRequired;
+
+
+        const child =
+          f.fields.options[
+            key
+          ];
+
+
+        if(!child){
+          return;
+        }
+
+
+        child.required =
+          checkbox.checked;
+
+
+        renderPreview();
+
+        renderJSON();
+
+      };
+
+  }
+);
 
 
   card.querySelectorAll(
