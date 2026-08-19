@@ -308,7 +308,7 @@ button {
   
   <div style="display:flex;align-items:center;gap:14px;">
     <img src="./logo.jpg" class="admin-logo" alt="Company Logo">
-    <h1>Admin Dashboard <span class="version">V.R.0.0.7-WIP</span></h1>
+    <h1>Admin Dashboard <span class="version">V.R.0.0.8-WIP</span></h1>
   </div>
 
   <!-- 📅 DATE FILTER -->
@@ -1107,7 +1107,7 @@ function renderDynamicCompletedFields(t) {
   }
 
   // ==========================================
-  // GET DELIVERY METHOD CONFIGURATION
+  // GET JOB CONFIGURATION
   // ==========================================
 
   const jobConfig =
@@ -1124,6 +1124,7 @@ function renderDynamicCompletedFields(t) {
     !cfg.fields ||
     !Array.isArray(cfg._order)
   ) {
+
     console.warn(
       "⚠️ No delivery configuration found:",
       {
@@ -1143,8 +1144,32 @@ function renderDynamicCompletedFields(t) {
       <b>DELIVERY DETAILS</b>
   `;
 
+
   // ==========================================
-  // RENDER VALUE HELPER
+  // HTML ESCAPE HELPER
+  // ==========================================
+
+  function escapeHtml(value) {
+
+    if (
+      value === null ||
+      value === undefined
+    ) {
+      return "";
+    }
+
+    return String(value)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+
+  }
+
+
+  // ==========================================
+  // NORMAL FIELD RENDERER
   // ==========================================
 
   function renderField(
@@ -1153,22 +1178,25 @@ function renderDynamicCompletedFields(t) {
     value
   ) {
 
-    if (!field) return "";
+    if (!field) {
+      return "";
+    }
 
     const label =
       field.label || fieldKey;
 
     const safeValue =
-      value === null ||
-      value === undefined
-        ? ""
-        : String(value);
+      escapeHtml(value);
 
-    if (field.type === "textarea") {
+
+    // TEXTAREA
+    if (
+      field.type === "textarea"
+    ) {
 
       return `
         <label class="full">
-          ${label}
+          ${escapeHtml(label)}
         </label>
 
         <textarea
@@ -1176,24 +1204,52 @@ function renderDynamicCompletedFields(t) {
           disabled
         >${safeValue}</textarea>
       `;
-
     }
 
+
+    // TEXT / OTHER
     return `
       <label class="full">
-        ${label}
+        ${escapeHtml(label)}
       </label>
 
       <input
         class="full"
-        value="${safeValue.replace(/"/g, "&quot;")}"
+        value="${safeValue}"
         disabled
       >
     `;
+
   }
 
+
   // ==========================================
-  // 1️⃣ DELIVERY METHOD FIELDS
+  // RADIO SELECTED VALUE
+  // ==========================================
+  //
+  // IMPORTANT:
+  //
+  // driver_v2.html saves the selected
+  // conditional radio into:
+  //
+  // deliverytype_2nd
+  //
+  // Example:
+  //
+  // deliverytype_2nd = "c100_disconnected"
+  //
+  // We therefore use deliverytype_2nd
+  // when resolving radio fields.
+  //
+  // ==========================================
+
+  const selectedRadioValue =
+    t.deliverytype_2nd ||
+    "";
+
+
+  // ==========================================
+  // RENDER DELIVERY METHOD FIELDS
   // ==========================================
 
   for (
@@ -1203,74 +1259,123 @@ function renderDynamicCompletedFields(t) {
     const field =
       cfg.fields[fieldKey];
 
-    if (!field) continue;
+    if (!field) {
+      continue;
+    }
 
-    // Radio fields are handled separately
-    if (field.type === "radio") {
+
+    // ========================================
+    // RADIO GROUP
+    // ========================================
+
+    if (
+      field.type === "radio"
+    ) {
+
+      /*
+       * First try the value saved by
+       * driver_v2.html:
+       *
+       * deliverytype_2nd
+       *
+       * If that doesn't exist, fall back
+       * to the old/direct structure:
+       *
+       * t[fieldKey]
+       */
 
       const selectedValue =
-        t[fieldKey];
+        selectedRadioValue ||
+        t[fieldKey] ||
+        "";
 
-      // If this radio itself contains
-      // child fields, render the selected
-      // child configuration dynamically.
 
+      const selectedOption =
+        field.fields?.options?.[
+          selectedValue
+        ];
+
+
+      // Nothing selected / not found
       if (
-        selectedValue &&
-        field.fields
+        !selectedOption
       ) {
 
-        const selectedOption =
-          field.fields.options?.[
+        console.warn(
+          "⚠️ Radio selection not found:",
+          {
+            fieldKey,
+            selectedValue,
+            availableOptions:
+              Object.keys(
+                field.fields?.options || {}
+              )
+          }
+        );
+
+        continue;
+      }
+
+
+      // ======================================
+      // RADIO OPTION LABEL
+      // ======================================
+
+      html += `
+        <label class="full">
+          ${escapeHtml(
+            field.label || fieldKey
+          )}
+        </label>
+
+        <input
+          class="full"
+          value="${escapeHtml(
+            selectedOption.label ||
             selectedValue
+          )}"
+          disabled
+        >
+      `;
+
+
+      // ======================================
+      // CONDITIONAL CHILD FIELDS
+      // ======================================
+
+      const childOrder =
+        field.fields?._order || [];
+
+
+      for (
+        const childKey of childOrder
+      ) {
+
+        const childField =
+          field.fields?.options?.[
+            childKey
           ];
 
-        if (selectedOption) {
-
-          html += `
-            <label class="full">
-              ${field.label || fieldKey}
-            </label>
-
-            <input
-              class="full"
-              value="${(
-                selectedOption.label ||
-                selectedValue
-              ).replace(/"/g, "&quot;")}"
-              disabled
-            >
-          `;
-
-          const childOrder =
-            field.fields._order || [];
-
-          for (
-            const childKey of childOrder
-          ) {
-
-            const childField =
-              field.fields.options?.[
-                childKey
-              ];
-
-            if (!childField) continue;
-
-            html += renderField(
-              childKey,
-              childField,
-              t[childKey]
-            );
-          }
+        if (!childField) {
+          continue;
         }
 
+
+        html += renderField(
+          childKey,
+          childField,
+          t[childKey]
+        );
+
       }
+
 
       continue;
     }
 
+
     // ========================================
-    // NORMAL TEXT / TEXTAREA FIELD
+    // NORMAL FIELD
     // ========================================
 
     html += renderField(
@@ -1278,10 +1383,12 @@ function renderDynamicCompletedFields(t) {
       field,
       t[fieldKey]
     );
+
   }
 
+
   // ==========================================
-  // 2️⃣ COMPLETION METADATA
+  // COMPLETION METADATA
   // ==========================================
 
   html += `
@@ -1291,9 +1398,9 @@ function renderDynamicCompletedFields(t) {
 
     <input
       class="full"
-      value="${(
+      value="${escapeHtml(
         t.completedBy || ""
-      ).replace(/"/g, "&quot;")}"
+      )}"
       disabled
     >
 
@@ -1303,14 +1410,18 @@ function renderDynamicCompletedFields(t) {
 
     <input
       class="full"
-      value="${formatFirestoreDate(
-        t.completedAt
+      value="${escapeHtml(
+        formatFirestoreDate(
+          t.completedAt
+        )
       )}"
       disabled
     >
   `;
 
+
   html += `</div>`;
+
 
   return html;
 }
