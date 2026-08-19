@@ -1002,7 +1002,7 @@ textarea{
   <div>
 
     <h1>
-      🚚 Driva Delivery Template Maker V.R.0.0.15
+      🚚 Driva Delivery Template Maker V.R.0.0.16
     </h1>
 
     <p>
@@ -2504,7 +2504,8 @@ function renderFields(){
 
       wireConditionalEditor(
         card,
-        f
+        f,
+        key
       );
 
 
@@ -2736,7 +2737,8 @@ function conditionalEditor(
 
 function wireConditionalEditor(
   card,
-  f
+  f,
+  parentKey
 ){
 
   if(
