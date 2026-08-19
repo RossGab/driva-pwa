@@ -308,7 +308,7 @@ button {
   
   <div style="display:flex;align-items:center;gap:14px;">
     <img src="./logo.jpg" class="admin-logo" alt="Company Logo">
-    <h1>Admin Dashboard <span class="version">V.R.0.0.8-WIP</span></h1>
+    <h1>Admin Dashboard <span class="version">V.R.0.0.9-WIP</span></h1>
   </div>
 
   <!-- 📅 DATE FILTER -->
@@ -1136,6 +1136,17 @@ function renderDynamicCompletedFields(t) {
     return "";
   }
 
+  console.log(
+    "🔎 ADMIN DELIVERY CONFIG:",
+    {
+      jobType: t.JOBTYPE,
+      deliveryType: t.deliveryType,
+      deliverytype_2nd: t.deliverytype_2nd,
+      config: cfg
+    }
+  );
+
+
   let html = `
     <div
       class="task-form full"
@@ -1146,7 +1157,7 @@ function renderDynamicCompletedFields(t) {
 
 
   // ==========================================
-  // HTML ESCAPE HELPER
+  // HTML ESCAPE
   // ==========================================
 
   function escapeHtml(value) {
@@ -1164,7 +1175,6 @@ function renderDynamicCompletedFields(t) {
       .replace(/>/g, "&gt;")
       .replace(/"/g, "&quot;")
       .replace(/'/g, "&#039;");
-
   }
 
 
@@ -1207,7 +1217,7 @@ function renderDynamicCompletedFields(t) {
     }
 
 
-    // TEXT / OTHER
+    // TEXT
     return `
       <label class="full">
         ${escapeHtml(label)}
@@ -1219,37 +1229,26 @@ function renderDynamicCompletedFields(t) {
         disabled
       >
     `;
-
   }
 
 
   // ==========================================
-  // RADIO SELECTED VALUE
-  // ==========================================
+  // SELECTED RADIO VALUE
   //
-  // IMPORTANT:
-  //
-  // driver_v2.html saves the selected
-  // conditional radio into:
+  // Firestore:
   //
   // deliverytype_2nd
-  //
-  // Example:
-  //
-  // deliverytype_2nd = "c100_disconnected"
-  //
-  // We therefore use deliverytype_2nd
-  // when resolving radio fields.
-  //
+  //   = "c100_disconnected"
   // ==========================================
 
   const selectedRadioValue =
-    t.deliverytype_2nd ||
-    "";
+    String(
+      t.deliverytype_2nd || ""
+    ).trim();
 
 
   // ==========================================
-  // RENDER DELIVERY METHOD FIELDS
+  // RENDER FIELDS IN CONFIG ORDER
   // ==========================================
 
   for (
@@ -1272,22 +1271,24 @@ function renderDynamicCompletedFields(t) {
       field.type === "radio"
     ) {
 
-      /*
-       * First try the value saved by
-       * driver_v2.html:
-       *
-       * deliverytype_2nd
-       *
-       * If that doesn't exist, fall back
-       * to the old/direct structure:
-       *
-       * t[fieldKey]
-       */
-
       const selectedValue =
         selectedRadioValue ||
-        t[fieldKey] ||
-        "";
+        String(
+          t[fieldKey] || ""
+        ).trim();
+
+
+      console.log(
+        "🔘 ADMIN RADIO:",
+        {
+          fieldKey,
+          selectedValue,
+          availableOptions:
+            Object.keys(
+              field.fields?.options || {}
+            )
+        }
+      );
 
 
       const selectedOption =
@@ -1296,13 +1297,14 @@ function renderDynamicCompletedFields(t) {
         ];
 
 
-      // Nothing selected / not found
-      if (
-        !selectedOption
-      ) {
+      // ======================================
+      // RADIO OPTION NOT FOUND
+      // ======================================
+
+      if (!selectedOption) {
 
         console.warn(
-          "⚠️ Radio selection not found:",
+          "⚠️ Selected radio option not found:",
           {
             fieldKey,
             selectedValue,
@@ -1318,7 +1320,7 @@ function renderDynamicCompletedFields(t) {
 
 
       // ======================================
-      // RADIO OPTION LABEL
+      // DISPLAY SELECTED RADIO
       // ======================================
 
       html += `
@@ -1340,7 +1342,7 @@ function renderDynamicCompletedFields(t) {
 
 
       // ======================================
-      // CONDITIONAL CHILD FIELDS
+      // DISPLAY CHILD FIELDS
       // ======================================
 
       const childOrder =
@@ -1361,12 +1363,29 @@ function renderDynamicCompletedFields(t) {
         }
 
 
+        const childValue =
+          t[childKey] ?? "";
+
+
+        console.log(
+          "   ↳ ADMIN CHILD:",
+          {
+            childKey,
+            label:
+              childField.label,
+            type:
+              childField.type,
+            value:
+              childValue
+          }
+        );
+
+
         html += renderField(
           childKey,
           childField,
-          t[childKey]
+          childValue
         );
-
       }
 
 
@@ -1383,12 +1402,11 @@ function renderDynamicCompletedFields(t) {
       field,
       t[fieldKey]
     );
-
   }
 
 
   // ==========================================
-  // COMPLETION METADATA
+  // COMPLETION INFORMATION
   // ==========================================
 
   html += `
@@ -1420,7 +1438,9 @@ function renderDynamicCompletedFields(t) {
   `;
 
 
-  html += `</div>`;
+  html += `
+    </div>
+  `;
 
 
   return html;
@@ -1518,7 +1538,7 @@ window.revertToPending = async function (taskKey) {
       return;
     }
 
-    const original = snap.val();
+    const original = snap.data();
 
     // 1️⃣ Fields to CLEAR (completion-only data)
     const RESET_FIELDS = [
@@ -2240,7 +2260,7 @@ window.cancelEdit = function (btn) {
       return;
     }
 
-    const original = snap.val();
+    const original = snap.data();
 
     // 2️⃣ Allowlist editable fields
     const EDITABLE_FIELDS = [
