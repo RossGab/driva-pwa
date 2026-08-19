@@ -308,7 +308,7 @@ button {
   
   <div style="display:flex;align-items:center;gap:14px;">
     <img src="./logo.jpg" class="admin-logo" alt="Company Logo">
-    <h1>Admin Dashboard <span class="version">V.R.0.0.9-WIP</span></h1>
+    <h1>Admin Dashboard <span class="version">V.R.0.0.10-WIP</span></h1>
   </div>
 
   <!-- 📅 DATE FILTER -->
@@ -1102,22 +1102,30 @@ function formatFirestoreDate(value) {
 
 function renderDynamicCompletedFields(t) {
 
-  if (!t || !t.deliveryType || !t.JOBTYPE) {
+  if (
+    !t ||
+    !t.deliveryType ||
+    !t.JOBTYPE
+  ) {
     return "";
   }
+
 
   // ==========================================
   // GET JOB CONFIGURATION
   // ==========================================
 
   const jobConfig =
-    window.DRIVER_UI_CONFIG?.[t.JOBTYPE];
+    window.DRIVER_UI_CONFIG?.[
+      t.JOBTYPE
+    ];
 
-  const deliveryMethods =
-    jobConfig?.deliveryMethods;
 
   const cfg =
-    deliveryMethods?.[t.deliveryType];
+    jobConfig?.deliveryMethods?.[
+      t.deliveryType
+    ];
+
 
   if (
     !cfg ||
@@ -1126,23 +1134,40 @@ function renderDynamicCompletedFields(t) {
   ) {
 
     console.warn(
-      "⚠️ No delivery configuration found:",
+      "❌ DELIVERY CONFIG NOT FOUND",
       {
-        jobType: t.JOBTYPE,
-        deliveryType: t.deliveryType
+        JOBTYPE:
+          t.JOBTYPE,
+
+        deliveryType:
+          t.deliveryType,
+
+        driverUI:
+          window.DRIVER_UI_CONFIG
       }
     );
 
     return "";
   }
 
+
   console.log(
-    "🔎 ADMIN DELIVERY CONFIG:",
+    "✅ DELIVERY CONFIG FOUND",
     {
-      jobType: t.JOBTYPE,
-      deliveryType: t.deliveryType,
-      deliverytype_2nd: t.deliverytype_2nd,
-      config: cfg
+      JOBTYPE:
+        t.JOBTYPE,
+
+      deliveryType:
+        t.deliveryType,
+
+      fieldOrder:
+        cfg._order,
+
+      fields:
+        cfg.fields,
+
+      deliverytype_2nd:
+        t.deliverytype_2nd
     }
   );
 
@@ -1152,15 +1177,20 @@ function renderDynamicCompletedFields(t) {
       class="task-form full"
       style="margin-top:12px"
     >
-      <b>DELIVERY DETAILS</b>
+
+      <b>
+        DELIVERY DETAILS
+      </b>
   `;
 
 
   // ==========================================
-  // HTML ESCAPE
+  // ESCAPE HTML
   // ==========================================
 
-  function escapeHtml(value) {
+  function escapeHtml(
+    value
+  ) {
 
     if (
       value === null ||
@@ -1169,17 +1199,34 @@ function renderDynamicCompletedFields(t) {
       return "";
     }
 
+
     return String(value)
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;")
-      .replace(/'/g, "&#039;");
+      .replace(
+        /&/g,
+        "&amp;"
+      )
+      .replace(
+        /</g,
+        "&lt;"
+      )
+      .replace(
+        />/g,
+        "&gt;"
+      )
+      .replace(
+        /"/g,
+        "&quot;"
+      )
+      .replace(
+        /'/g,
+        "&#039;"
+      );
+
   }
 
 
   // ==========================================
-  // NORMAL FIELD RENDERER
+  // NORMAL FIELD
   // ==========================================
 
   function renderField(
@@ -1192,19 +1239,25 @@ function renderDynamicCompletedFields(t) {
       return "";
     }
 
+
     const label =
-      field.label || fieldKey;
+      field.label ||
+      fieldKey;
+
 
     const safeValue =
-      escapeHtml(value);
+      escapeHtml(
+        value
+      );
 
 
-    // TEXTAREA
     if (
-      field.type === "textarea"
+      field.type ===
+      "textarea"
     ) {
 
       return `
+
         <label class="full">
           ${escapeHtml(label)}
         </label>
@@ -1213,12 +1266,14 @@ function renderDynamicCompletedFields(t) {
           class="full"
           disabled
         >${safeValue}</textarea>
+
       `;
+
     }
 
 
-    // TEXT
     return `
+
       <label class="full">
         ${escapeHtml(label)}
       </label>
@@ -1228,188 +1283,226 @@ function renderDynamicCompletedFields(t) {
         value="${safeValue}"
         disabled
       >
+
     `;
+
   }
 
 
   // ==========================================
-  // SELECTED RADIO VALUE
-  //
-  // Firestore:
-  //
-  // deliverytype_2nd
-  //   = "c100_disconnected"
-  // ==========================================
-
-  const selectedRadioValue =
-    String(
-      t.deliverytype_2nd || ""
-    ).trim();
-
-
-  // ==========================================
-  // RENDER FIELDS IN CONFIG ORDER
+  // 1. NORMAL FIELDS
   // ==========================================
 
   for (
-    const fieldKey of cfg._order
+    const fieldKey of
+      cfg._order
   ) {
 
     const field =
-      cfg.fields[fieldKey];
+      cfg.fields[
+        fieldKey
+      ];
+
 
     if (!field) {
       continue;
     }
 
 
-    // ========================================
-    // RADIO GROUP
-    // ========================================
+    /*
+     * Do NOT render radio fields here.
+     *
+     * We will render the selected radio
+     * separately below.
+     */
 
     if (
       field.type === "radio"
     ) {
 
-      const selectedValue =
-        selectedRadioValue ||
-        String(
-          t[fieldKey] || ""
-        ).trim();
-
-
-      console.log(
-        "🔘 ADMIN RADIO:",
-        {
-          fieldKey,
-          selectedValue,
-          availableOptions:
-            Object.keys(
-              field.fields?.options || {}
-            )
-        }
-      );
-
-
-      const selectedOption =
-        field.fields?.options?.[
-          selectedValue
-        ];
-
-
-      // ======================================
-      // RADIO OPTION NOT FOUND
-      // ======================================
-
-      if (!selectedOption) {
-
-        console.warn(
-          "⚠️ Selected radio option not found:",
-          {
-            fieldKey,
-            selectedValue,
-            availableOptions:
-              Object.keys(
-                field.fields?.options || {}
-              )
-          }
-        );
-
-        continue;
-      }
-
-
-      // ======================================
-      // DISPLAY SELECTED RADIO
-      // ======================================
-
-      html += `
-        <label class="full">
-          ${escapeHtml(
-            field.label || fieldKey
-          )}
-        </label>
-
-        <input
-          class="full"
-          value="${escapeHtml(
-            selectedOption.label ||
-            selectedValue
-          )}"
-          disabled
-        >
-      `;
-
-
-      // ======================================
-      // DISPLAY CHILD FIELDS
-      // ======================================
-
-      const childOrder =
-        field.fields?._order || [];
-
-
-      for (
-        const childKey of childOrder
-      ) {
-
-        const childField =
-          field.fields?.options?.[
-            childKey
-          ];
-
-        if (!childField) {
-          continue;
-        }
-
-
-        const childValue =
-          t[childKey] ?? "";
-
-
-        console.log(
-          "   ↳ ADMIN CHILD:",
-          {
-            childKey,
-            label:
-              childField.label,
-            type:
-              childField.type,
-            value:
-              childValue
-          }
-        );
-
-
-        html += renderField(
-          childKey,
-          childField,
-          childValue
-        );
-      }
-
-
       continue;
+
     }
 
 
-    // ========================================
-    // NORMAL FIELD
-    // ========================================
+    html +=
+      renderField(
+        fieldKey,
+        field,
+        t[fieldKey]
+      );
 
-    html += renderField(
-      fieldKey,
-      field,
-      t[fieldKey]
-    );
   }
 
 
   // ==========================================
-  // COMPLETION INFORMATION
+  // 2. SELECTED RADIO / STATUS
+  // ==========================================
+
+  const selectedKey =
+    String(
+      t.deliverytype_2nd ||
+      ""
+    ).trim();
+
+
+  console.log(
+    "🔘 SELECTED DELIVERY STATUS:",
+    selectedKey
+  );
+
+
+  if (
+    selectedKey
+  ) {
+
+    /*
+     * DIRECTLY FIND THE RADIO FIELD
+     *
+     * Example:
+     *
+     * selectedKey =
+     * "c100_disconnected"
+     *
+     * cfg.fields[
+     *   "c100_disconnected"
+     * ]
+     */
+
+    const selectedRadio =
+      cfg.fields[
+        selectedKey
+      ];
+
+
+    console.log(
+      "🔘 SELECTED RADIO CONFIG:",
+      selectedRadio
+    );
+
+
+    if (
+      selectedRadio &&
+      selectedRadio.type ===
+        "radio"
+    ) {
+
+      // ======================================
+      // RADIO LABEL
+      // ======================================
+
+      html += `
+
+        <label class="full">
+          ${escapeHtml(
+            selectedRadio.label ||
+            selectedKey
+          )}
+        </label>
+
+      `;
+
+
+      // ======================================
+      // CHILD FIELDS
+      // ======================================
+
+      const childOrder =
+        selectedRadio.fields?._order ||
+        [];
+
+
+      console.log(
+        "🔽 RADIO CHILD ORDER:",
+        childOrder
+      );
+
+
+      for (
+        const childKey of
+          childOrder
+      ) {
+
+        const childField =
+          selectedRadio.fields
+            ?.options?.[
+              childKey
+            ];
+
+
+        if (!childField) {
+
+          console.warn(
+            "⚠️ CHILD CONFIG NOT FOUND:",
+            childKey
+          );
+
+          continue;
+
+        }
+
+
+        const childValue =
+          t[childKey] ??
+          "";
+
+
+        console.log(
+          "↳ CHILD:",
+          {
+            key:
+              childKey,
+
+            label:
+              childField.label,
+
+            value:
+              childValue,
+
+            type:
+              childField.type,
+
+            required:
+              childField.required
+          }
+        );
+
+
+        html +=
+          renderField(
+            childKey,
+
+            childField,
+
+            childValue
+          );
+
+      }
+
+    } else {
+
+      console.warn(
+        "⚠️ Selected status is not a radio field:",
+        {
+          selectedKey,
+          availableFields:
+            Object.keys(
+              cfg.fields
+            )
+        }
+      );
+
+    }
+
+  }
+
+
+  // ==========================================
+  // 3. COMPLETION METADATA
   // ==========================================
 
   html += `
+
     <label class="full">
       Completed By
     </label>
@@ -1417,10 +1510,12 @@ function renderDynamicCompletedFields(t) {
     <input
       class="full"
       value="${escapeHtml(
-        t.completedBy || ""
+        t.completedBy ||
+        ""
       )}"
       disabled
     >
+
 
     <label class="full">
       Completed At
@@ -1435,6 +1530,7 @@ function renderDynamicCompletedFields(t) {
       )}"
       disabled
     >
+
   `;
 
 
@@ -1444,6 +1540,7 @@ function renderDynamicCompletedFields(t) {
 
 
   return html;
+
 }
   
 function renderTaskDetails(t) {
