@@ -1002,7 +1002,7 @@ textarea{
   <div>
 
     <h1>
-      🚚 Driva Delivery Template Maker V.R.0.0.14
+      🚚 Driva Delivery Template Maker V.R.0.0.15
     </h1>
 
     <p>
@@ -1647,35 +1647,75 @@ function normalizeForRTDB(m){
 
         let newKey =
           oldKey;
-
-
+        
+        
         /*
-         * Only migrate the old generated
-         * child_N format.
+         * Conditional child keys must always
+         * be unique to their parent radio.
+         *
+         * Example:
+         *
+         * Radio:
+         * c04_with_owner_s_padlock
+         *
+         * Child:
+         * Other Remarks
+         *
+         * Becomes:
+         *
+         * c04_with_owner_s_padlock_other_remarks
          */
-
+        
+        
+        /*
+         * Old format:
+         *
+         * child_1
+         * child_2
+         *
+         * Convert those first.
+         */
+        
         if(
           /^child_\d+$/.test(
             oldKey
           )
         ){
-
-          const generatedKey =
+        
+          newKey =
             slug(
-              option.label
+              `${key}_${option.label}`
             );
-
-
-          if(
-            generatedKey &&
-            generatedKey !== "field"
-          ){
-
-            newKey =
-              generatedKey;
-
-          }
-
+        
+        }
+        
+        
+        /*
+         * Older versions may already have
+         * generated the child key only from
+         * the label:
+         *
+         * other_remarks
+         *
+         * Convert that to:
+         *
+         * c04_with_owner_s_padlock_other_remarks
+         *
+         * unless it is already correctly
+         * prefixed with the radio key.
+         */
+        
+        else if(
+          !oldKey.startsWith(
+            `${key}_`
+          )
+        ){
+        
+          newKey =
+            slug(
+              `${key}_${option.label}`
+            );
+        
         }
 
 
@@ -2289,7 +2329,7 @@ function renderFields(){
 
           ${
             f.type === "radio"
-              ? conditionalEditor(f)
+              ? conditionalEditor(f, key)
               : ""
           }
 
@@ -2536,7 +2576,8 @@ function moveField(
    ========================================================= */
 
 function conditionalEditor(
-  f
+  f,
+  parentKey
 ){
 
   f.fields ||= {
@@ -2781,22 +2822,23 @@ function wireConditionalEditor(
          * locking_device_used
          */
     
-        let key =
+        const baseKey =
           slug(
-            cleanLabel
+            `${parentKey}_${cleanLabel}`
           );
-    
-    
+        
+        let key =
+          baseKey;
+        
         let counter = 2;
-    
-    
+        
         while(
           f.fields.options[key]
         ){
-    
+        
           key =
-            `${slug(cleanLabel)}_${counter++}`;
-    
+            `${baseKey}_${counter++}`;
+        
         }
     
     
