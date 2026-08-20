@@ -568,7 +568,7 @@ import {
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "V.R.0.0.15.6.10";
+const VERSION = "V.R.0.0.15.6.9";
 const BILLING_CACHE = {};
 window.BILLING_CACHE = BILLING_CACHE;
 const DRIVER_UI_CACHE = {};
@@ -4018,13 +4018,13 @@ function initDriverTaskMap() {
      */
     disableClusteringAtZoom: 20,
 
-    spiderfyOnMaxZoom: true,
+    spiderfyOnMaxZoom: false,
 
     showCoverageOnHover: false,
 
     zoomToBoundsOnClick: false,
 
-    spiderfyDistanceMultiplier: 2.2,
+    spiderfyDistanceMultiplier: 1.5,
 
     // =================================================
     // ⚡ PERFORMANCE
@@ -4284,82 +4284,106 @@ function updateDriverLocationOnTaskMap() {
   }
 }
 
-function spiderfyFocusedTaskGroup() {
+function focusDriverTaskCluster(cluster) {
 
-  if (!DRIVER_TASK_MAP) {
-    return;
-  }
+  if (!cluster) return;
 
-  if (
-    !DRIVER_TASK_MAP_FOCUS_KEYS ||
-    DRIVER_TASK_MAP_FOCUS_KEYS.size === 0
-  ) {
-    return;
-  }
+  const childMarkers =
+    cluster.getAllChildMarkers();
 
-  // ==========================================
-  // FIND MARKERS BELONGING TO FOCUSED GROUP
-  // ==========================================
-
-  const markers = [];
-
-  DRIVER_TASK_MAP_FOCUS_KEYS.forEach(taskKey => {
-
-    const marker =
-      DRIVER_TASK_MARKERS[taskKey];
-
-    if (marker) {
-      markers.push(marker);
-    }
-
-  });
-
-  if (!markers.length) {
+  if (!childMarkers.length) {
     return;
   }
 
   // ==========================================
-  // FIND THE CLUSTER CONTAINING THESE MARKERS
+  // GET TASK KEYS FROM THIS CLUSTER
   // ==========================================
 
-  const clusters = new Set();
+  const keys = [];
 
-  markers.forEach(marker => {
+  childMarkers.forEach(marker => {
 
-    const parent =
-      DRIVER_TASK_MARKER_CLUSTER
-        .getVisibleParent(marker);
+    const taskKey =
+      marker.options?.taskKey;
 
-    if (
-      parent &&
-      typeof parent.spiderfy === "function"
-    ) {
-      clusters.add(parent);
+    if (taskKey) {
+      keys.push(taskKey);
     }
 
   });
 
+  if (!keys.length) {
+    return;
+  }
+
   // ==========================================
-  // SPIDERFY EACH CLUSTER
+  // ENTER FOCUS MODE
   // ==========================================
 
-  clusters.forEach(cluster => {
+  DRIVER_TASK_MAP_FOCUS_KEYS =
+    new Set(keys);
 
-    try {
+  // ==========================================
+  // 🔥 IMPORTANT
+  //
+  // If 20 or fewer tasks remain:
+  // STOP CLUSTERING COMPLETELY.
+  //
+  // Show every task individually.
+  // ==========================================
 
-      cluster.spiderfy();
+  DRIVER_TASK_MAP_FOCUS_INDIVIDUAL =
+    keys.length <= 20;
 
-    } catch (err) {
-
-      console.warn(
-        "⚠️ Could not spiderfy cluster:",
-        err
-      );
-
+  console.log(
+    "🎯 Map cluster clicked:",
+    {
+      taskCount: keys.length,
+      individualMode:
+        DRIVER_TASK_MAP_FOCUS_INDIVIDUAL
     }
+  );
+
+  // ==========================================
+  // RENDER SELECTED TASKS
+  // ==========================================
+
+  renderDriverTaskMap();
+
+  // ==========================================
+  // FIT MAP TO SELECTED GROUP
+  // ==========================================
+
+  const bounds = [];
+
+  childMarkers.forEach(marker => {
+
+    const latLng =
+      marker.getLatLng();
+
+    if (!latLng) return;
+
+    bounds.push([
+      latLng.lat,
+      latLng.lng
+    ]);
 
   });
 
+  if (bounds.length) {
+
+    DRIVER_TASK_MAP.fitBounds(
+      bounds,
+      {
+        padding: [60, 60],
+        maxZoom: 18,
+        animate: true
+      }
+    );
+
+  }
+
+  updateTaskMapFocusInfo();
 }
 
 function renderDriverTaskMap() {
@@ -4552,7 +4576,28 @@ function renderDriverTaskMap() {
     //   continue clustering.
     //
     
-    DRIVER_TASK_MARKER_CLUSTER.addLayer(marker);
+    if (DRIVER_TASK_MAP_FOCUS_INDIVIDUAL) {
+    
+      // ==========================================
+      // 🔥 SMALL GROUP
+      // SHOW EVERY TASK INDIVIDUALLY
+      // ==========================================
+    
+      marker.addTo(
+        DRIVER_TASK_MAP
+      );
+    
+    } else {
+    
+      // ==========================================
+      // 📦 NORMAL CLUSTERING
+      // ==========================================
+    
+      DRIVER_TASK_MARKER_CLUSTER.addLayer(
+        marker
+      );
+    
+    }
     
     DRIVER_TASK_MARKERS[task._key] =
       marker;
