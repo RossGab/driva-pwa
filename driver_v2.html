@@ -582,7 +582,7 @@ import {
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "V.R.0.0.15.6.9.1";
+const VERSION = "V.R.0.0.15.6.9.2";
 const BILLING_CACHE = {};
 window.BILLING_CACHE = BILLING_CACHE;
 const DRIVER_UI_CACHE = {};
@@ -4349,9 +4349,111 @@ function updateDriverLocationOnTaskMap() {
 const FOCUSED_MARKER_MIN_DISTANCE = 48;
 const FOCUSED_MARKER_FIRST_RING = 58;
 const FOCUSED_MARKER_RING_STEP = 38;
+const FOCUSED_MARKER_MIN_DISTANCE = 48;
+const FOCUSED_MARKER_FIRST_RING = 58;
+const FOCUSED_MARKER_RING_STEP = 38;
 const FOCUSED_MARKER_MAX_RADIUS = 360;
 
+// =====================================================
+// 🔥 IMPORTANT:
+// NEVER place a displayed marker directly on a real GPS
+// endpoint.
+//
+// The old version started with { x: 0, y: 0 }, which meant
+// the first marker could cover the actual task location.
+//
+// All markers now start away from the GPS endpoint.
+// =====================================================
+
 function getFocusedMarkerOffsets() {
+
+  const offsets = [];
+
+  for (
+    let radius = FOCUSED_MARKER_FIRST_RING;
+    radius <= FOCUSED_MARKER_MAX_RADIUS;
+    radius += FOCUSED_MARKER_RING_STEP
+  ) {
+
+    // Start at the top and rotate around the GPS point.
+    for (
+      let angle = -90;
+      angle < 270;
+      angle += 30
+    ) {
+
+      const radians =
+        angle * Math.PI / 180;
+
+      offsets.push({
+        x:
+          Math.cos(radians) * radius,
+
+        y:
+          Math.sin(radians) * radius
+      });
+
+    }
+  }
+
+  return offsets;
+}
+
+const FOCUSED_MARKER_OFFSETS =
+  getFocusedMarkerOffsets();
+
+function focusedPointIsFree(
+  candidate,
+  placed,
+  originalPoints
+) {
+
+  // ==========================================
+  // 1️⃣ DO NOT OVERLAP OTHER DISPLAY MARKERS
+  // ==========================================
+
+  for (const point of placed) {
+
+    const dx =
+      candidate.x - point.x;
+
+    const dy =
+      candidate.y - point.y;
+
+    if (
+      Math.sqrt(
+        dx * dx +
+        dy * dy
+      ) < FOCUSED_MARKER_MIN_DISTANCE
+    ) {
+      return false;
+    }
+  }
+
+  // ==========================================
+  // 2️⃣ DO NOT COVER ANY REAL GPS ENDPOINT
+  // ==========================================
+
+  for (const point of originalPoints) {
+
+    const dx =
+      candidate.x - point.x;
+
+    const dy =
+      candidate.y - point.y;
+
+    if (
+      Math.sqrt(
+        dx * dx +
+        dy * dy
+      ) < FOCUSED_MARKER_MIN_DISTANCE
+    ) {
+      return false;
+    }
+  }
+
+  return true;
+}
   const offsets = [
     { x: 0, y: 0 }
   ];
@@ -4411,7 +4513,20 @@ function positionFocusedTaskMarkers() {
   const map = DRIVER_TASK_MAP;
   const placed = [];
 
-  clearFocusedTaskCalloutLines();
+clearFocusedTaskCalloutLines();
+
+// ==========================================
+// 🔥 COLLECT ALL REAL GPS ENDPOINTS
+// ==========================================
+
+const originalPoints = entries.map(marker => {
+
+  const latLng =
+    marker.options.taskOriginalLatLng;
+
+  return map.project(latLng);
+
+});
 
   const entries = Object.values(
     DRIVER_TASK_MARKERS
@@ -4453,11 +4568,12 @@ function positionFocusedTaskMarkers() {
       };
 
       if (
-        focusedPointIsFree(
-          candidate,
-          placed
-        )
-      ) {
+          focusedPointIsFree(
+            candidate,
+            placed,
+            originalPoints
+          )
+        ) {
         chosen = candidate;
         break;
       }
