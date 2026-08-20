@@ -151,6 +151,87 @@ img { width:100%;margin-top:8px;border-radius:6px; }
     min-height: 500px;
   }
 
+  /* =====================================================
+   🗺 MAX-5 TASK GROUP MARKER
+   ===================================================== */
+
+.task-map-group-marker {
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  background: #1976d2;
+  color: #fff;
+
+  border: 3px solid #fff;
+
+  box-shadow:
+    0 2px 7px rgba(0,0,0,.40);
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  font-size: 15px;
+  font-weight: bold;
+
+  cursor: pointer;
+}
+
+.task-map-group-marker.small {
+  background: #43a047;
+}
+
+.task-map-group-marker.medium {
+  background: #f9a825;
+  color: #222;
+}
+
+.task-map-group-marker.large {
+  background: #1976d2;
+  color: #fff;
+}
+
+.task-map-expanded-marker {
+  background: #1976d2;
+  color: #fff;
+
+  width: 40px;
+  height: 40px;
+
+  border-radius: 50% 50% 50% 0;
+
+  transform: rotate(-45deg);
+
+  border: 2px solid #fff;
+
+  box-shadow:
+    0 2px 6px rgba(0,0,0,.35);
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.task-map-expanded-marker span {
+  transform: rotate(45deg);
+  font-weight: bold;
+  font-size: 13px;
+}
+
+.task-map-collapse {
+  background: #555;
+  color: #fff;
+
+  border: none;
+  border-radius: 6px;
+
+  padding: 8px 12px;
+
+  font-weight: bold;
+
+  cursor: pointer;
+}
+
   .task-map-marker {
     background: #1976d2;
     color: #fff;
@@ -558,7 +639,7 @@ import {
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "V.R.0.0.15.10";
+const VERSION = "V.R.0.0.15.11";
 const BILLING_CACHE = {};
 window.BILLING_CACHE = BILLING_CACHE;
 const DRIVER_UI_CACHE = {};
@@ -575,10 +656,28 @@ let LAST_KNOWN_GPS = null;
 // =====================================================
 
 let DRIVER_TASK_MAP = null;
+
 let DRIVER_TASK_MARKERS = {};
 let DRIVER_TASK_MARKER_CLUSTER = null;
 let DRIVER_LOCATION_MARKER = null;
+
 let DRIVER_TASK_MAP_VISIBLE = false;
+
+// =====================================================
+// 🗺 MAX 5 TASK MAP GROUPING
+// =====================================================
+
+const MAP_MAX_TASKS_PER_GROUP = 5;
+
+// Approximate grouping distance in meters.
+// Smaller = more groups.
+// Larger = fewer groups.
+const MAP_GROUP_DISTANCE_METERS = 80;
+
+let DRIVER_TASK_GROUPS = {};
+let DRIVER_TASK_GROUP_MARKERS = {};
+
+let DRIVER_TASK_EXPANDED_GROUPS = new Set();
   
 let LOAD_IN_PROGRESS = false;
 let RENDER_OFFSET = 0;
@@ -3854,48 +3953,6 @@ function initDriverTaskMap() {
       attribution: "&copy; OpenStreetMap contributors"
     }
   ).addTo(DRIVER_TASK_MAP);
-
-  // =====================================================
-  // 📍 TASK MARKER CLUSTER
-  // =====================================================
-
-  DRIVER_TASK_MARKER_CLUSTER =
-    L.markerClusterGroup({
-
-      // =================================================
-      // IMPORTANT:
-      // DO NOT disable clustering at zoom 19.
-      //
-      // This allows MarkerCluster to spiderfy tasks
-      // that are still on top of each other.
-      // =================================================
-
-      maxClusterRadius: 50,
-
-      // =================================================
-      // SPIDERFY
-      // =================================================
-
-      spiderfyOnMaxZoom: true,
-
-      // Do not draw the cluster coverage polygon
-      // when hovering/tapping.
-      showCoverageOnHover: false,
-
-      // Tapping a normal cluster zooms toward it.
-      zoomToBoundsOnClick: true,
-
-      // Better mobile performance
-      animate: false,
-
-      chunkedLoading: true,
-      chunkInterval: 50,
-      chunkDelay: 10
-    });
-
-  DRIVER_TASK_MAP.addLayer(
-    DRIVER_TASK_MARKER_CLUSTER
-  );
 }
 
 function createTaskMapIcon(sequence, status) {
@@ -3966,6 +4023,657 @@ function isValidTaskGPS(task) {
   );
 }
 
+// =====================================================
+// 🗺 DISTANCE BETWEEN TWO GPS POINTS
+// =====================================================
+
+function mapDistanceMeters(
+  lat1,
+  lng1,
+  lat2,
+  lng2
+) {
+
+  const R = 6371000;
+
+  const toRad =
+    value =>
+      value * Math.PI / 180;
+
+  const dLat =
+    toRad(lat2 - lat1);
+
+  const dLng =
+    toRad(lng2 - lng1);
+
+  const a =
+    Math.sin(dLat / 2) *
+    Math.sin(dLat / 2) +
+
+    Math.cos(toRad(lat1)) *
+    Math.cos(toRad(lat2)) *
+
+    Math.sin(dLng / 2) *
+    Math.sin(dLng / 2);
+
+  return (
+    R *
+    2 *
+    Math.atan2(
+      Math.sqrt(a),
+      Math.sqrt(1 - a)
+    )
+  );
+}
+
+
+// =====================================================
+// 🗺 CREATE MAX-5 GROUPS
+// =====================================================
+
+function buildTaskGroups(tasks) {
+
+  const groups = [];
+
+  for (const task of tasks) {
+
+    if (!isValidTaskGPS(task)) {
+      continue;
+    }
+
+    const lat =
+      Number(task.LATITUDE);
+
+    const lng =
+      Number(task.LONGITUDE);
+
+    let targetGroup = null;
+
+    // =================================================
+    // FIND CLOSEST EXISTING GROUP
+    // =================================================
+
+    let closestDistance =
+      Infinity;
+
+    for (const group of groups) {
+
+      // 🔒 MAXIMUM 5 TASKS
+      if (
+        group.tasks.length >=
+        MAP_MAX_TASKS_PER_GROUP
+      ) {
+        continue;
+      }
+
+      const distance =
+        mapDistanceMeters(
+          lat,
+          lng,
+          group.centerLat,
+          group.centerLng
+        );
+
+      if (
+        distance <=
+        MAP_GROUP_DISTANCE_METERS &&
+        distance < closestDistance
+      ) {
+
+        closestDistance =
+          distance;
+
+        targetGroup =
+          group;
+      }
+    }
+
+    // =================================================
+    // ADD TO EXISTING GROUP
+    // =================================================
+
+    if (targetGroup) {
+
+      targetGroup.tasks.push(task);
+
+      // Recalculate center
+      const count =
+        targetGroup.tasks.length;
+
+      targetGroup.centerLat =
+        targetGroup.tasks.reduce(
+          (sum, t) =>
+            sum + Number(t.LATITUDE),
+          0
+        ) / count;
+
+      targetGroup.centerLng =
+        targetGroup.tasks.reduce(
+          (sum, t) =>
+            sum + Number(t.LONGITUDE),
+          0
+        ) / count;
+
+      continue;
+    }
+
+    // =================================================
+    // CREATE NEW GROUP
+    // =================================================
+
+    groups.push({
+
+      id:
+        `map_group_${groups.length}_${Date.now()}`,
+
+      centerLat:
+        lat,
+
+      centerLng:
+        lng,
+
+      tasks: [
+        task
+      ]
+
+    });
+  }
+
+  return groups;
+}
+
+// =====================================================
+// 🗺 GROUP ICON
+// =====================================================
+
+function createTaskGroupIcon(count) {
+
+  let sizeClass =
+    "small";
+
+  if (count >= 4) {
+    sizeClass =
+      "large";
+  } else if (count >= 3) {
+    sizeClass =
+      "medium";
+  }
+
+  return L.divIcon({
+
+    className: "",
+
+    html: `
+      <div class="
+        task-map-group-marker
+        ${sizeClass}
+      ">
+        ${count}
+      </div>
+    `,
+
+    iconSize: [
+      46,
+      46
+    ],
+
+    iconAnchor: [
+      23,
+      23
+    ]
+  });
+}
+
+// =====================================================
+// 🗺 INDIVIDUAL TASK ICON
+// =====================================================
+
+function createExpandedTaskMapIcon(
+  sequence,
+  status
+) {
+
+  const label =
+    sequence !== undefined &&
+    sequence !== null &&
+    String(sequence).trim() !== ""
+      ? String(sequence)
+      : "•";
+
+  const completedLocally =
+    status === "SYNC_PENDING";
+
+  return L.divIcon({
+
+    className: "",
+
+    html: `
+      <div
+        class="
+          task-map-expanded-marker
+          ${completedLocally ? "local-completed" : ""}
+        "
+      >
+        <span>
+          ${label}
+        </span>
+      </div>
+    `,
+
+    iconSize: [
+      40,
+      40
+    ],
+
+    iconAnchor: [
+      20,
+      40
+    ],
+
+    popupAnchor: [
+      0,
+      -40
+    ]
+  });
+}
+
+// =====================================================
+// 🗺 EXPAND GROUP
+// =====================================================
+
+function expandTaskGroup(group) {
+
+  if (!group) {
+    return;
+  }
+
+  if (
+    DRIVER_TASK_EXPANDED_GROUPS.has(
+      group.id
+    )
+  ) {
+    return;
+  }
+
+  DRIVER_TASK_EXPANDED_GROUPS.add(
+    group.id
+  );
+
+  // Remove group marker
+  const groupMarker =
+    DRIVER_TASK_GROUP_MARKERS[
+      group.id
+    ];
+
+  if (groupMarker) {
+
+    DRIVER_TASK_MAP.removeLayer(
+      groupMarker
+    );
+  }
+
+  // ===================================================
+  // CALCULATE SPREAD POSITIONS
+  // ===================================================
+
+  const centerLat =
+    group.centerLat;
+
+  const centerLng =
+    group.centerLng;
+
+  const taskCount =
+    group.tasks.length;
+
+  const radius =
+    taskCount === 1
+      ? 0
+      : 0.00012;
+
+  group.tasks.forEach(
+    (task, index) => {
+
+      let lat =
+        Number(task.LATITUDE);
+
+      let lng =
+        Number(task.LONGITUDE);
+
+      // ===============================================
+      // Spread markers around center
+      // ===============================================
+
+      if (taskCount > 1) {
+
+        const angle =
+          (
+            index /
+            taskCount
+          ) *
+          Math.PI *
+          2;
+
+        lat =
+          centerLat +
+          Math.cos(angle) *
+          radius;
+
+        lng =
+          centerLng +
+          Math.sin(angle) *
+          radius;
+      }
+
+      const status =
+        resolveStatus(task);
+
+      const marker =
+        L.marker(
+          [lat, lng],
+          {
+            icon:
+              createExpandedTaskMapIcon(
+                task.SEQUENCE,
+                status
+              ),
+            zIndexOffset:
+              500 + index
+          }
+        );
+
+      marker.on(
+        "click",
+        function () {
+
+          openTaskMapPopup(
+            marker,
+            task,
+            status
+          );
+
+        }
+      );
+
+      marker.addTo(
+        DRIVER_TASK_MAP
+      );
+
+      // Save marker
+      DRIVER_TASK_MARKERS[
+        task._key
+      ] = marker;
+    }
+  );
+
+  // ===================================================
+  // ADD COLLAPSE BUTTON
+  // ===================================================
+
+  const collapseMarker =
+    L.marker(
+      [
+        centerLat,
+        centerLng
+      ],
+      {
+        icon:
+          L.divIcon({
+
+            className: "",
+
+            html: `
+              <button
+                class="task-map-collapse"
+              >
+                × ${taskCount}
+              </button>
+            `,
+
+            iconSize: [
+              55,
+              32
+            ],
+
+            iconAnchor: [
+              27,
+              16
+            ]
+          }),
+
+        zIndexOffset:
+          1000
+      }
+    );
+
+  collapseMarker.on(
+    "click",
+    function () {
+
+      collapseTaskGroup(
+        group
+      );
+
+    }
+  );
+
+  collapseMarker.addTo(
+    DRIVER_TASK_MAP
+  );
+
+  group.collapseMarker =
+    collapseMarker;
+}
+
+// =====================================================
+// 🗺 COLLAPSE GROUP
+// =====================================================
+
+function collapseTaskGroup(group) {
+
+  if (!group) {
+    return;
+  }
+
+  // Remove individual markers
+  for (
+    const task of group.tasks
+  ) {
+
+    const marker =
+      DRIVER_TASK_MARKERS[
+        task._key
+      ];
+
+    if (marker) {
+
+      DRIVER_TASK_MAP.removeLayer(
+        marker
+      );
+
+      delete DRIVER_TASK_MARKERS[
+        task._key
+      ];
+    }
+  }
+
+  // Remove collapse marker
+  if (
+    group.collapseMarker
+  ) {
+
+    DRIVER_TASK_MAP.removeLayer(
+      group.collapseMarker
+    );
+
+    group.collapseMarker =
+      null;
+  }
+
+  DRIVER_TASK_EXPANDED_GROUPS.delete(
+    group.id
+  );
+
+  // Recreate group marker
+  createTaskGroupMarker(
+    group
+  );
+}
+
+// =====================================================
+// 🗺 CREATE GROUP MARKER
+// =====================================================
+
+function createTaskGroupMarker(
+  group
+) {
+
+  const count =
+    group.tasks.length;
+
+  const marker =
+    L.marker(
+      [
+        group.centerLat,
+        group.centerLng
+      ],
+      {
+        icon:
+          createTaskGroupIcon(
+            count
+          ),
+
+        zIndexOffset:
+          300
+      }
+    );
+
+  marker.on(
+    "click",
+    function () {
+
+      expandTaskGroup(
+        group
+      );
+
+    }
+  );
+
+  marker.addTo(
+    DRIVER_TASK_MAP
+  );
+
+  DRIVER_TASK_GROUP_MARKERS[
+    group.id
+  ] = marker;
+
+  return marker;
+}
+// =====================================================
+// 🗺 TASK POPUP
+// =====================================================
+
+function openTaskMapPopup(
+  marker,
+  task,
+  status
+) {
+
+  let statusLabel =
+    "🔵 Pending";
+
+  if (
+    status ===
+    "SYNC_PENDING"
+  ) {
+
+    statusLabel =
+      "🟢 Completed locally — waiting for sync";
+  }
+
+  if (
+    status ===
+    "EXPORTED"
+  ) {
+
+    statusLabel =
+      "🔵 Exported — waiting for admin upload";
+  }
+
+  marker
+    .bindPopup(`
+      <div
+        style="
+          min-width:220px;
+        "
+      >
+
+        <b>
+          ${task.CUSTOMERNAME || "—"}
+        </b>
+
+        <br>
+
+        📍 ${task.ADDRESS || "—"}
+
+        <hr
+          style="
+            margin:6px 0;
+          "
+        >
+
+        <b>Sequence:</b>
+        ${task.SEQUENCE || "—"}
+
+        <br>
+
+        <b>Account:</b>
+        ${task.ACCOUNTNUMBER || "—"}
+
+        <br>
+
+        <b>Meter:</b>
+        ${task.METERNUMBER || "—"}
+
+        <br>
+
+        <b>MRU:</b>
+        ${task.MRU || "—"}
+
+        <br>
+
+        <b>Job:</b>
+        ${task.JOBTYPE || "—"}
+
+        <br>
+
+        <b>Status:</b>
+        ${statusLabel}
+
+        <br><br>
+
+        <button
+          style="
+            width:100%;
+            padding:8px;
+            border:none;
+            border-radius:6px;
+            background:#1976d2;
+            color:white;
+            font-weight:bold;
+          "
+          onclick="
+            openTaskFromMap(
+              '${task._key}'
+            )
+          "
+        >
+          Open Task
+        </button>
+
+      </div>
+    `)
+    .openPopup();
+}
 
 function getDriverTaskMapTasks() {
 
@@ -4057,10 +4765,6 @@ function updateDriverLocationOnTaskMap() {
   }
 }
 
-
-
-
-
 function renderDriverTaskMap() {
 
   if (!DRIVER_TASK_MAP) {
@@ -4068,17 +4772,67 @@ function renderDriverTaskMap() {
   }
 
   // =====================================================
-  // 🧹 CLEAR PREVIOUS TASK MARKERS
+  // 🧹 CLEAR PREVIOUS MAP OBJECTS
   // =====================================================
 
-  if (DRIVER_TASK_MARKER_CLUSTER) {
-    DRIVER_TASK_MARKER_CLUSTER.clearLayers();
-  }
+  Object.values(
+    DRIVER_TASK_MARKERS
+  ).forEach(marker => {
+
+    if (
+      DRIVER_TASK_MAP.hasLayer(
+        marker
+      )
+    ) {
+
+      DRIVER_TASK_MAP.removeLayer(
+        marker
+      );
+    }
+  });
+
+  Object.values(
+    DRIVER_TASK_GROUP_MARKERS
+  ).forEach(marker => {
+
+    if (
+      DRIVER_TASK_MAP.hasLayer(
+        marker
+      )
+    ) {
+
+      DRIVER_TASK_MAP.removeLayer(
+        marker
+      );
+    }
+  });
+
+  Object.values(
+    DRIVER_TASK_GROUPS
+  ).forEach(group => {
+
+    if (
+      group.collapseMarker &&
+      DRIVER_TASK_MAP.hasLayer(
+        group.collapseMarker
+      )
+    ) {
+
+      DRIVER_TASK_MAP.removeLayer(
+        group.collapseMarker
+      );
+    }
+
+  });
 
   DRIVER_TASK_MARKERS = {};
+  DRIVER_TASK_GROUP_MARKERS = {};
+  DRIVER_TASK_GROUPS = {};
+
+  DRIVER_TASK_EXPANDED_GROUPS.clear();
 
   // =====================================================
-  // 📋 GET ALL FILTERED TASKS
+  // 📋 GET FILTERED TASKS
   // =====================================================
 
   const tasks =
@@ -4090,132 +4844,48 @@ function renderDriverTaskMap() {
   let missingGPS = 0;
 
   // =====================================================
-  // 📍 CREATE MARKERS
+  // 🗺 BUILD MAX-5 GROUPS
   // =====================================================
 
-  tasks.forEach(task => {
+  const groups =
+    buildTaskGroups(
+      tasks
+    );
 
-    if (!isValidTaskGPS(task)) {
-      missingGPS++;
-      return;
-    }
+  // =====================================================
+  // 📍 CREATE GROUP MARKERS
+  // =====================================================
 
-    const lat =
-      Number(task.LATITUDE);
+  groups.forEach(
+    group => {
 
-    const lng =
-      Number(task.LONGITUDE);
+      DRIVER_TASK_GROUPS[
+        group.id
+      ] = group;
 
-    const status =
-      resolveStatus(task);
-
-    // ===================================================
-    // 📍 CREATE MARKER
-    // ===================================================
-
-    const marker =
-      L.marker(
-        [lat, lng],
-        {
-          icon:
-            createTaskMapIcon(
-              task.SEQUENCE,
-              status
-            )
-        }
+      createTaskGroupMarker(
+        group
       );
 
-    marker.on("click", function () {
+      bounds.push([
+        group.centerLat,
+        group.centerLng
+      ]);
 
-  let statusLabel = "🔵 Pending";
+      plotted +=
+        group.tasks.length;
+    }
+  );
 
-  if (status === "SYNC_PENDING") {
-    statusLabel =
-      "🟢 Completed locally — waiting for sync";
-  }
+  // =====================================================
+  // COUNT MISSING GPS
+  // =====================================================
 
-  if (status === "EXPORTED") {
-    statusLabel =
-      "🔵 Exported — waiting for admin upload";
-  }
-
-  marker
-    .bindPopup(`
-      <div style="min-width:220px;">
-
-        <b>
-          ${task.CUSTOMERNAME || "—"}
-        </b>
-
-        <br>
-
-        📍 ${task.ADDRESS || "—"}
-
-        <hr style="margin:6px 0;">
-
-        <b>Sequence:</b>
-        ${task.SEQUENCE || "—"}
-
-        <br>
-
-        <b>Account:</b>
-        ${task.ACCOUNTNUMBER || "—"}
-
-        <br>
-
-        <b>Meter:</b>
-        ${task.METERNUMBER || "—"}
-
-        <br>
-
-        <b>MRU:</b>
-        ${task.MRU || "—"}
-
-        <br>
-
-        <b>Job:</b>
-        ${task.JOBTYPE || "—"}
-
-        <br>
-
-        <b>Status:</b>
-        ${statusLabel}
-
-        <br><br>
-
-        <button
-          style="
-            width:100%;
-            padding:8px;
-            border:none;
-            border-radius:6px;
-            background:#1976d2;
-            color:white;
-            font-weight:bold;
-          "
-          onclick="openTaskFromMap('${task._key}')"
-        >
-          Open Task
-        </button>
-
-      </div>
-    `)
-    .openPopup();
-
-});
-
-// =====================================================
-// ➕ ADD MARKER TO CLUSTER
-// =====================================================
-
-DRIVER_TASK_MARKER_CLUSTER.addLayer(marker);
-
-DRIVER_TASK_MARKERS[task._key] = marker;
-
-bounds.push([lat, lng]);
-
-plotted++;
-    });
+  missingGPS =
+    tasks.filter(
+      task =>
+        !isValidTaskGPS(task)
+    ).length;
 
   // =====================================================
   // 🔵 DRIVER LOCATION
@@ -4226,21 +4896,29 @@ plotted++;
   if (
     LAST_KNOWN_GPS &&
     Number.isFinite(
-      Number(LAST_KNOWN_GPS.latitude)
+      Number(
+        LAST_KNOWN_GPS.latitude
+      )
     ) &&
     Number.isFinite(
-      Number(LAST_KNOWN_GPS.longitude)
+      Number(
+        LAST_KNOWN_GPS.longitude
+      )
     )
   ) {
 
     bounds.push([
-      Number(LAST_KNOWN_GPS.latitude),
-      Number(LAST_KNOWN_GPS.longitude)
+      Number(
+        LAST_KNOWN_GPS.latitude
+      ),
+      Number(
+        LAST_KNOWN_GPS.longitude
+      )
     ]);
   }
 
   // =====================================================
-  // 🗺 FIT MAP ONCE
+  // 🗺 FIT MAP
   // =====================================================
 
   if (bounds.length) {
@@ -4248,7 +4926,11 @@ plotted++;
     DRIVER_TASK_MAP.fitBounds(
       bounds,
       {
-        padding: [30, 30],
+        padding: [
+          30,
+          30
+        ],
+
         maxZoom: 16
       }
     );
@@ -4256,13 +4938,16 @@ plotted++;
   } else {
 
     DRIVER_TASK_MAP.setView(
-      [14.5995, 120.9842],
+      [
+        14.5995,
+        120.9842
+      ],
       12
     );
   }
 
   // =====================================================
-  // ℹ️ MAP INFORMATION
+  // ℹ️ MAP INFO
   // =====================================================
 
   const info =
@@ -4272,16 +4957,31 @@ plotted++;
 
   if (info) {
 
-    info.innerHTML =
-      `📍 <b>${plotted}</b> tasks on map`;
+    const groupCount =
+      groups.length;
 
-    if (missingGPS > 0) {
+    info.innerHTML =
+      `📍 <b>${plotted}</b> tasks`;
+
+    info.innerHTML +=
+      ` &nbsp; | &nbsp; ` +
+      `📦 <b>${groupCount}</b> groups`;
+
+    info.innerHTML +=
+      ` &nbsp; | &nbsp; ` +
+      `🔢 Max 5/group`;
+
+    if (
+      missingGPS > 0
+    ) {
 
       info.innerHTML +=
-        ` &nbsp; | &nbsp; ⚠️ ${missingGPS} without GPS`;
+        ` &nbsp; | &nbsp; ` +
+        `⚠️ ${missingGPS} without GPS`;
     }
   }
 }
+
 
 window.openTaskFromMap =
   function(taskKey) {
