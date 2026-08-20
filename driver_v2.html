@@ -639,7 +639,7 @@ import {
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "V.R.0.0.15.15";
+const VERSION = "V.R.0.0.15.11.1";
 const BILLING_CACHE = {};
 window.BILLING_CACHE = BILLING_CACHE;
 const DRIVER_UI_CACHE = {};
@@ -664,70 +664,15 @@ let DRIVER_LOCATION_MARKER = null;
 let DRIVER_TASK_MAP_VISIBLE = false;
 
 // =====================================================
-// 🗺 TASK MAP GROUPING / VISUAL SEPARATION
+// 🗺 MAX 5 TASK MAP GROUPING
 // =====================================================
 
-// =====================================================
-// 🗺 ZOOM-BASED TASK GROUP LIMIT
-// =====================================================
+const MAP_MAX_TASKS_PER_GROUP = 5;
 
-function getMapMaxTasksPerGroup() {
-
-  if (!DRIVER_TASK_MAP) {
-    return 5;
-  }
-
-  const zoom =
-    DRIVER_TASK_MAP.getZoom();
-
-  // -----------------------------------------------
-  // ZOOMED OUT
-  // -----------------------------------------------
-  // Allow large groups.
-  if (zoom <= 13) {
-    return Infinity;
-  }
-
-  // -----------------------------------------------
-  // MEDIUM ZOOM
-  // -----------------------------------------------
-  if (zoom <= 14) {
-    return 10;
-  }
-
-  if (zoom <= 15) {
-    return 7;
-  }
-
-  // -----------------------------------------------
-  // ZOOMED IN
-  // -----------------------------------------------
-  // Maximum 5 tasks per group.
-  return 5;
-}
-
-// Geographic distance used ONLY for deciding
-// which tasks belong to the same logical group.
+// Approximate grouping distance in meters.
+// Smaller = more groups.
+// Larger = fewer groups.
 const MAP_GROUP_DISTANCE_METERS = 80;
-
-// =====================================================
-// 📱 SCREEN-SPACE COLLISION SETTINGS
-// =====================================================
-
-// Group markers are 46 x 46 px.
-// Keep their centers farther apart than that.
-const MAP_GROUP_MIN_MARKER_DISTANCE_PX = 72;
-
-// Expanded task markers are 40 x 40 px.
-const MAP_TASK_MIN_MARKER_DISTANCE_PX = 58;
-
-// Maximum visual displacement from the
-// real GPS position.
-const MAP_MAX_VISUAL_OFFSET_PX = 140;
-
-// Distance used when searching for another
-// free screen position.
-const MAP_COLLISION_STEP_PX = 16;
 
 let DRIVER_TASK_GROUPS = {};
 let DRIVER_TASK_GROUP_MARKERS = {};
@@ -4008,29 +3953,6 @@ function initDriverTaskMap() {
       attribution: "&copy; OpenStreetMap contributors"
     }
   ).addTo(DRIVER_TASK_MAP);
-
-  // =====================================================
-// 📱 RE-CALCULATE MARKER POSITIONS AFTER ZOOM
-// =====================================================
-
-DRIVER_TASK_MAP.on(
-  "zoomend",
-  function () {
-
-    if (
-      !DRIVER_TASK_MAP_VISIBLE
-    ) {
-      return;
-    }
-
-    setTimeout(() => {
-
-      rebuildTaskGroupsAfterZoom();
-
-    }, 30);
-
-  }
-);
 }
 
 function createTaskMapIcon(sequence, status) {
@@ -4153,9 +4075,6 @@ function buildTaskGroups(tasks) {
 
   const groups = [];
 
-  const maxTasksPerGroup =
-  getMapMaxTasksPerGroup();
-
   for (const task of tasks) {
 
     if (!isValidTaskGPS(task)) {
@@ -4179,10 +4098,10 @@ function buildTaskGroups(tasks) {
 
     for (const group of groups) {
 
-      // 🔒 ZOOM-BASED MAXIMUM
+      // 🔒 MAXIMUM 5 TASKS
       if (
         group.tasks.length >=
-        maxTasksPerGroup
+        MAP_MAX_TASKS_PER_GROUP
       ) {
         continue;
       }
@@ -4306,237 +4225,6 @@ function createTaskGroupIcon(count) {
 }
 
 // =====================================================
-// 🗺 SCREEN-SPACE MARKER COLLISION HELPERS
-// =====================================================
-
-function getMapVisualPoint(lat, lng) {
-
-  if (!DRIVER_TASK_MAP) {
-    return null;
-  }
-
-  return DRIVER_TASK_MAP.latLngToLayerPoint(
-    L.latLng(lat, lng)
-  );
-}
-
-
-// -----------------------------------------------------
-// Find a free visual position around a base point.
-//
-// IMPORTANT:
-// This does NOT change the real task GPS.
-// It only returns a temporary screen-space position.
-// -----------------------------------------------------
-
-function findFreeMapPoint(
-  basePoint,
-  occupiedPoints,
-  minimumDistance,
-  maxOffset = MAP_MAX_VISUAL_OFFSET_PX
-) {
-
-  // First try the real GPS position.
-  let free = true;
-
-  for (
-    const occupied of occupiedPoints
-  ) {
-
-    if (
-      basePoint.distanceTo(
-        occupied
-      ) < minimumDistance
-    ) {
-
-      free = false;
-      break;
-    }
-  }
-
-  if (free) {
-    return basePoint.clone();
-  }
-
-  // ---------------------------------------------------
-  // Search in expanding rings around the real position.
-  // ---------------------------------------------------
-
-  const angleStep =
-    Math.PI / 6;
-
-  for (
-    let radius = MAP_COLLISION_STEP_PX;
-    radius <= maxOffset;
-    radius += MAP_COLLISION_STEP_PX
-  ) {
-
-    for (
-      let angle = 0;
-      angle < Math.PI * 2;
-      angle += angleStep
-    ) {
-
-      const candidate =
-        L.point(
-          basePoint.x +
-            Math.cos(angle) * radius,
-
-          basePoint.y +
-            Math.sin(angle) * radius
-        );
-
-      let candidateFree =
-        true;
-
-      for (
-        const occupied of occupiedPoints
-      ) {
-
-        if (
-          candidate.distanceTo(
-            occupied
-          ) < minimumDistance
-        ) {
-
-          candidateFree =
-            false;
-
-          break;
-        }
-      }
-
-      if (candidateFree) {
-        return candidate;
-      }
-    }
-  }
-
-  // ---------------------------------------------------
-  // Last-resort position.
-  //
-  // Keep moving farther around the point instead of
-  // sending every collision to the exact same fallback.
-  // ---------------------------------------------------
-  
-  const fallbackIndex =
-    occupiedPoints.length;
-  
-  const fallbackAngle =
-    (
-      fallbackIndex *
-      137.5
-    ) *
-    Math.PI /
-    180;
-  
-  const fallbackRadius =
-    maxOffset +
-    (
-      Math.floor(
-        fallbackIndex / 8
-      ) *
-      MAP_COLLISION_STEP_PX
-    );
-  
-  return L.point(
-    basePoint.x +
-      Math.cos(fallbackAngle) *
-      fallbackRadius,
-  
-    basePoint.y +
-      Math.sin(fallbackAngle) *
-      fallbackRadius
-  );
-}
-
-// =====================================================
-// 🗺 LAYOUT GROUP MARKERS WITHOUT OVERLAP
-// =====================================================
-
-function layoutTaskGroupMarkers() {
-
-  if (
-    !DRIVER_TASK_MAP ||
-    !DRIVER_TASK_GROUPS
-  ) {
-    return;
-  }
-
-  const groups =
-    Object.values(
-      DRIVER_TASK_GROUPS
-    );
-
-  if (!groups.length) {
-    return;
-  }
-
-  // ===================================================
-  // SCREEN SPACE COLLISION LAYOUT
-  // ===================================================
-
-  const occupied = [];
-
-  groups.forEach(group => {
-
-    const marker =
-      DRIVER_TASK_GROUP_MARKERS[
-        group.id
-      ];
-
-    if (!marker) {
-      return;
-    }
-
-    // -----------------------------------------------
-    // Always start from the TRUE GPS coordinate
-    // -----------------------------------------------
-
-    const originalLatLng =
-      L.latLng(
-        group.centerLat,
-        group.centerLng
-      );
-
-    const originalPoint =
-      DRIVER_TASK_MAP.latLngToLayerPoint(
-        originalLatLng
-      );
-
-    // -----------------------------------------------
-    // Find a screen position that doesn't overlap
-    // -----------------------------------------------
-
-    const visualPoint =
-      findFreeMapPoint(
-        originalPoint,
-        occupied,
-        MAP_GROUP_MIN_MARKER_DISTANCE_PX,
-        MAP_MAX_VISUAL_OFFSET_PX
-      );
-
-    occupied.push(
-      visualPoint
-    );
-
-    // -----------------------------------------------
-    // Convert visual pixel position back to LatLng
-    // -----------------------------------------------
-
-    const visualLatLng =
-      DRIVER_TASK_MAP.layerPointToLatLng(
-        visualPoint
-      );
-
-    marker.setLatLng(
-      visualLatLng
-    );
-
-  });
-}
-
-// =====================================================
 // 🗺 INDIVIDUAL TASK ICON
 // =====================================================
 
@@ -4589,72 +4277,6 @@ function createExpandedTaskMapIcon(
   });
 }
 
-function layoutExpandedTaskMarkers() {
-
-  if (!DRIVER_TASK_MAP) {
-    return;
-  }
-
-  Object.values(
-    DRIVER_TASK_GROUPS
-  ).forEach(group => {
-
-    if (
-      !DRIVER_TASK_EXPANDED_GROUPS.has(
-        group.id
-      )
-    ) {
-      return;
-    }
-
-    const occupiedPoints = [];
-
-    group.tasks.forEach(task => {
-
-      const marker =
-        DRIVER_TASK_MARKERS[
-          task._key
-        ];
-
-      if (!marker) {
-        return;
-      }
-
-      // -----------------------------------------------
-      // ALWAYS START FROM THE REAL GPS LOCATION
-      // -----------------------------------------------
-
-      const basePoint =
-        getMapVisualPoint(
-          Number(task.LATITUDE),
-          Number(task.LONGITUDE)
-        );
-
-      if (!basePoint) {
-        return;
-      }
-
-      const visualPoint =
-        findFreeMapPoint(
-          basePoint,
-          occupiedPoints,
-          MAP_TASK_MIN_MARKER_DISTANCE_PX,
-          MAP_MAX_VISUAL_OFFSET_PX
-        );
-
-      occupiedPoints.push(
-        visualPoint
-      );
-
-      marker.setLatLng(
-        DRIVER_TASK_MAP.layerPointToLatLng(
-          visualPoint
-        )
-      );
-    });
-  });
-}
-
 // =====================================================
 // 🗺 EXPAND GROUP
 // =====================================================
@@ -4691,72 +4313,97 @@ function expandTaskGroup(group) {
   }
 
   // ===================================================
-// CREATE INDIVIDUAL TASK MARKERS
-// ===================================================
+  // CALCULATE SPREAD POSITIONS
+  // ===================================================
 
-const centerLat =
-  group.centerLat;
+  const centerLat =
+    group.centerLat;
 
-const centerLng =
-  group.centerLng;
+  const centerLng =
+    group.centerLng;
 
-const taskCount =
-  group.tasks.length;
+  const taskCount =
+    group.tasks.length;
 
-group.tasks.forEach(
-  (task, index) => {
+  const radius =
+    taskCount === 1
+      ? 0
+      : 0.00012;
 
-    const status =
-      resolveStatus(task);
+  group.tasks.forEach(
+    (task, index) => {
 
-    const marker =
-      L.marker(
-        [
-          Number(task.LATITUDE),
-          Number(task.LONGITUDE)
-        ],
-        {
-          icon:
-            createExpandedTaskMapIcon(
-              task.SEQUENCE,
-              status
-            ),
+      let lat =
+        Number(task.LATITUDE);
 
-          zIndexOffset:
-            500 + index
+      let lng =
+        Number(task.LONGITUDE);
+
+      // ===============================================
+      // Spread markers around center
+      // ===============================================
+
+      if (taskCount > 1) {
+
+        const angle =
+          (
+            index /
+            taskCount
+          ) *
+          Math.PI *
+          2;
+
+        lat =
+          centerLat +
+          Math.cos(angle) *
+          radius;
+
+        lng =
+          centerLng +
+          Math.sin(angle) *
+          radius;
+      }
+
+      const status =
+        resolveStatus(task);
+
+      const marker =
+        L.marker(
+          [lat, lng],
+          {
+            icon:
+              createExpandedTaskMapIcon(
+                task.SEQUENCE,
+                status
+              ),
+            zIndexOffset:
+              500 + index
+          }
+        );
+
+      marker.on(
+        "click",
+        function () {
+
+          openTaskMapPopup(
+            marker,
+            task,
+            status
+          );
+
         }
       );
 
-    marker.on(
-      "click",
-      function () {
+      marker.addTo(
+        DRIVER_TASK_MAP
+      );
 
-        openTaskMapPopup(
-          marker,
-          task,
-          status
-        );
-
-      }
-    );
-
-    marker.addTo(
-      DRIVER_TASK_MAP
-    );
-
-    DRIVER_TASK_MARKERS[
-      task._key
-    ] = marker;
-  }
-);
-
-// ===================================================
-// APPLY SCREEN-SPACE COLLISION AVOIDANCE
-// ===================================================
-
-layoutExpandedTaskMarkers();
-
-  
+      // Save marker
+      DRIVER_TASK_MARKERS[
+        task._key
+      ] = marker;
+    }
+  );
 
   // ===================================================
   // ADD COLLAPSE BUTTON
@@ -4876,7 +4523,9 @@ function collapseTaskGroup(group) {
 // 🗺 CREATE GROUP MARKER
 // =====================================================
 
-function createTaskGroupMarker(group) {
+function createTaskGroupMarker(
+  group
+) {
 
   const count =
     group.tasks.length;
@@ -4889,9 +4538,12 @@ function createTaskGroupMarker(group) {
       ],
       {
         icon:
-          createTaskGroupIcon(count),
+          createTaskGroupIcon(
+            count
+          ),
 
-        zIndexOffset: 300
+        zIndexOffset:
+          300
       }
     );
 
@@ -4899,7 +4551,9 @@ function createTaskGroupMarker(group) {
     "click",
     function () {
 
-      expandTaskGroup(group);
+      expandTaskGroup(
+        group
+      );
 
     }
   );
@@ -5111,119 +4765,6 @@ function updateDriverLocationOnTaskMap() {
   }
 }
 
-// =====================================================
-// 🗺 REBUILD GROUPS AFTER ZOOM
-// =====================================================
-
-function rebuildTaskGroupsAfterZoom() {
-
-  if (
-    !DRIVER_TASK_MAP ||
-    !DRIVER_TASK_MAP_VISIBLE
-  ) {
-    return;
-  }
-
-  const tasks =
-    getDriverTaskMapTasks();
-
-  // -----------------------------------------------
-  // Remove existing group markers
-  // -----------------------------------------------
-
-  Object.values(
-    DRIVER_TASK_GROUP_MARKERS
-  ).forEach(marker => {
-
-    if (
-      DRIVER_TASK_MAP.hasLayer(marker)
-    ) {
-      DRIVER_TASK_MAP.removeLayer(marker);
-    }
-
-  });
-
-  // -----------------------------------------------
-  // Remove existing expanded task markers
-  // -----------------------------------------------
-
-  Object.values(
-    DRIVER_TASK_MARKERS
-  ).forEach(marker => {
-
-    if (
-      DRIVER_TASK_MAP.hasLayer(marker)
-    ) {
-      DRIVER_TASK_MAP.removeLayer(marker);
-    }
-
-  });
-
-  // -----------------------------------------------
-  // Remove collapse markers
-  // -----------------------------------------------
-
-  Object.values(
-    DRIVER_TASK_GROUPS
-  ).forEach(group => {
-
-    if (
-      group.collapseMarker &&
-      DRIVER_TASK_MAP.hasLayer(
-        group.collapseMarker
-      )
-    ) {
-
-      DRIVER_TASK_MAP.removeLayer(
-        group.collapseMarker
-      );
-
-    }
-
-  });
-
-  // -----------------------------------------------
-  // Reset marker state
-  // -----------------------------------------------
-
-  DRIVER_TASK_MARKERS = {};
-  DRIVER_TASK_GROUP_MARKERS = {};
-  DRIVER_TASK_GROUPS = {};
-
-  DRIVER_TASK_EXPANDED_GROUPS.clear();
-
-  // -----------------------------------------------
-  // Rebuild using CURRENT zoom
-  // -----------------------------------------------
-
-  const groups =
-    buildTaskGroups(tasks);
-
-  groups.forEach(group => {
-
-    DRIVER_TASK_GROUPS[
-      group.id
-    ] = group;
-
-    createTaskGroupMarker(
-      group
-    );
-
-  });
-
-  // -----------------------------------------------
-  // Recalculate screen-space separation
-  // -----------------------------------------------
-
-  setTimeout(() => {
-
-    layoutTaskGroupMarkers();
-
-    layoutExpandedTaskMarkers();
-
-  }, 30);
-}
-
 function renderDriverTaskMap() {
 
   if (!DRIVER_TASK_MAP) {
@@ -5382,38 +4923,28 @@ function renderDriverTaskMap() {
 
   if (bounds.length) {
 
-  DRIVER_TASK_MAP.fitBounds(
-    bounds,
-    {
-      padding: [
-        30,
-        30
+    DRIVER_TASK_MAP.fitBounds(
+      bounds,
+      {
+        padding: [
+          30,
+          30
+        ],
+
+        maxZoom: 16
+      }
+    );
+
+  } else {
+
+    DRIVER_TASK_MAP.setView(
+      [
+        14.5995,
+        120.9842
       ],
-
-      maxZoom: 16
-    }
-  );
-
-  // Wait until Leaflet finishes calculating
-  // the final zoom/pixel positions.
-  setTimeout(() => {
-
-    layoutTaskGroupMarkers();
-
-    layoutExpandedTaskMarkers();
-
-  }, 100);
-
-} else {
-
-  DRIVER_TASK_MAP.setView(
-    [
-      14.5995,
-      120.9842
-    ],
-    12
-  );
-}
+      12
+    );
+  }
 
   // =====================================================
   // ℹ️ MAP INFO
