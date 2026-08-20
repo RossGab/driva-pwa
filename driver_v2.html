@@ -639,7 +639,7 @@ import {
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "V.R.0.0.15.11.1";
+const VERSION = "V.R.0.0.15.11.2";
 const BILLING_CACHE = {};
 window.BILLING_CACHE = BILLING_CACHE;
 const DRIVER_UI_CACHE = {};
@@ -4278,106 +4278,128 @@ function createExpandedTaskMapIcon(
 }
 
 // =====================================================
-// 🗺 EXPAND GROUP
+// 🗺 EXPAND TASK GROUP
 // =====================================================
 
 function expandTaskGroup(group) {
 
-  if (!group) {
+  if (!group || !group.tasks) {
     return;
   }
 
-  if (
-    DRIVER_TASK_EXPANDED_GROUPS.has(
-      group.id
-    )
-  ) {
-    return;
-  }
+  // ===================================================
+  // CLOSE ANY OTHER EXPANDED GROUP
+  // ===================================================
+
+  Object.values(
+    DRIVER_TASK_GROUPS
+  ).forEach(otherGroup => {
+
+    if (
+      otherGroup.id === group.id
+    ) {
+      return;
+    }
+
+    if (
+      DRIVER_TASK_EXPANDED_GROUPS.has(
+        otherGroup.id
+      )
+    ) {
+      collapseTaskGroup(
+        otherGroup
+      );
+    }
+
+  });
+
+  // ===================================================
+  // MARK THIS GROUP AS EXPANDED
+  // ===================================================
 
   DRIVER_TASK_EXPANDED_GROUPS.add(
     group.id
   );
 
-  // Remove group marker
-  const groupMarker =
-    DRIVER_TASK_GROUP_MARKERS[
-      group.id
-    ];
-
-  if (groupMarker) {
-
-    DRIVER_TASK_MAP.removeLayer(
-      groupMarker
-    );
-  }
-
   // ===================================================
-  // CALCULATE SPREAD POSITIONS
+  // HIDE ALL OTHER CLUSTER MARKERS
   // ===================================================
 
-  const centerLat =
-    group.centerLat;
+  Object.values(
+    DRIVER_TASK_GROUP_MARKERS
+  ).forEach(marker => {
 
-  const centerLng =
-    group.centerLng;
+    if (!marker) {
+      return;
+    }
 
-  const taskCount =
-    group.tasks.length;
+    // Hide every cluster except the selected one.
+    if (
+      marker !==
+      DRIVER_TASK_GROUP_MARKERS[
+        group.id
+      ]
+    ) {
 
-  const radius =
-    taskCount === 1
-      ? 0
-      : 0.00012;
+      if (
+        DRIVER_TASK_MAP.hasLayer(
+          marker
+        )
+      ) {
+
+        DRIVER_TASK_MAP.removeLayer(
+          marker
+        );
+
+      }
+
+    }
+
+  });
+
+  // ===================================================
+  // SHOW SELECTED GROUP'S INDIVIDUAL TASKS
+  // ===================================================
 
   group.tasks.forEach(
     (task, index) => {
 
-      let lat =
+      const lat =
         Number(task.LATITUDE);
 
-      let lng =
+      const lng =
         Number(task.LONGITUDE);
 
-      // ===============================================
-      // Spread markers around center
-      // ===============================================
-
-      if (taskCount > 1) {
-
-        const angle =
-          (
-            index /
-            taskCount
-          ) *
-          Math.PI *
-          2;
-
-        lat =
-          centerLat +
-          Math.cos(angle) *
-          radius;
-
-        lng =
-          centerLng +
-          Math.sin(angle) *
-          radius;
+      if (
+        !Number.isFinite(lat) ||
+        !Number.isFinite(lng)
+      ) {
+        return;
       }
 
       const status =
         resolveStatus(task);
 
+      // -----------------------------------------------
+      // IMPORTANT:
+      // Use the REAL GPS position.
+      // -----------------------------------------------
+
       const marker =
         L.marker(
-          [lat, lng],
+          [
+            lat,
+            lng
+          ],
           {
             icon:
               createExpandedTaskMapIcon(
                 task.SEQUENCE,
                 status
               ),
+
             zIndexOffset:
-              500 + index
+              1000 + index
           }
         );
 
@@ -4398,50 +4420,69 @@ function expandTaskGroup(group) {
         DRIVER_TASK_MAP
       );
 
-      // Save marker
       DRIVER_TASK_MARKERS[
         task._key
       ] = marker;
+
     }
   );
 
   // ===================================================
-  // ADD COLLAPSE BUTTON
+  // CREATE COLLAPSE BUTTON
   // ===================================================
+
+  const collapseIcon =
+    L.divIcon({
+
+      className:
+        "task-map-collapse-icon",
+
+      html:
+        `
+        <div
+          style="
+            width:46px;
+            height:46px;
+            border-radius:50%;
+            background:#111827;
+            color:#ffffff;
+            display:flex;
+            align-items:center;
+            justify-content:center;
+            font-size:22px;
+            font-weight:700;
+            border:3px solid #ffffff;
+            box-shadow:0 2px 8px rgba(0,0,0,.35);
+          "
+        >
+          ×
+        </div>
+        `,
+
+      iconSize: [
+        46,
+        46
+      ],
+
+      iconAnchor: [
+        23,
+        23
+      ]
+
+    });
 
   const collapseMarker =
     L.marker(
       [
-        centerLat,
-        centerLng
+        group.centerLat,
+        group.centerLng
       ],
       {
         icon:
-          L.divIcon({
-
-            className: "",
-
-            html: `
-              <button
-                class="task-map-collapse"
-              >
-                × ${taskCount}
-              </button>
-            `,
-
-            iconSize: [
-              55,
-              32
-            ],
-
-            iconAnchor: [
-              27,
-              16
-            ]
-          }),
+          collapseIcon,
 
         zIndexOffset:
-          1000
+          2000
       }
     );
 
@@ -4462,10 +4503,24 @@ function expandTaskGroup(group) {
 
   group.collapseMarker =
     collapseMarker;
+
+  // ===================================================
+  // DO NOT MOVE THE TASKS
+  // ===================================================
+  //
+  // They remain at their actual GPS coordinates.
+  //
+  // We intentionally do NOT call:
+  //
+  // layoutExpandedTaskMarkers();
+  //
+  // because we don't want the map to move them.
+  // ===================================================
+
 }
 
 // =====================================================
-// 🗺 COLLAPSE GROUP
+// 🗺 COLLAPSE TASK GROUP
 // =====================================================
 
 function collapseTaskGroup(group) {
@@ -4474,49 +4529,108 @@ function collapseTaskGroup(group) {
     return;
   }
 
-  // Remove individual markers
-  for (
-    const task of group.tasks
-  ) {
+  // ===================================================
+  // REMOVE INDIVIDUAL TASK MARKERS
+  // ===================================================
+
+  group.tasks.forEach(task => {
 
     const marker =
       DRIVER_TASK_MARKERS[
         task._key
       ];
 
-    if (marker) {
+    if (!marker) {
+      return;
+    }
+
+    if (
+      DRIVER_TASK_MAP.hasLayer(
+        marker
+      )
+    ) {
 
       DRIVER_TASK_MAP.removeLayer(
         marker
       );
 
-      delete DRIVER_TASK_MARKERS[
-        task._key
-      ];
     }
-  }
 
-  // Remove collapse marker
+    delete DRIVER_TASK_MARKERS[
+      task._key
+    ];
+
+  });
+
+  // ===================================================
+  // REMOVE COLLAPSE BUTTON
+  // ===================================================
+
   if (
     group.collapseMarker
   ) {
 
-    DRIVER_TASK_MAP.removeLayer(
-      group.collapseMarker
-    );
+    if (
+      DRIVER_TASK_MAP.hasLayer(
+        group.collapseMarker
+      )
+    ) {
+
+      DRIVER_TASK_MAP.removeLayer(
+        group.collapseMarker
+      );
+
+    }
 
     group.collapseMarker =
       null;
+
   }
+
+  // ===================================================
+  // REMOVE EXPANDED STATE
+  // ===================================================
 
   DRIVER_TASK_EXPANDED_GROUPS.delete(
     group.id
   );
 
-  // Recreate group marker
-  createTaskGroupMarker(
-    group
-  );
+  // ===================================================
+  // SHOW ALL CLUSTER MARKERS AGAIN
+  // ===================================================
+
+  Object.values(
+    DRIVER_TASK_GROUP_MARKERS
+  ).forEach(marker => {
+
+    if (!marker) {
+      return;
+    }
+
+    if (
+      !DRIVER_TASK_MAP.hasLayer(
+        marker
+      )
+    ) {
+
+      marker.addTo(
+        DRIVER_TASK_MAP
+      );
+
+    }
+
+  });
+
+  // ===================================================
+  // REAPPLY GROUP MARKER LAYOUT
+  // ===================================================
+
+  setTimeout(() => {
+
+    layoutTaskGroupMarkers();
+
+  }, 30);
+
 }
 
 // =====================================================
