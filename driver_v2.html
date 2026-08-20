@@ -189,6 +189,20 @@ img { width:100%;margin-top:8px;border-radius:6px; }
     font-size: 18px;
   }
 
+  /* =====================================================
+     🧭 FOCUSED TASK CALLOUTS
+     The task marker may move away from the exact GPS point
+     to prevent overlapping. A leader line connects it back
+     to the real GPS coordinate.
+     ===================================================== */
+  .task-map-marker.callout-marker {
+    z-index: 1000;
+  }
+
+  .task-map-callout-line {
+    pointer-events: none;
+  }
+
   .task-map-topbar {
     display: flex;
     gap: 6px;
@@ -568,7 +582,7 @@ import {
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "V.R.0.0.15.6.9";
+const VERSION = "V.R.0.0.15.6.9.1";
 const BILLING_CACHE = {};
 window.BILLING_CACHE = BILLING_CACHE;
 const DRIVER_UI_CACHE = {};
@@ -587,6 +601,7 @@ let LAST_KNOWN_GPS = null;
 let DRIVER_TASK_MAP = null;
 let DRIVER_TASK_MARKERS = {};
 let DRIVER_TASK_MARKER_CLUSTER = null;
+let DRIVER_TASK_CALLOUT_LAYER = null;
 let DRIVER_LOCATION_MARKER = null;
 let DRIVER_TASK_MAP_VISIBLE = false;
 let DRIVER_TASK_MAP_FOCUS_KEYS = null;
@@ -925,6 +940,8 @@ function showAllDriverTaskClusters() {
 
   // 🔥 Return to normal clustering mode
   DRIVER_TASK_MAP_FOCUS_INDIVIDUAL = false;
+
+  clearFocusedTaskCalloutLines();
 
   const btn =
     document.getElementById(
@@ -4050,6 +4067,33 @@ function initDriverTaskMap() {
   );
 
   // =====================================================
+  // 🧭 LEADER-LINE LAYER
+  // =====================================================
+  // Kept separate from the task markers so the lines can be
+  // cleared/rebuilt whenever the map zooms or moves.
+  DRIVER_TASK_CALLOUT_LAYER =
+    L.layerGroup().addTo(DRIVER_TASK_MAP);
+
+  // =====================================================
+  // 🔄 REPOSITION FOCUSED MARKERS AFTER ZOOM / PAN
+  // =====================================================
+  DRIVER_TASK_MAP.on(
+    "zoomend moveend",
+    () => {
+      if (
+        !DRIVER_TASK_MAP_VISIBLE ||
+        !DRIVER_TASK_MAP_FOCUS_INDIVIDUAL
+      ) {
+        return;
+      }
+
+      requestAnimationFrame(() => {
+        positionFocusedTaskMarkers();
+      });
+    }
+  );
+
+  // =====================================================
   // 🎯 CLUSTER CLICK → ENTER / DEEPEN FOCUS
   // =====================================================
   
@@ -4284,6 +4328,192 @@ function updateDriverLocationOnTaskMap() {
   }
 }
 
+/* =====================================================
+   🧭 FOCUSED TASK MARKER COLLISION AVOIDANCE
+   =====================================================
+
+   Leaflet markers are normally placed directly on the GPS
+   coordinate. When several tasks are very close together,
+   that makes the sequence numbers overlap.
+
+   In focused mode we keep the FIRST marker at the real GPS
+   point whenever possible, then move colliding markers around
+   the point in small rings. Every moved marker gets a leader
+   line back to its exact GPS coordinate.
+
+   The positions are calculated in SCREEN PIXELS, then converted
+   back to latitude/longitude. This means the spacing stays
+   visually consistent as the user zooms and pans.
+*/
+
+const FOCUSED_MARKER_MIN_DISTANCE = 48;
+const FOCUSED_MARKER_FIRST_RING = 58;
+const FOCUSED_MARKER_RING_STEP = 38;
+const FOCUSED_MARKER_MAX_RADIUS = 360;
+
+function getFocusedMarkerOffsets() {
+  const offsets = [
+    { x: 0, y: 0 }
+  ];
+
+  for (
+    let radius = FOCUSED_MARKER_FIRST_RING;
+    radius <= FOCUSED_MARKER_MAX_RADIUS;
+    radius += FOCUSED_MARKER_RING_STEP
+  ) {
+    // Start at the top and rotate around the GPS point.
+    for (let angle = -90; angle < 270; angle += 30) {
+      const radians = angle * Math.PI / 180;
+
+      offsets.push({
+        x: Math.cos(radians) * radius,
+        y: Math.sin(radians) * radius
+      });
+    }
+  }
+
+  return offsets;
+}
+
+const FOCUSED_MARKER_OFFSETS =
+  getFocusedMarkerOffsets();
+
+function focusedPointIsFree(candidate, placed) {
+  for (const point of placed) {
+    const dx = candidate.x - point.x;
+    const dy = candidate.y - point.y;
+
+    if (
+      Math.sqrt(dx * dx + dy * dy) <
+      FOCUSED_MARKER_MIN_DISTANCE
+    ) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function clearFocusedTaskCalloutLines() {
+  if (DRIVER_TASK_CALLOUT_LAYER) {
+    DRIVER_TASK_CALLOUT_LAYER.clearLayers();
+  }
+}
+
+function positionFocusedTaskMarkers() {
+  if (
+    !DRIVER_TASK_MAP ||
+    !DRIVER_TASK_MAP_FOCUS_INDIVIDUAL
+  ) {
+    return;
+  }
+
+  const map = DRIVER_TASK_MAP;
+  const placed = [];
+
+  clearFocusedTaskCalloutLines();
+
+  const entries = Object.values(
+    DRIVER_TASK_MARKERS
+  ).filter(marker =>
+    marker &&
+    marker.options &&
+    marker.options.taskOriginalLatLng
+  );
+
+  // Stable ordering makes the layout predictable.
+  entries.sort((a, b) => {
+    const sa = Number(a.options.taskSequence);
+    const sb = Number(b.options.taskSequence);
+
+    if (Number.isFinite(sa) && Number.isFinite(sb)) {
+      return sa - sb;
+    }
+
+    if (Number.isFinite(sa)) return -1;
+    if (Number.isFinite(sb)) return 1;
+
+    return String(a.options.taskKey || "")
+      .localeCompare(String(b.options.taskKey || ""));
+  });
+
+  for (const marker of entries) {
+    const originalLatLng =
+      marker.options.taskOriginalLatLng;
+
+    const originalPoint =
+      map.project(originalLatLng);
+
+    let chosen = null;
+
+    for (const offset of FOCUSED_MARKER_OFFSETS) {
+      const candidate = {
+        x: originalPoint.x + offset.x,
+        y: originalPoint.y + offset.y
+      };
+
+      if (
+        focusedPointIsFree(
+          candidate,
+          placed
+        )
+      ) {
+        chosen = candidate;
+        break;
+      }
+    }
+
+    // Extremely crowded groups can eventually exhaust the
+    // generated candidates. Fall back to the original point
+    // rather than failing to render the task.
+    if (!chosen) {
+      chosen = originalPoint;
+    }
+
+    placed.push(chosen);
+
+    const displayLatLng =
+      map.unproject(chosen);
+
+    marker.setLatLng(displayLatLng);
+
+    const dx =
+      chosen.x - originalPoint.x;
+
+    const dy =
+      chosen.y - originalPoint.y;
+
+    const distance =
+      Math.sqrt(dx * dx + dy * dy);
+
+    if (
+      distance > 3 &&
+      DRIVER_TASK_CALLOUT_LAYER
+    ) {
+      const line =
+        L.polyline(
+          [
+            originalLatLng,
+            displayLatLng
+          ],
+          {
+            className:
+              "task-map-callout-line",
+            color: "#1976d2",
+            weight: 2,
+            opacity: 0.75,
+            dashArray: "4 4",
+            interactive: false
+          }
+        );
+
+      DRIVER_TASK_CALLOUT_LAYER.addLayer(
+        line
+      );
+    }
+  }
+}
+
 function focusDriverTaskCluster(cluster) {
 
   if (!cluster) return;
@@ -4395,25 +4625,26 @@ function renderDriverTaskMap() {
   // ==========================================
   // 🧹 CLEAR PREVIOUS CLUSTER MARKERS
   // ==========================================
-  
   DRIVER_TASK_MARKER_CLUSTER.clearLayers();
-  
+
   // ==========================================
   // 🧹 CLEAR PREVIOUS INDIVIDUAL MARKERS
   // ==========================================
-  
   Object.values(DRIVER_TASK_MARKERS).forEach(marker => {
-  
+
     if (
       marker &&
       DRIVER_TASK_MAP.hasLayer(marker)
     ) {
       DRIVER_TASK_MAP.removeLayer(marker);
     }
-  
+
   });
-  
+
   DRIVER_TASK_MARKERS = {};
+
+  // Clear old leader lines before rebuilding markers.
+  clearFocusedTaskCalloutLines();
 
   let tasks =
     getDriverTaskMapTasks();
@@ -4421,7 +4652,6 @@ function renderDriverTaskMap() {
   // ==========================================
   // 🎯 FOCUS MODE
   // ==========================================
-
   const focusMode =
     DRIVER_TASK_MAP_FOCUS_KEYS &&
     DRIVER_TASK_MAP_FOCUS_KEYS.size > 0;
@@ -4445,7 +4675,6 @@ function renderDriverTaskMap() {
   // =====================================================
   // 📍 CREATE MARKERS
   // =====================================================
-
   tasks.forEach(task => {
 
     if (!isValidTaskGPS(task)) {
@@ -4462,41 +4691,49 @@ function renderDriverTaskMap() {
     const status =
       resolveStatus(task);
 
+    const originalLatLng =
+      L.latLng(lat, lng);
+
     // ===================================================
     // 📍 CREATE MARKER
     // ===================================================
-
     const marker =
       L.marker(
-        [lat, lng],
+        originalLatLng,
         {
           icon:
             createTaskMapIcon(
               task.SEQUENCE,
               status
             ),
-    
-          // 🔑 Important for focus mode
-          taskKey: task._key
+
+          // 🔑 Task identity
+          taskKey: task._key,
+
+          // 🔑 Exact GPS location.
+          // The visible marker may be moved away from this
+          // coordinate in focused mode, but this value never
+          // changes.
+          taskOriginalLatLng:
+            originalLatLng,
+
+          taskSequence:
+            task.SEQUENCE
         }
       );
 
     // ===================================================
     // 📋 POPUP
     // ===================================================
-
     let statusLabel =
       "🔵 Pending";
 
     if (status === "SYNC_PENDING") {
-
       statusLabel =
         "🟢 Completed locally — waiting for sync";
-
     }
 
     if (status === "EXPORTED") {
-
       statusLabel =
         "🔵 Exported — waiting for admin upload";
     }
@@ -4570,37 +4807,26 @@ function renderDriverTaskMap() {
     //   use clustering.
     //
     // Focus mode with <= 20 tasks:
-    //   show every task individually.
+    //   show every task individually. The marker positions
+    //   are adjusted below so overlapping markers are spread
+    //   around their true GPS points and connected by lines.
     //
     // Focus mode with > 20 tasks:
     //   continue clustering.
     //
-    
     if (DRIVER_TASK_MAP_FOCUS_INDIVIDUAL) {
-    
-      // ==========================================
-      // 🔥 SMALL GROUP
-      // SHOW EVERY TASK INDIVIDUALLY
-      // ==========================================
-    
+
       marker.addTo(
         DRIVER_TASK_MAP
       );
-    
+
     } else {
-    
-      // ==========================================
-      // 📦 NORMAL CLUSTERING
-      // ==========================================
-    
+
       DRIVER_TASK_MARKER_CLUSTER.addLayer(
         marker
       );
-    
+
     }
-    
-    DRIVER_TASK_MARKERS[task._key] =
-      marker;
 
     DRIVER_TASK_MARKERS[task._key] =
       marker;
@@ -4616,7 +4842,6 @@ function renderDriverTaskMap() {
   // =====================================================
   // 🔵 DRIVER LOCATION
   // =====================================================
-
   updateDriverLocationOnTaskMap();
 
   if (
@@ -4638,13 +4863,12 @@ function renderDriverTaskMap() {
   // =====================================================
   // 🗺 FIT MAP ONCE
   // =====================================================
-
   if (
     !DRIVER_TASK_MAP_INITIALIZED_VIEW
   ) {
-  
+
     if (bounds.length) {
-  
+
       DRIVER_TASK_MAP.fitBounds(
         bounds,
         {
@@ -4652,24 +4876,35 @@ function renderDriverTaskMap() {
           maxZoom: 16
         }
       );
-  
+
     } else {
-  
+
       DRIVER_TASK_MAP.setView(
         [14.5995, 120.9842],
         12
       );
-  
+
     }
-  
+
     DRIVER_TASK_MAP_INITIALIZED_VIEW =
       true;
   }
 
   // =====================================================
+  // 🧭 REMOVE OVERLAP IN FOCUSED MODE
+  // =====================================================
+  // Run once immediately and again after Leaflet finishes any
+  // fitBounds/zoom animation. The zoomend/moveend listener in
+  // initDriverTaskMap also keeps the layout correct afterwards.
+  if (DRIVER_TASK_MAP_FOCUS_INDIVIDUAL) {
+    requestAnimationFrame(() => {
+      positionFocusedTaskMarkers();
+    });
+  }
+
+  // =====================================================
   // ℹ️ MAP INFORMATION
   // =====================================================
-
   const info =
     document.getElementById(
       "taskMapInfo"
@@ -4753,6 +4988,8 @@ function openDriverTaskMap() {
   // 🔥 Normal map mode
   DRIVER_TASK_MAP_FOCUS_INDIVIDUAL = false;
 
+  clearFocusedTaskCalloutLines();
+
   if (SYNC_RUNNING) {
 
     alert(
@@ -4801,6 +5038,7 @@ function openDriverTaskMap() {
 function closeDriverTaskMap() {
 
   DRIVER_TASK_MAP_VISIBLE = false;
+  clearFocusedTaskCalloutLines();
 
   document.getElementById(
     "driverTaskMapPanel"
