@@ -558,7 +558,7 @@ import {
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "V.R.0.0.15.6";
+const VERSION = "V.R.0.0.15.7";
 const BILLING_CACHE = {};
 window.BILLING_CACHE = BILLING_CACHE;
 const DRIVER_UI_CACHE = {};
@@ -4044,6 +4044,145 @@ function updateDriverLocationOnTaskMap() {
   }
 }
 
+function getNearbyMapTasks(task, radiusMeters = 30) {
+
+  if (!task || !isValidTaskGPS(task)) {
+    return [];
+  }
+
+  const lat = Number(task.LATITUDE);
+  const lng = Number(task.LONGITUDE);
+
+  return getDriverTaskMapTasks().filter(other => {
+
+    if (!other || !other._key) return false;
+    if (!isValidTaskGPS(other)) return false;
+
+    const otherLat = Number(other.LATITUDE);
+    const otherLng = Number(other.LONGITUDE);
+
+    const distance = getDistanceMeters(
+      lat,
+      lng,
+      otherLat,
+      otherLng
+    );
+
+    return distance <= radiusMeters;
+  });
+}
+
+function showNearbyTasksPopup(map, marker, task) {
+
+  const nearbyTasks =
+    getNearbyMapTasks(task, 30);
+
+  // Only one task nearby
+  if (nearbyTasks.length <= 1) {
+    return false;
+  }
+
+  let html = `
+    <div style="
+      min-width:240px;
+      max-width:300px;
+    ">
+
+      <b>📍 Nearby Deliveries</b>
+
+      <div style="
+        font-size:12px;
+        color:#666;
+        margin:5px 0 8px;
+      ">
+        ${nearbyTasks.length} deliveries within 30 meters
+      </div>
+  `;
+
+  nearbyTasks.forEach(nearby => {
+
+    const status =
+      resolveStatus(nearby);
+
+    let statusText = "🔵 Pending";
+
+    if (status === "SYNC_PENDING") {
+      statusText =
+        "🟢 Completed locally";
+    }
+
+    html += `
+      <button
+        style="
+          width:100%;
+          text-align:left;
+          padding:10px;
+          margin-top:6px;
+          border:1px solid #ddd;
+          border-radius:7px;
+          background:#f8f8f8;
+          cursor:pointer;
+        "
+        onclick="openTaskFromMap('${nearby._key}')"
+      >
+
+        <div style="
+          font-weight:bold;
+          font-size:14px;
+        ">
+          📋 Sequence ${nearby.SEQUENCE || "—"}
+        </div>
+
+        <div style="
+          font-size:13px;
+          margin-top:3px;
+        ">
+          ${nearby.CUSTOMERNAME || "—"}
+        </div>
+
+        <div style="
+          font-size:12px;
+          color:#555;
+          margin-top:3px;
+        ">
+          Account:
+          ${nearby.ACCOUNTNUMBER || "—"}
+        </div>
+
+        <div style="
+          font-size:12px;
+          color:#555;
+          margin-top:3px;
+        ">
+          Meter:
+          ${nearby.METERNUMBER || "—"}
+        </div>
+
+        <div style="
+          font-size:11px;
+          color:#777;
+          margin-top:3px;
+        ">
+          ${statusText}
+        </div>
+
+      </button>
+    `;
+  });
+
+  html += `
+    </div>
+  `;
+
+  marker
+    .bindPopup(html, {
+      maxWidth: 320
+    })
+    .openPopup();
+
+  return true;
+}
+
 function renderDriverTaskMap() {
 
   if (!DRIVER_TASK_MAP) {
@@ -4108,27 +4247,42 @@ function renderDriverTaskMap() {
         }
       );
 
-    // ===================================================
-    // 📋 POPUP
-    // ===================================================
+    marker.on("click", function () {
 
-    let statusLabel =
-      "🔵 Pending";
+  const nearbyTasks =
+    getNearbyMapTasks(task, 30);
 
-    if (status === "SYNC_PENDING") {
+  if (nearbyTasks.length > 1) {
 
-      statusLabel =
-        "🟢 Completed locally — waiting for sync";
+    showNearbyTasksPopup(
+      DRIVER_TASK_MAP,
+      marker,
+      task
+    );
 
-    }
+    return;
+  }
 
-    if (status === "EXPORTED") {
+  // Normal single-task popup
 
-      statusLabel =
-        "🔵 Exported — waiting for admin upload";
-    }
+  let statusLabel =
+    "🔵 Pending";
 
-    marker.bindPopup(`
+  if (status === "SYNC_PENDING") {
+
+    statusLabel =
+      "🟢 Completed locally — waiting for sync";
+
+  }
+
+  if (status === "EXPORTED") {
+
+    statusLabel =
+      "🔵 Exported — waiting for admin upload";
+  }
+
+  marker
+    .bindPopup(`
       <div style="min-width:220px;">
 
         <b>
@@ -4187,26 +4341,10 @@ function renderDriverTaskMap() {
         </button>
 
       </div>
-    `);
+    `)
+    .openPopup();
 
-    // ===================================================
-    // 📦 ADD TO CLUSTER
-    // ===================================================
-
-    DRIVER_TASK_MARKER_CLUSTER.addLayer(
-      marker
-    );
-
-    DRIVER_TASK_MARKERS[task._key] =
-      marker;
-
-    bounds.push([
-      lat,
-      lng
-    ]);
-
-    plotted++;
-  });
+});
 
   // =====================================================
   // 🔵 DRIVER LOCATION
