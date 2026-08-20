@@ -568,7 +568,7 @@ import {
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "V.R.0.0.15.6.8";
+const VERSION = "V.R.0.0.15.6.9";
 const BILLING_CACHE = {};
 window.BILLING_CACHE = BILLING_CACHE;
 const DRIVER_UI_CACHE = {};
@@ -590,6 +590,7 @@ let DRIVER_TASK_MARKER_CLUSTER = null;
 let DRIVER_LOCATION_MARKER = null;
 let DRIVER_TASK_MAP_VISIBLE = false;
 let DRIVER_TASK_MAP_FOCUS_KEYS = null;
+let DRIVER_TASK_MAP_FOCUS_INDIVIDUAL = false;
   
 let LOAD_IN_PROGRESS = false;
 let RENDER_OFFSET = 0;
@@ -920,8 +921,10 @@ async function startQRScanner() {
 
 function showAllDriverTaskClusters() {
 
-  DRIVER_TASK_MAP_FOCUS_KEYS =
-    null;
+  DRIVER_TASK_MAP_FOCUS_KEYS = null;
+
+  // 🔥 Return to normal clustering mode
+  DRIVER_TASK_MAP_FOCUS_INDIVIDUAL = false;
 
   const btn =
     document.getElementById(
@@ -4314,21 +4317,41 @@ function focusDriverTaskCluster(cluster) {
   }
 
   // ==========================================
-  // ENTER / DEEPEN FOCUS MODE
+  // ENTER FOCUS MODE
   // ==========================================
 
   DRIVER_TASK_MAP_FOCUS_KEYS =
     new Set(keys);
 
   // ==========================================
-  // RENDER ONLY THESE TASKS
-  // BUT KEEP THEM CLUSTERED
+  // 🔥 IMPORTANT
+  //
+  // If 20 or fewer tasks remain:
+  // STOP CLUSTERING COMPLETELY.
+  //
+  // Show every task individually.
+  // ==========================================
+
+  DRIVER_TASK_MAP_FOCUS_INDIVIDUAL =
+    keys.length <= 20;
+
+  console.log(
+    "🎯 Map cluster clicked:",
+    {
+      taskCount: keys.length,
+      individualMode:
+        DRIVER_TASK_MAP_FOCUS_INDIVIDUAL
+    }
+  );
+
+  // ==========================================
+  // RENDER SELECTED TASKS
   // ==========================================
 
   renderDriverTaskMap();
 
   // ==========================================
-  // FIT TO SELECTED GROUP
+  // FIT MAP TO SELECTED GROUP
   // ==========================================
 
   const bounds = [];
@@ -4370,11 +4393,26 @@ function renderDriverTaskMap() {
   }
 
   // ==========================================
-  // 🧹 CLEAR PREVIOUS MARKERS
+  // 🧹 CLEAR PREVIOUS CLUSTER MARKERS
   // ==========================================
-
+  
   DRIVER_TASK_MARKER_CLUSTER.clearLayers();
-
+  
+  // ==========================================
+  // 🧹 CLEAR PREVIOUS INDIVIDUAL MARKERS
+  // ==========================================
+  
+  Object.values(DRIVER_TASK_MARKERS).forEach(marker => {
+  
+    if (
+      marker &&
+      DRIVER_TASK_MAP.hasLayer(marker)
+    ) {
+      DRIVER_TASK_MAP.removeLayer(marker);
+    }
+  
+  });
+  
   DRIVER_TASK_MARKERS = {};
 
   let tasks =
@@ -4525,27 +4563,44 @@ function renderDriverTaskMap() {
     `);
 
     // ===================================================
-    // 📦 ADD TO CLUSTER
-    // ===================================================
-    // ===================================================
-    // 📦 ALWAYS USE CLUSTERING
+    // 📍 ADD MARKER
     // ===================================================
     //
     // Normal mode:
-    //   all tasks are clustered.
+    //   use clustering.
     //
-    // Focus mode:
-    //   only the selected tasks are rendered,
-    //   but those tasks are STILL clustered.
+    // Focus mode with <= 20 tasks:
+    //   show every task individually.
     //
-    // This is what gives us:
-    //
-    // All → 229 → 35 → 8 → individual
+    // Focus mode with > 20 tasks:
+    //   continue clustering.
     //
     
-    DRIVER_TASK_MARKER_CLUSTER.addLayer(
-      marker
-    );
+    if (DRIVER_TASK_MAP_FOCUS_INDIVIDUAL) {
+    
+      // ==========================================
+      // 🔥 SMALL GROUP
+      // SHOW EVERY TASK INDIVIDUALLY
+      // ==========================================
+    
+      marker.addTo(
+        DRIVER_TASK_MAP
+      );
+    
+    } else {
+    
+      // ==========================================
+      // 📦 NORMAL CLUSTERING
+      // ==========================================
+    
+      DRIVER_TASK_MARKER_CLUSTER.addLayer(
+        marker
+      );
+    
+    }
+    
+    DRIVER_TASK_MARKERS[task._key] =
+      marker;
 
     DRIVER_TASK_MARKERS[task._key] =
       marker;
@@ -4694,6 +4749,9 @@ window.openTaskFromMap =
 function openDriverTaskMap() {
 
   DRIVER_TASK_MAP_FOCUS_KEYS = null;
+
+  // 🔥 Normal map mode
+  DRIVER_TASK_MAP_FOCUS_INDIVIDUAL = false;
 
   if (SYNC_RUNNING) {
 
