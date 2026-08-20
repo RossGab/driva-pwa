@@ -639,7 +639,7 @@ import {
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "V.R.0.0.15.13";
+const VERSION = "V.R.0.0.15.14";
 const BILLING_CACHE = {};
 window.BILLING_CACHE = BILLING_CACHE;
 const DRIVER_UI_CACHE = {};
@@ -716,7 +716,7 @@ const MAP_GROUP_DISTANCE_METERS = 80;
 
 // Group markers are 46 x 46 px.
 // Keep their centers farther apart than that.
-const MAP_GROUP_MIN_MARKER_DISTANCE_PX = 64;
+const MAP_GROUP_MIN_MARKER_DISTANCE_PX = 72;
 
 // Expanded task markers are 40 x 40 px.
 const MAP_TASK_MIN_MARKER_DISTANCE_PX = 58;
@@ -4413,15 +4413,41 @@ function findFreeMapPoint(
   }
 
   // ---------------------------------------------------
-  // If we cannot find a perfect position,
-  // return the furthest practical position.
+  // Last-resort position.
+  //
+  // Keep moving farther around the point instead of
+  // sending every collision to the exact same fallback.
   // ---------------------------------------------------
-
+  
+  const fallbackIndex =
+    occupiedPoints.length;
+  
+  const fallbackAngle =
+    (
+      fallbackIndex *
+      137.5
+    ) *
+    Math.PI /
+    180;
+  
+  const fallbackRadius =
+    maxOffset +
+    (
+      Math.floor(
+        fallbackIndex / 8
+      ) *
+      MAP_COLLISION_STEP_PX
+    );
+  
   return L.point(
-    basePoint.x + maxOffset,
-    basePoint.y
+    basePoint.x +
+      Math.cos(fallbackAngle) *
+      fallbackRadius,
+  
+    basePoint.y +
+      Math.sin(fallbackAngle) *
+      fallbackRadius
   );
-}
 
 
 // =====================================================
@@ -4437,11 +4463,22 @@ function layoutTaskGroupMarkers() {
     return;
   }
 
-  const occupiedPoints = [];
+  const groups =
+    Object.values(
+      DRIVER_TASK_GROUPS
+    );
 
-  Object.values(
-    DRIVER_TASK_GROUPS
-  ).forEach(group => {
+  if (!groups.length) {
+    return;
+  }
+
+  // ===================================================
+  // SCREEN SPACE COLLISION LAYOUT
+  // ===================================================
+
+  const occupied = [];
+
+  groups.forEach(group => {
 
     const marker =
       DRIVER_TASK_GROUP_MARKERS[
@@ -4452,39 +4489,50 @@ function layoutTaskGroupMarkers() {
       return;
     }
 
-    // -------------------------------------------------
-    // IMPORTANT:
-    // Always calculate from the ORIGINAL GPS center.
-    // Never calculate from the previously displaced
-    // marker position.
-    // -------------------------------------------------
+    // -----------------------------------------------
+    // Always start from the TRUE GPS coordinate
+    // -----------------------------------------------
 
-    const basePoint =
-      getMapVisualPoint(
+    const originalLatLng =
+      L.latLng(
         group.centerLat,
         group.centerLng
       );
 
-    if (!basePoint) {
-      return;
-    }
+    const originalPoint =
+      DRIVER_TASK_MAP.latLngToLayerPoint(
+        originalLatLng
+      );
+
+    // -----------------------------------------------
+    // Find a screen position that doesn't overlap
+    // -----------------------------------------------
 
     const visualPoint =
       findFreeMapPoint(
-        basePoint,
-        occupiedPoints,
-        MAP_GROUP_MIN_MARKER_DISTANCE_PX
+        originalPoint,
+        occupied,
+        MAP_GROUP_MIN_MARKER_DISTANCE_PX,
+        MAP_MAX_VISUAL_OFFSET_PX
       );
 
-    occupiedPoints.push(
+    occupied.push(
       visualPoint
     );
 
-    marker.setLatLng(
+    // -----------------------------------------------
+    // Convert visual pixel position back to LatLng
+    // -----------------------------------------------
+
+    const visualLatLng =
       DRIVER_TASK_MAP.layerPointToLatLng(
         visualPoint
-      )
+      );
+
+    marker.setLatLng(
+      visualLatLng
     );
+
   });
 }
 
@@ -4828,9 +4876,7 @@ function collapseTaskGroup(group) {
 // 🗺 CREATE GROUP MARKER
 // =====================================================
 
-function createTaskGroupMarker(
-  group
-) {
+function createTaskGroupMarker(group) {
 
   const count =
     group.tasks.length;
@@ -4843,12 +4889,9 @@ function createTaskGroupMarker(
       ],
       {
         icon:
-          createTaskGroupIcon(
-            count
-          ),
+          createTaskGroupIcon(count),
 
-        zIndexOffset:
-          300
+        zIndexOffset: 300
       }
     );
 
@@ -4856,9 +4899,7 @@ function createTaskGroupMarker(
     "click",
     function () {
 
-      expandTaskGroup(
-        group
-      );
+      expandTaskGroup(group);
 
     }
   );
