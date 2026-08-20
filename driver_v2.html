@@ -558,7 +558,7 @@ import {
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "V.R.0.0.15.6.2";
+const VERSION = "V.R.0.0.15.6.3";
 const BILLING_CACHE = {};
 window.BILLING_CACHE = BILLING_CACHE;
 const DRIVER_UI_CACHE = {};
@@ -3913,7 +3913,7 @@ function initDriverTaskMap() {
      * overlapping tasks instead of putting them
      * directly on top of each other.
      */
-    disableClusteringAtZoom: 18,
+    disableClusteringAtZoom: 20,
 
     spiderfyOnMaxZoom: true,
 
