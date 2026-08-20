@@ -126,6 +126,16 @@ img { width:100%;margin-top:8px;border-radius:6px; }
   href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
 />
 
+<link
+  rel="stylesheet"
+  href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"
+/>
+
+<link
+  rel="stylesheet"
+  href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"
+/>
+
 <style>
   #driverTaskMapPanel {
     display: none;
@@ -204,6 +214,9 @@ img { width:100%;margin-top:8px;border-radius:6px; }
 </style>
 <script
   src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js">
+</script>
+<script
+  src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js">
 </script>
 </head>
 
@@ -545,7 +558,7 @@ import {
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "V.R.0.0.15.5";
+const VERSION = "V.R.0.0.15.6";
 const BILLING_CACHE = {};
 window.BILLING_CACHE = BILLING_CACHE;
 const DRIVER_UI_CACHE = {};
@@ -563,8 +576,10 @@ let LAST_KNOWN_GPS = null;
 
 let DRIVER_TASK_MAP = null;
 let DRIVER_TASK_MARKERS = {};
+let DRIVER_TASK_MARKER_CLUSTER = null;
 let DRIVER_LOCATION_MARKER = null;
 let DRIVER_TASK_MAP_VISIBLE = false;
+  
 let LOAD_IN_PROGRESS = false;
 let RENDER_OFFSET = 0;
 let CURRENT_RENDER_LIST = [];
@@ -3839,6 +3854,34 @@ function initDriverTaskMap() {
       attribution: "&copy; OpenStreetMap contributors"
     }
   ).addTo(DRIVER_TASK_MAP);
+
+  // =====================================================
+  // 📍 TASK MARKER CLUSTER
+  // =====================================================
+
+  DRIVER_TASK_MARKER_CLUSTER =
+    L.markerClusterGroup({
+
+      // Prevent clustering when zoomed in closely
+      disableClusteringAtZoom: 18,
+
+      // How close markers need to be to cluster
+      maxClusterRadius: 50,
+
+      // Animate clustering
+      animate: false,
+
+      // Better mobile performance
+      chunkedLoading: true,
+
+      chunkInterval: 50,
+
+      chunkDelay: 10
+    });
+
+  DRIVER_TASK_MAP.addLayer(
+    DRIVER_TASK_MARKER_CLUSTER
+  );
 }
 
 
@@ -4007,19 +4050,31 @@ function renderDriverTaskMap() {
     return;
   }
 
-  // Remove old task markers
-  Object.values(DRIVER_TASK_MARKERS).forEach(marker => {
-    DRIVER_TASK_MAP.removeLayer(marker);
-  });
+  // =====================================================
+  // 🧹 CLEAR PREVIOUS TASK MARKERS
+  // =====================================================
+
+  if (DRIVER_TASK_MARKER_CLUSTER) {
+    DRIVER_TASK_MARKER_CLUSTER.clearLayers();
+  }
 
   DRIVER_TASK_MARKERS = {};
 
-  const tasks = getDriverTaskMapTasks();
+  // =====================================================
+  // 📋 GET ALL FILTERED TASKS
+  // =====================================================
+
+  const tasks =
+    getDriverTaskMapTasks();
 
   const bounds = [];
 
   let plotted = 0;
   let missingGPS = 0;
+
+  // =====================================================
+  // 📍 CREATE MARKERS
+  // =====================================================
 
   tasks.forEach(task => {
 
@@ -4028,29 +4083,47 @@ function renderDriverTaskMap() {
       return;
     }
 
-    const lat = Number(task.LATITUDE);
-    const lng = Number(task.LONGITUDE);
+    const lat =
+      Number(task.LATITUDE);
 
-    const status = resolveStatus(task);
+    const lng =
+      Number(task.LONGITUDE);
 
-    const marker = L.marker(
-      [lat, lng],
-      {
-        icon: createTaskMapIcon(
-          task.SEQUENCE,
-          status
-        )
-      }
-    ).addTo(DRIVER_TASK_MAP);
+    const status =
+      resolveStatus(task);
 
-    let statusLabel = "🔵 Pending";
+    // ===================================================
+    // 📍 CREATE MARKER
+    // ===================================================
+
+    const marker =
+      L.marker(
+        [lat, lng],
+        {
+          icon:
+            createTaskMapIcon(
+              task.SEQUENCE,
+              status
+            )
+        }
+      );
+
+    // ===================================================
+    // 📋 POPUP
+    // ===================================================
+
+    let statusLabel =
+      "🔵 Pending";
 
     if (status === "SYNC_PENDING") {
+
       statusLabel =
         "🟢 Completed locally — waiting for sync";
+
     }
 
     if (status === "EXPORTED") {
+
       statusLabel =
         "🔵 Exported — waiting for admin upload";
     }
@@ -4116,12 +4189,28 @@ function renderDriverTaskMap() {
       </div>
     `);
 
-    DRIVER_TASK_MARKERS[task._key] = marker;
+    // ===================================================
+    // 📦 ADD TO CLUSTER
+    // ===================================================
 
-    bounds.push([lat, lng]);
+    DRIVER_TASK_MARKER_CLUSTER.addLayer(
+      marker
+    );
+
+    DRIVER_TASK_MARKERS[task._key] =
+      marker;
+
+    bounds.push([
+      lat,
+      lng
+    ]);
 
     plotted++;
   });
+
+  // =====================================================
+  // 🔵 DRIVER LOCATION
+  // =====================================================
 
   updateDriverLocationOnTaskMap();
 
@@ -4141,6 +4230,10 @@ function renderDriverTaskMap() {
     ]);
   }
 
+  // =====================================================
+  // 🗺 FIT MAP ONCE
+  // =====================================================
+
   if (bounds.length) {
 
     DRIVER_TASK_MAP.fitBounds(
@@ -4159,8 +4252,14 @@ function renderDriverTaskMap() {
     );
   }
 
+  // =====================================================
+  // ℹ️ MAP INFORMATION
+  // =====================================================
+
   const info =
-    document.getElementById("taskMapInfo");
+    document.getElementById(
+      "taskMapInfo"
+    );
 
   if (info) {
 
