@@ -568,7 +568,7 @@ import {
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "V.R.0.0.15.6.6";
+const VERSION = "V.R.0.0.15.6.7";
 const BILLING_CACHE = {};
 window.BILLING_CACHE = BILLING_CACHE;
 const DRIVER_UI_CACHE = {};
@@ -587,6 +587,7 @@ let LAST_KNOWN_GPS = null;
 let DRIVER_TASK_MAP = null;
 let DRIVER_TASK_MARKERS = {};
 let DRIVER_TASK_MARKER_CLUSTER = null;
+let DRIVER_TASK_FOCUS_LAYER = null;
 let DRIVER_LOCATION_MARKER = null;
 let DRIVER_TASK_MAP_VISIBLE = false;
 let DRIVER_TASK_MAP_FOCUS_KEYS = null;
@@ -4046,6 +4047,13 @@ function initDriverTaskMap() {
     DRIVER_TASK_MARKER_CLUSTER
   );
 
+  // =====================================================
+  // 🎯 FOCUS MARKER LAYER
+  // =====================================================
+  
+  DRIVER_TASK_FOCUS_LAYER =
+    L.layerGroup().addTo(DRIVER_TASK_MAP);
+
   DRIVER_TASK_MARKER_CLUSTER.on(
     "clusterclick",
     function (event) {
@@ -4362,32 +4370,37 @@ function renderDriverTaskMap() {
   }
 
   // ==========================================
-  // 🧹 CLEAR PREVIOUS TASK MARKERS
+  // 🧹 CLEAR PREVIOUS MARKERS
   // ==========================================
-  
+
   DRIVER_TASK_MARKER_CLUSTER.clearLayers();
-  
+
+  if (DRIVER_TASK_FOCUS_LAYER) {
+    DRIVER_TASK_FOCUS_LAYER.clearLayers();
+  }
+
   DRIVER_TASK_MARKERS = {};
 
   let tasks =
-  getDriverTaskMapTasks();
+    getDriverTaskMapTasks();
 
   // ==========================================
   // 🎯 FOCUS MODE
   // ==========================================
-  
-  if (
+
+  const focusMode =
     DRIVER_TASK_MAP_FOCUS_KEYS &&
-    DRIVER_TASK_MAP_FOCUS_KEYS.size > 0
-  ) {
-  
+    DRIVER_TASK_MAP_FOCUS_KEYS.size > 0;
+
+  if (focusMode) {
+
     tasks =
       tasks.filter(task =>
         DRIVER_TASK_MAP_FOCUS_KEYS.has(
           task._key
         )
       );
-  
+
   }
 
   const bounds = [];
@@ -4519,9 +4532,23 @@ function renderDriverTaskMap() {
     // 📦 ADD TO CLUSTER
     // ===================================================
 
-    DRIVER_TASK_MARKER_CLUSTER.addLayer(
-      marker
-    );
+    if (focusMode) {
+
+      // 🎯 Focus mode:
+      // show every task at its exact GPS position
+      DRIVER_TASK_FOCUS_LAYER.addLayer(
+        marker
+      );
+    
+    } else {
+    
+      // 📍 Normal mode:
+      // use clustering
+      DRIVER_TASK_MARKER_CLUSTER.addLayer(
+        marker
+      );
+    
+    }
 
     DRIVER_TASK_MARKERS[task._key] =
       marker;
