@@ -568,7 +568,7 @@ import {
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "V.R.0.0.15.6.5";
+const VERSION = "V.R.0.0.15.6.6";
 const BILLING_CACHE = {};
 window.BILLING_CACHE = BILLING_CACHE;
 const DRIVER_UI_CACHE = {};
@@ -4361,27 +4361,17 @@ function renderDriverTaskMap() {
     return;
   }
 
-  const tasks =
-  getDriverTaskMapTasks();
-
-  // =====================================================
+  // ==========================================
   // 🧹 CLEAR PREVIOUS TASK MARKERS
-  // =====================================================
-
-  if (DRIVER_TASK_MARKER_CLUSTER) {
-    DRIVER_TASK_MARKER_CLUSTER.clearLayers();
-  }
-
+  // ==========================================
+  
+  DRIVER_TASK_MARKER_CLUSTER.clearLayers();
+  
   DRIVER_TASK_MARKERS = {};
 
-  // =====================================================
-  // 📋 GET ALL FILTERED TASKS
-  // =====================================================
-
   let tasks =
-    getDriverTaskMapTasks();
-  
-  
+  getDriverTaskMapTasks();
+
   // ==========================================
   // 🎯 FOCUS MODE
   // ==========================================
