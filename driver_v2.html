@@ -558,7 +558,7 @@ import {
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "V.R.0.0.15.6.1";
+const VERSION = "V.R.0.0.15.6.2";
 const BILLING_CACHE = {};
 window.BILLING_CACHE = BILLING_CACHE;
 const DRIVER_UI_CACHE = {};
@@ -586,6 +586,8 @@ let CURRENT_RENDER_LIST = [];
 let IS_DOWNLOADING = false;
 let LAST_RENDER_SIGNATURE = "";
 let SYNC_RUNNING = false;
+
+let DRIVER_TASK_MAP_INITIALIZED_VIEW = false;
 
 function setTaskWorkLocked(locked) {
 
@@ -1137,7 +1139,9 @@ function applyFiltersOnly() {
 
   renderWithPagination(tasks);
   if (DRIVER_TASK_MAP_VISIBLE) {
-    renderDriverTaskMap();
+    requestAnimationFrame(() => {
+      renderDriverTaskMap();
+    });
   }
   updateRemainingCounter(tasks);
   updateUploadCounter();
@@ -3860,24 +3864,83 @@ function initDriverTaskMap() {
   // =====================================================
 
   DRIVER_TASK_MARKER_CLUSTER =
-    L.markerClusterGroup({
+  L.markerClusterGroup({
 
-      // Prevent clustering when zoomed in closely
-      disableClusteringAtZoom: 18,
+    // =================================================
+    // 📍 CLUSTERING
+    // =================================================
 
-      // How close markers need to be to cluster
-      maxClusterRadius: 50,
+    /*
+     * Smaller radius = locations must actually be
+     * closer together before becoming one cluster.
+     *
+     * This prevents distant delivery locations from
+     * being grouped together too aggressively.
+     */
+    maxClusterRadius: function (zoom) {
 
-      // Animate clustering
-      animate: false,
+      if (zoom <= 11) {
+        return 35;
+      }
 
-      // Better mobile performance
-      chunkedLoading: true,
+      if (zoom <= 13) {
+        return 30;
+      }
 
-      chunkInterval: 50,
+      if (zoom <= 15) {
+        return 25;
+      }
 
-      chunkDelay: 10
-    });
+      if (zoom <= 16) {
+        return 22;
+      }
+
+      if (zoom <= 17) {
+        return 18;
+      }
+
+      return 12;
+    },
+
+    // =================================================
+    // 🔎 CLOSE ZOOM
+    // =================================================
+
+    /*
+     * Keep clustering until zoom 18.
+     *
+     * At maximum zoom, MarkerCluster can spiderfy
+     * overlapping tasks instead of putting them
+     * directly on top of each other.
+     */
+    disableClusteringAtZoom: 18,
+
+    spiderfyOnMaxZoom: true,
+
+    showCoverageOnHover: false,
+
+    zoomToBoundsOnClick: true,
+
+    spiderfyDistanceMultiplier: 1.5,
+
+    // =================================================
+    // ⚡ PERFORMANCE
+    // =================================================
+
+    animate: false,
+
+    chunkedLoading: true,
+
+    chunkInterval: 50,
+
+    chunkDelay: 10,
+
+    removeOutsideVisibleBounds: true,
+
+    iconCreateFunction:
+      createTaskClusterIcon
+
+  });
 
   DRIVER_TASK_MAP.addLayer(
     DRIVER_TASK_MARKER_CLUSTER
@@ -3915,6 +3978,62 @@ function createTaskMapIcon(sequence, status) {
   });
 }
 
+  function createTaskClusterIcon(cluster) {
+
+  const count =
+    cluster.getChildCount();
+
+  let size = 42;
+
+  if (count >= 10) {
+    size = 50;
+  }
+
+  if (count >= 50) {
+    size = 58;
+  }
+
+  return L.divIcon({
+
+    className: "",
+
+    html: `
+      <div
+        style="
+          width:${size}px;
+          height:${size}px;
+          border-radius:50%;
+          background:#1976d2;
+          color:#fff;
+          border:3px solid #fff;
+          box-shadow:0 2px 7px rgba(0,0,0,.35);
+
+          display:flex;
+          align-items:center;
+          justify-content:center;
+
+          font-size:15px;
+          font-weight:bold;
+
+          box-sizing:border-box;
+        "
+      >
+        ${count}
+      </div>
+    `,
+
+    iconSize: [
+      size,
+      size
+    ],
+
+    iconAnchor: [
+      size / 2,
+      size / 2
+    ]
+
+  });
+}
 
 function createDriverMapIcon() {
 
@@ -4234,22 +4353,31 @@ function renderDriverTaskMap() {
   // 🗺 FIT MAP ONCE
   // =====================================================
 
-  if (bounds.length) {
-
-    DRIVER_TASK_MAP.fitBounds(
-      bounds,
-      {
-        padding: [30, 30],
-        maxZoom: 16
-      }
-    );
-
-  } else {
-
-    DRIVER_TASK_MAP.setView(
-      [14.5995, 120.9842],
-      12
-    );
+  if (
+    !DRIVER_TASK_MAP_INITIALIZED_VIEW
+  ) {
+  
+    if (bounds.length) {
+  
+      DRIVER_TASK_MAP.fitBounds(
+        bounds,
+        {
+          padding: [30, 30],
+          maxZoom: 16
+        }
+      );
+  
+    } else {
+  
+      DRIVER_TASK_MAP.setView(
+        [14.5995, 120.9842],
+        12
+      );
+  
+    }
+  
+    DRIVER_TASK_MAP_INITIALIZED_VIEW =
+      true;
   }
 
   // =====================================================
