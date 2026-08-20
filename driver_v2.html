@@ -462,6 +462,16 @@ img { width:100%;margin-top:8px;border-radius:6px; }
 <div id="driverTaskMapPanel">
 
   <div class="task-map-topbar">
+  <button
+  id="showAllTaskClustersBtn"
+  style="
+    background:#2ecc71;
+    color:#fff;
+    display:none;
+  "
+>
+  📍 All Tasks
+</button>
 
     <button
       id="closeTaskMapBtn"
@@ -558,7 +568,7 @@ import {
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "V.R.0.0.15.6.4";
+const VERSION = "V.R.0.0.15.6.5";
 const BILLING_CACHE = {};
 window.BILLING_CACHE = BILLING_CACHE;
 const DRIVER_UI_CACHE = {};
@@ -579,6 +589,7 @@ let DRIVER_TASK_MARKERS = {};
 let DRIVER_TASK_MARKER_CLUSTER = null;
 let DRIVER_LOCATION_MARKER = null;
 let DRIVER_TASK_MAP_VISIBLE = false;
+let DRIVER_TASK_MAP_FOCUS_KEYS = null;
   
 let LOAD_IN_PROGRESS = false;
 let RENDER_OFFSET = 0;
@@ -904,6 +915,95 @@ async function startQRScanner() {
   } catch (err) {
     console.error("QR start error:", err);
     alert("Camera failed to start. Try again.");
+  }
+}
+
+function showAllDriverTaskClusters() {
+
+  DRIVER_TASK_MAP_FOCUS_KEYS =
+    null;
+
+  const btn =
+    document.getElementById(
+      "showAllTaskClustersBtn"
+    );
+
+  if (btn) {
+    btn.style.display = "none";
+  }
+
+  renderDriverTaskMap();
+
+  // Recalculate the overall task bounds
+  const tasks =
+    getDriverTaskMapTasks();
+
+  const bounds = [];
+
+  tasks.forEach(task => {
+
+    if (!isValidTaskGPS(task)) {
+      return;
+    }
+
+    bounds.push([
+      Number(task.LATITUDE),
+      Number(task.LONGITUDE)
+    ]);
+
+  });
+
+  if (bounds.length) {
+
+    DRIVER_TASK_MAP.fitBounds(
+      bounds,
+      {
+        padding: [30, 30],
+        maxZoom: 16,
+        animate: true
+      }
+    );
+
+  }
+
+  updateTaskMapFocusInfo();
+}
+
+document.getElementById(
+  "showAllTaskClustersBtn"
+).onclick =
+  showAllDriverTaskClusters;
+
+function updateTaskMapFocusInfo() {
+
+  const btn =
+    document.getElementById(
+      "showAllTaskClustersBtn"
+    );
+
+  const info =
+    document.getElementById(
+      "taskMapInfo"
+    );
+
+  if (!DRIVER_TASK_MAP_FOCUS_KEYS) {
+
+    if (btn) {
+      btn.style.display = "none";
+    }
+
+    return;
+  }
+
+  if (btn) {
+    btn.style.display = "block";
+  }
+
+  if (info) {
+
+    info.innerHTML =
+      `🎯 <b>Focused group:</b> ` +
+      `${DRIVER_TASK_MAP_FOCUS_KEYS.size} tasks`;
   }
 }
 
@@ -3915,7 +4015,7 @@ function initDriverTaskMap() {
      */
     disableClusteringAtZoom: 20,
 
-    spiderfyOnMaxZoom: true,
+    spiderfyOnMaxZoom: false,
 
     showCoverageOnHover: false,
 
@@ -3944,6 +4044,20 @@ function initDriverTaskMap() {
 
   DRIVER_TASK_MAP.addLayer(
     DRIVER_TASK_MARKER_CLUSTER
+  );
+
+  DRIVER_TASK_MARKER_CLUSTER.on(
+    "clusterclick",
+    function (event) {
+  
+      const cluster =
+        event.layer;
+  
+      focusDriverTaskCluster(
+        cluster
+      );
+  
+    }
   );
 }
 
@@ -4163,11 +4277,92 @@ function updateDriverLocationOnTaskMap() {
   }
 }
 
+function focusDriverTaskCluster(cluster) {
+
+  if (!cluster) return;
+
+  const childMarkers =
+    cluster.getAllChildMarkers();
+
+  if (!childMarkers.length) {
+    return;
+  }
+
+  // ==========================================
+  // GET TASK KEYS FROM THIS CLUSTER
+  // ==========================================
+
+  const keys = [];
+
+  childMarkers.forEach(marker => {
+
+    const taskKey =
+      marker.options?.taskKey;
+
+    if (taskKey) {
+      keys.push(taskKey);
+    }
+
+  });
+
+  if (!keys.length) {
+    return;
+  }
+
+  // ==========================================
+  // ENTER FOCUS MODE
+  // ==========================================
+
+  DRIVER_TASK_MAP_FOCUS_KEYS =
+    new Set(keys);
+
+  renderDriverTaskMap();
+
+  // ==========================================
+  // FIT ONLY THIS GROUP
+  // ==========================================
+
+  const bounds = [];
+
+  childMarkers.forEach(marker => {
+
+    const latLng =
+      marker.getLatLng();
+
+    if (!latLng) return;
+
+    bounds.push([
+      latLng.lat,
+      latLng.lng
+    ]);
+
+  });
+
+  if (bounds.length) {
+
+    DRIVER_TASK_MAP.fitBounds(
+      bounds,
+      {
+        padding: [60, 60],
+        maxZoom: 19,
+        animate: true
+      }
+    );
+
+  }
+
+  updateTaskMapFocusInfo();
+
+}
+
 function renderDriverTaskMap() {
 
   if (!DRIVER_TASK_MAP) {
     return;
   }
+
+  const tasks =
+  getDriverTaskMapTasks();
 
   // =====================================================
   // 🧹 CLEAR PREVIOUS TASK MARKERS
@@ -4183,8 +4378,27 @@ function renderDriverTaskMap() {
   // 📋 GET ALL FILTERED TASKS
   // =====================================================
 
-  const tasks =
+  let tasks =
     getDriverTaskMapTasks();
+  
+  
+  // ==========================================
+  // 🎯 FOCUS MODE
+  // ==========================================
+  
+  if (
+    DRIVER_TASK_MAP_FOCUS_KEYS &&
+    DRIVER_TASK_MAP_FOCUS_KEYS.size > 0
+  ) {
+  
+    tasks =
+      tasks.filter(task =>
+        DRIVER_TASK_MAP_FOCUS_KEYS.has(
+          task._key
+        )
+      );
+  
+  }
 
   const bounds = [];
 
@@ -4223,7 +4437,10 @@ function renderDriverTaskMap() {
             createTaskMapIcon(
               task.SEQUENCE,
               status
-            )
+            ),
+    
+          // 🔑 Important for focus mode
+          taskKey: task._key
         }
       );
 
@@ -4461,6 +4678,8 @@ window.openTaskFromMap =
 
 
 function openDriverTaskMap() {
+
+  DRIVER_TASK_MAP_FOCUS_KEYS = null;
 
   if (SYNC_RUNNING) {
 
