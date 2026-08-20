@@ -558,7 +558,7 @@ import {
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "V.R.0.0.15.6.3";
+const VERSION = "V.R.0.0.15.6.4";
 const BILLING_CACHE = {};
 window.BILLING_CACHE = BILLING_CACHE;
 const DRIVER_UI_CACHE = {};
@@ -3882,24 +3882,24 @@ function initDriverTaskMap() {
       if (zoom <= 11) {
         return 35;
       }
-
+    
       if (zoom <= 13) {
         return 30;
       }
-
+    
       if (zoom <= 15) {
         return 25;
       }
-
-      if (zoom <= 16) {
-        return 22;
-      }
-
+    
       if (zoom <= 17) {
-        return 18;
+        return 25;
       }
-
-      return 12;
+    
+      if (zoom <= 18) {
+        return 60;
+      }
+    
+      return 80;
     },
 
     // =================================================
@@ -3919,7 +3919,7 @@ function initDriverTaskMap() {
 
     showCoverageOnHover: false,
 
-    zoomToBoundsOnClick: true,
+    zoomToBoundsOnClick: false,
 
     spiderfyDistanceMultiplier: 1.5,
 
