@@ -582,7 +582,7 @@ import {
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "V.R.0.0.15.6.9.2";
+const VERSION = "V.R.0.0.15.6.9.3";
 const BILLING_CACHE = {};
 window.BILLING_CACHE = BILLING_CACHE;
 const DRIVER_UI_CACHE = {};
@@ -4336,33 +4336,21 @@ function updateDriverLocationOnTaskMap() {
    coordinate. When several tasks are very close together,
    that makes the sequence numbers overlap.
 
-   In focused mode we keep the FIRST marker at the real GPS
-   point whenever possible, then move colliding markers around
-   the point in small rings. Every moved marker gets a leader
-   line back to its exact GPS coordinate.
-
-   The positions are calculated in SCREEN PIXELS, then converted
-   back to latitude/longitude. This means the spacing stays
-   visually consistent as the user zooms and pans.
+   In focused mode:
+   - markers are moved away from the real GPS point
+   - markers are kept separated from each other
+   - markers are also kept away from other real GPS points
+   - a leader line connects the visual marker to the real GPS point
 */
 
 const FOCUSED_MARKER_MIN_DISTANCE = 48;
 const FOCUSED_MARKER_FIRST_RING = 58;
 const FOCUSED_MARKER_RING_STEP = 38;
-const FOCUSED_MARKER_MIN_DISTANCE = 48;
-const FOCUSED_MARKER_FIRST_RING = 58;
-const FOCUSED_MARKER_RING_STEP = 38;
 const FOCUSED_MARKER_MAX_RADIUS = 360;
 
+
 // =====================================================
-// 🔥 IMPORTANT:
-// NEVER place a displayed marker directly on a real GPS
-// endpoint.
-//
-// The old version started with { x: 0, y: 0 }, which meant
-// the first marker could cover the actual task location.
-//
-// All markers now start away from the GPS endpoint.
+// 📍 GENERATE MARKER OFFSETS
 // =====================================================
 
 function getFocusedMarkerOffsets() {
@@ -4399,8 +4387,14 @@ function getFocusedMarkerOffsets() {
   return offsets;
 }
 
+
 const FOCUSED_MARKER_OFFSETS =
   getFocusedMarkerOffsets();
+
+
+// =====================================================
+// 📍 CHECK IF VISUAL MARKER POSITION IS FREE
+// =====================================================
 
 function focusedPointIsFree(
   candidate,
@@ -4426,9 +4420,11 @@ function focusedPointIsFree(
         dy * dy
       ) < FOCUSED_MARKER_MIN_DISTANCE
     ) {
+
       return false;
     }
   }
+
 
   // ==========================================
   // 2️⃣ DO NOT COVER ANY REAL GPS ENDPOINT
@@ -4448,164 +4444,258 @@ function focusedPointIsFree(
         dy * dy
       ) < FOCUSED_MARKER_MIN_DISTANCE
     ) {
+
       return false;
     }
   }
 
-  return true;
-}
-  const offsets = [
-    { x: 0, y: 0 }
-  ];
-
-  for (
-    let radius = FOCUSED_MARKER_FIRST_RING;
-    radius <= FOCUSED_MARKER_MAX_RADIUS;
-    radius += FOCUSED_MARKER_RING_STEP
-  ) {
-    // Start at the top and rotate around the GPS point.
-    for (let angle = -90; angle < 270; angle += 30) {
-      const radians = angle * Math.PI / 180;
-
-      offsets.push({
-        x: Math.cos(radians) * radius,
-        y: Math.sin(radians) * radius
-      });
-    }
-  }
-
-  return offsets;
-}
-
-const FOCUSED_MARKER_OFFSETS =
-  getFocusedMarkerOffsets();
-
-function focusedPointIsFree(candidate, placed) {
-  for (const point of placed) {
-    const dx = candidate.x - point.x;
-    const dy = candidate.y - point.y;
-
-    if (
-      Math.sqrt(dx * dx + dy * dy) <
-      FOCUSED_MARKER_MIN_DISTANCE
-    ) {
-      return false;
-    }
-  }
 
   return true;
 }
+
+
+// =====================================================
+// 🧹 CLEAR LEADER LINES
+// =====================================================
 
 function clearFocusedTaskCalloutLines() {
+
   if (DRIVER_TASK_CALLOUT_LAYER) {
+
     DRIVER_TASK_CALLOUT_LAYER.clearLayers();
+
   }
+
 }
 
+
+// =====================================================
+// 🧭 POSITION FOCUSED TASK MARKERS
+// =====================================================
+
 function positionFocusedTaskMarkers() {
+
   if (
     !DRIVER_TASK_MAP ||
     !DRIVER_TASK_MAP_FOCUS_INDIVIDUAL
   ) {
+
     return;
+
   }
 
-  const map = DRIVER_TASK_MAP;
+
+  const map =
+    DRIVER_TASK_MAP;
+
   const placed = [];
 
-clearFocusedTaskCalloutLines();
 
-// ==========================================
-// 🔥 COLLECT ALL REAL GPS ENDPOINTS
-// ==========================================
+  clearFocusedTaskCalloutLines();
 
-const originalPoints = entries.map(marker => {
 
-  const latLng =
-    marker.options.taskOriginalLatLng;
+  // ==========================================
+  // 🔥 GET ALL INDIVIDUAL MARKERS
+  // ==========================================
 
-  return map.project(latLng);
+  const entries =
+    Object.values(
+      DRIVER_TASK_MARKERS
+    ).filter(marker =>
+      marker &&
+      marker.options &&
+      marker.options.taskOriginalLatLng
+    );
 
-});
 
-  const entries = Object.values(
-    DRIVER_TASK_MARKERS
-  ).filter(marker =>
-    marker &&
-    marker.options &&
-    marker.options.taskOriginalLatLng
-  );
+  // ==========================================
+  // 🔥 COLLECT ALL REAL GPS ENDPOINTS
+  //
+  // IMPORTANT:
+  // entries MUST be created BEFORE this.
+  // ==========================================
 
-  // Stable ordering makes the layout predictable.
+  const originalPoints =
+    entries.map(marker => {
+
+      const latLng =
+        marker.options.taskOriginalLatLng;
+
+      return map.project(
+        latLng
+      );
+
+    });
+
+
+  // ==========================================
+  // 🔢 STABLE ORDER
+  // ==========================================
+
   entries.sort((a, b) => {
-    const sa = Number(a.options.taskSequence);
-    const sb = Number(b.options.taskSequence);
 
-    if (Number.isFinite(sa) && Number.isFinite(sb)) {
+    const sa =
+      Number(
+        a.options.taskSequence
+      );
+
+    const sb =
+      Number(
+        b.options.taskSequence
+      );
+
+
+    if (
+      Number.isFinite(sa) &&
+      Number.isFinite(sb)
+    ) {
+
       return sa - sb;
+
     }
 
-    if (Number.isFinite(sa)) return -1;
-    if (Number.isFinite(sb)) return 1;
 
-    return String(a.options.taskKey || "")
-      .localeCompare(String(b.options.taskKey || ""));
+    if (Number.isFinite(sa)) {
+      return -1;
+    }
+
+
+    if (Number.isFinite(sb)) {
+      return 1;
+    }
+
+
+    return String(
+      a.options.taskKey || ""
+    ).localeCompare(
+      String(
+        b.options.taskKey || ""
+      )
+    );
+
   });
 
+
+  // ==========================================
+  // 📍 POSITION EACH MARKER
+  // ==========================================
+
   for (const marker of entries) {
+
     const originalLatLng =
       marker.options.taskOriginalLatLng;
 
+
     const originalPoint =
-      map.project(originalLatLng);
+      map.project(
+        originalLatLng
+      );
 
-    let chosen = null;
 
-    for (const offset of FOCUSED_MARKER_OFFSETS) {
+    let chosen =
+      null;
+
+
+    // ========================================
+    // 🔎 FIND A FREE VISUAL POSITION
+    // ========================================
+
+    for (
+      const offset of FOCUSED_MARKER_OFFSETS
+    ) {
+
       const candidate = {
-        x: originalPoint.x + offset.x,
-        y: originalPoint.y + offset.y
+
+        x:
+          originalPoint.x +
+          offset.x,
+
+        y:
+          originalPoint.y +
+          offset.y
+
       };
 
+
       if (
-          focusedPointIsFree(
-            candidate,
-            placed,
-            originalPoints
-          )
-        ) {
-        chosen = candidate;
+        focusedPointIsFree(
+          candidate,
+          placed,
+          originalPoints
+        )
+      ) {
+
+        chosen =
+          candidate;
+
         break;
+
       }
+
     }
 
-    // Extremely crowded groups can eventually exhaust the
-    // generated candidates. Fall back to the original point
-    // rather than failing to render the task.
+
+    // ========================================
+    // 🛟 LAST RESORT
+    // ========================================
+
     if (!chosen) {
-      chosen = originalPoint;
+
+      chosen =
+        originalPoint;
+
     }
 
-    placed.push(chosen);
+
+    placed.push(
+      chosen
+    );
+
+
+    // ========================================
+    // 📍 CONVERT SCREEN POSITION → GPS
+    // ========================================
 
     const displayLatLng =
-      map.unproject(chosen);
+      map.unproject(
+        chosen
+      );
 
-    marker.setLatLng(displayLatLng);
+
+    marker.setLatLng(
+      displayLatLng
+    );
+
+
+    // ========================================
+    // 📏 DISTANCE FROM REAL GPS POINT
+    // ========================================
 
     const dx =
-      chosen.x - originalPoint.x;
+      chosen.x -
+      originalPoint.x;
 
     const dy =
-      chosen.y - originalPoint.y;
+      chosen.y -
+      originalPoint.y;
+
 
     const distance =
-      Math.sqrt(dx * dx + dy * dy);
+      Math.sqrt(
+        dx * dx +
+        dy * dy
+      );
+
+
+    // ========================================
+    // 🧵 DRAW LEADER LINE
+    // ========================================
 
     if (
       distance > 3 &&
       DRIVER_TASK_CALLOUT_LAYER
     ) {
+
       const line =
         L.polyline(
           [
@@ -4615,19 +4705,33 @@ const originalPoints = entries.map(marker => {
           {
             className:
               "task-map-callout-line",
-            color: "#1976d2",
-            weight: 2,
-            opacity: 0.75,
-            dashArray: "4 4",
-            interactive: false
+
+            color:
+              "#1976d2",
+
+            weight:
+              2,
+
+            opacity:
+              0.75,
+
+            dashArray:
+              "4 4",
+
+            interactive:
+              false
           }
         );
+
 
       DRIVER_TASK_CALLOUT_LAYER.addLayer(
         line
       );
+
     }
+
   }
+
 }
 
 function focusDriverTaskCluster(cluster) {
