@@ -639,7 +639,7 @@ import {
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "V.R.0.0.15.12";
+const VERSION = "V.R.0.0.15.13";
 const BILLING_CACHE = {};
 window.BILLING_CACHE = BILLING_CACHE;
 const DRIVER_UI_CACHE = {};
@@ -667,7 +667,44 @@ let DRIVER_TASK_MAP_VISIBLE = false;
 // 🗺 TASK MAP GROUPING / VISUAL SEPARATION
 // =====================================================
 
-const MAP_MAX_TASKS_PER_GROUP = 5;
+// =====================================================
+// 🗺 ZOOM-BASED TASK GROUP LIMIT
+// =====================================================
+
+function getMapMaxTasksPerGroup() {
+
+  if (!DRIVER_TASK_MAP) {
+    return 5;
+  }
+
+  const zoom =
+    DRIVER_TASK_MAP.getZoom();
+
+  // -----------------------------------------------
+  // ZOOMED OUT
+  // -----------------------------------------------
+  // Allow large groups.
+  if (zoom <= 13) {
+    return Infinity;
+  }
+
+  // -----------------------------------------------
+  // MEDIUM ZOOM
+  // -----------------------------------------------
+  if (zoom <= 14) {
+    return 10;
+  }
+
+  if (zoom <= 15) {
+    return 7;
+  }
+
+  // -----------------------------------------------
+  // ZOOMED IN
+  // -----------------------------------------------
+  // Maximum 5 tasks per group.
+  return 5;
+}
 
 // Geographic distance used ONLY for deciding
 // which tasks belong to the same logical group.
@@ -3988,11 +4025,10 @@ DRIVER_TASK_MAP.on(
 
     setTimeout(() => {
 
-      layoutTaskGroupMarkers();
-
-      layoutExpandedTaskMarkers();
+      rebuildTaskGroupsAfterZoom();
 
     }, 30);
+
   }
 );
 }
@@ -4117,6 +4153,9 @@ function buildTaskGroups(tasks) {
 
   const groups = [];
 
+  const maxTasksPerGroup =
+  getMapMaxTasksPerGroup();
+
   for (const task of tasks) {
 
     if (!isValidTaskGPS(task)) {
@@ -4140,10 +4179,10 @@ function buildTaskGroups(tasks) {
 
     for (const group of groups) {
 
-      // 🔒 MAXIMUM 5 TASKS
+      // 🔒 ZOOM-BASED MAXIMUM
       if (
         group.tasks.length >=
-        MAP_MAX_TASKS_PER_GROUP
+        maxTasksPerGroup
       ) {
         continue;
       }
@@ -5029,6 +5068,119 @@ function updateDriverLocationOnTaskMap() {
         }
       `);
   }
+}
+
+// =====================================================
+// 🗺 REBUILD GROUPS AFTER ZOOM
+// =====================================================
+
+function rebuildTaskGroupsAfterZoom() {
+
+  if (
+    !DRIVER_TASK_MAP ||
+    !DRIVER_TASK_MAP_VISIBLE
+  ) {
+    return;
+  }
+
+  const tasks =
+    getDriverTaskMapTasks();
+
+  // -----------------------------------------------
+  // Remove existing group markers
+  // -----------------------------------------------
+
+  Object.values(
+    DRIVER_TASK_GROUP_MARKERS
+  ).forEach(marker => {
+
+    if (
+      DRIVER_TASK_MAP.hasLayer(marker)
+    ) {
+      DRIVER_TASK_MAP.removeLayer(marker);
+    }
+
+  });
+
+  // -----------------------------------------------
+  // Remove existing expanded task markers
+  // -----------------------------------------------
+
+  Object.values(
+    DRIVER_TASK_MARKERS
+  ).forEach(marker => {
+
+    if (
+      DRIVER_TASK_MAP.hasLayer(marker)
+    ) {
+      DRIVER_TASK_MAP.removeLayer(marker);
+    }
+
+  });
+
+  // -----------------------------------------------
+  // Remove collapse markers
+  // -----------------------------------------------
+
+  Object.values(
+    DRIVER_TASK_GROUPS
+  ).forEach(group => {
+
+    if (
+      group.collapseMarker &&
+      DRIVER_TASK_MAP.hasLayer(
+        group.collapseMarker
+      )
+    ) {
+
+      DRIVER_TASK_MAP.removeLayer(
+        group.collapseMarker
+      );
+
+    }
+
+  });
+
+  // -----------------------------------------------
+  // Reset marker state
+  // -----------------------------------------------
+
+  DRIVER_TASK_MARKERS = {};
+  DRIVER_TASK_GROUP_MARKERS = {};
+  DRIVER_TASK_GROUPS = {};
+
+  DRIVER_TASK_EXPANDED_GROUPS.clear();
+
+  // -----------------------------------------------
+  // Rebuild using CURRENT zoom
+  // -----------------------------------------------
+
+  const groups =
+    buildTaskGroups(tasks);
+
+  groups.forEach(group => {
+
+    DRIVER_TASK_GROUPS[
+      group.id
+    ] = group;
+
+    createTaskGroupMarker(
+      group
+    );
+
+  });
+
+  // -----------------------------------------------
+  // Recalculate screen-space separation
+  // -----------------------------------------------
+
+  setTimeout(() => {
+
+    layoutTaskGroupMarkers();
+
+    layoutExpandedTaskMarkers();
+
+  }, 30);
 }
 
 function renderDriverTaskMap() {
