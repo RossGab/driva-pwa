@@ -1002,7 +1002,7 @@ textarea{
   <div>
 
     <h1>
-      🚚 Driva Delivery Template Maker V.R.0.0.17.0
+      🚚 Driva Delivery Template Maker V.R.0.0.17.1
     </h1>
 
     <p>
@@ -3396,14 +3396,14 @@ function createDriverField(
 
 }
 
-
 /* =========================================================
-   CREATE CONDITIONAL FIELD
+   CREATE CONDITIONAL FIELD — LIVE PREVIEW
    ========================================================= */
 
 function createConditionalField(
   fieldKey,
-  field
+  field,
+  radioGroupName
 ){
 
   const wrap =
@@ -3411,20 +3411,87 @@ function createConditionalField(
       "div"
     );
 
-
   wrap.className =
     "conditional-field";
 
+
+  /* =======================================================
+     RADIO BUTTON CHILD
+     ======================================================= */
+
+  if(
+    field.type === "radio"
+  ){
+
+    const row =
+      document.createElement(
+        "label"
+      );
+
+    row.className =
+      "status-option";
+
+
+    const radio =
+      document.createElement(
+        "input"
+      );
+
+    radio.type =
+      "radio";
+
+    /*
+     * All Radio Button children under the
+     * same Radio Group share the same name.
+     *
+     * Therefore only ONE can be selected.
+     */
+
+    radio.name =
+      radioGroupName ||
+      "conditional_radio_preview";
+
+
+    const text =
+      document.createElement(
+        "span"
+      );
+
+    text.textContent =
+      field.label ||
+      fieldKey;
+
+
+    row.appendChild(
+      radio
+    );
+
+    row.appendChild(
+      text
+    );
+
+
+    wrap.appendChild(
+      row
+    );
+
+
+    return wrap;
+
+  }
+
+
+  /* =======================================================
+     NORMAL CONDITIONAL FIELD
+     ======================================================= */
 
   const label =
     document.createElement(
       "label"
     );
 
-
   label.className =
     "driver-label";
-
 
   label.textContent =
     field.label ||
@@ -3447,6 +3514,10 @@ function createConditionalField(
   );
 
 
+  /* =======================================================
+     TEXTAREA
+     ======================================================= */
+
   if(
     field.type === "textarea"
   ){
@@ -3456,30 +3527,32 @@ function createConditionalField(
         "textarea"
       );
 
-
     textarea.className =
       "driver-textarea";
-
 
     wrap.appendChild(
       textarea
     );
 
-  }else{
+  }
+
+
+  /* =======================================================
+     TEXT
+     ======================================================= */
+
+  else{
 
     const input =
       document.createElement(
         "input"
       );
 
-
     input.type =
       "text";
 
-
     input.className =
       "driver-input";
-
 
     wrap.appendChild(
       input
@@ -3665,7 +3738,8 @@ function createStatusRadioGroup(
           conditional.appendChild(
             createConditionalField(
               childKey,
-              child
+              child,
+              `conditional_${methodName}_${key}`
             )
           );
 
