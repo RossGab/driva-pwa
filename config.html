@@ -1002,7 +1002,7 @@ textarea{
   <div>
 
     <h1>
-      🚚 Driva Delivery Template Maker V.R.0.0.16
+      🚚 Driva Delivery Template Maker V.R.0.0.17.0
     </h1>
 
     <p>
@@ -2614,8 +2614,8 @@ function conditionalEditor(
 
         These fields appear when this radio
         option is selected in the driver app.
-
-        They are NOT additional radio buttons.
+        
+        They can be Text, Textarea, or Radio Button fields.
 
       </div>
 
@@ -2651,7 +2651,7 @@ function conditionalEditor(
                   >
 
 
-                 <select
+                  <select
                     data-opt-type="${esc(key)}"
                   >
                   
@@ -2676,6 +2676,18 @@ function conditionalEditor(
                       }
                     >
                       Textarea
+                    </option>
+                  
+                  
+                    <option
+                      value="radio"
+                      ${
+                        option.type === "radio"
+                          ? "selected"
+                          : ""
+                      }
+                    >
+                      Radio Button
                     </option>
                   
                   </select>
