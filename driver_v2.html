@@ -23,6 +23,45 @@ textarea { width:100%;min-height:60px;margin-top:6px;padding:6px;font-size:14px;
 .offline-indicator { font-weight:bold;color:#c0392b;margin-top:6px; }
 .uploading { font-weight:bold;color:#f39c12;margin-top:6px; }
 button { width:100%;padding:10px;margin-top:6px;border-radius:6px;border:none;font-size:14px; }
+
+/* =====================================================
+   🗺 MAP PREVIOUS LEVEL BUTTON
+   ===================================================== */
+
+.task-map-previous-control {
+  margin-top: 10px;
+  margin-right: 10px;
+}
+
+.task-map-previous-control button {
+  width: auto;
+  min-width: 105px;
+
+  margin: 0;
+  padding: 8px 12px;
+
+  background: #ffffff;
+  color: #222;
+
+  border: 1px solid #ccc;
+  border-radius: 7px;
+
+  box-shadow:
+    0 2px 6px rgba(0, 0, 0, 0.25);
+
+  font-size: 13px;
+  font-weight: 600;
+
+  cursor: pointer;
+}
+
+.task-map-previous-control button:active {
+  transform: translateY(1px);
+}
+
+.task-map-previous-control button:hover {
+  background: #f5f5f5;
+}
 .capture { background:#007bff;color:#fff; }
 .capture-label {
   display: block;
@@ -582,7 +621,7 @@ import {
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "V.R.0.0.15.6.9.6";
+const VERSION = "V.R.0.0.15.6.9.7";
 const BILLING_CACHE = {};
 window.BILLING_CACHE = BILLING_CACHE;
 const DRIVER_UI_CACHE = {};
@@ -608,6 +647,16 @@ let DRIVER_LOCATION_MARKER = null;
 let DRIVER_TASK_MAP_VISIBLE = false;
 let DRIVER_TASK_MAP_FOCUS_KEYS = null;
 let DRIVER_TASK_MAP_FOCUS_INDIVIDUAL = false;
+
+// =====================================================
+// 🗺 DRIVER TASK MAP — FOCUS HISTORY
+// =====================================================
+
+// Each entry represents one previous map focus level.
+let DRIVER_TASK_MAP_FOCUS_HISTORY = [];
+
+// Prevent duplicate history entries.
+let DRIVER_TASK_MAP_LAST_FOCUS_SIGNATURE = null;
   
 let LOAD_IN_PROGRESS = false;
 let RENDER_OFFSET = 0;
@@ -941,59 +990,12 @@ async function startQRScanner() {
   }
 }
 
-function showAllDriverTaskClusters() {
+function showAllDriverTaskClusters() {function showAllDriverTaskClusters() {
 
-  DRIVER_TASK_MAP_FOCUS_KEYS = null;
+  // This function is now the
+  // "Previous Level" button.
+  goToPreviousDriverTaskMapFocus();
 
-  // 🔥 Return to normal clustering mode
-  DRIVER_TASK_MAP_FOCUS_INDIVIDUAL = false;
-
-  clearFocusedTaskCalloutLines();
-
-  const btn =
-    document.getElementById(
-      "showAllTaskClustersBtn"
-    );
-
-  if (btn) {
-    btn.style.display = "none";
-  }
-
-  renderDriverTaskMap();
-
-  // Recalculate the overall task bounds
-  const tasks =
-    getDriverTaskMapTasks();
-
-  const bounds = [];
-
-  tasks.forEach(task => {
-
-    if (!isValidTaskGPS(task)) {
-      return;
-    }
-
-    bounds.push([
-      Number(task.LATITUDE),
-      Number(task.LONGITUDE)
-    ]);
-
-  });
-
-  if (bounds.length) {
-
-    DRIVER_TASK_MAP.fitBounds(
-      bounds,
-      {
-        padding: [30, 30],
-        maxZoom: 16,
-        animate: true
-      }
-    );
-
-  }
-
-  updateTaskMapFocusInfo();
 }
 
 document.getElementById(
@@ -1228,6 +1230,18 @@ function refreshUI() {
 function applyFiltersOnly() {
   const selectedDate = dateFilter.value;
   if (!selectedDate) return;
+
+  // =====================================================
+  // 🗺 RESET MAP FOCUS WHEN TASK FILTERS CHANGE
+  // =====================================================
+  
+  DRIVER_TASK_MAP_FOCUS_HISTORY = [];
+  DRIVER_TASK_MAP_LAST_FOCUS_SIGNATURE = null;
+  
+  DRIVER_TASK_MAP_FOCUS_KEYS = null;
+  DRIVER_TASK_MAP_FOCUS_INDIVIDUAL = false;
+  
+  updateDriverTaskMapPreviousButton();
 
   const dateKey = selectedDate.replace(/-/g, "");
 
@@ -3978,6 +3992,60 @@ function initDriverTaskMap() {
     12
   );
 
+  // =====================================================
+// ↩ PREVIOUS MAP LEVEL BUTTON
+// =====================================================
+
+const previousMapControl =
+  L.control({
+    position: "topright"
+  });
+
+previousMapControl.onAdd =
+  function () {
+
+    const container =
+      L.DomUtil.create(
+        "div",
+        "leaflet-control task-map-previous-control"
+      );
+
+    container.innerHTML = `
+      <button
+        id="showAllTaskClustersBtn"
+        type="button"
+        title="Return to previous map level"
+      >
+        ↩ Previous
+      </button>
+    `;
+
+    // Prevent the map from receiving
+    // clicks intended for the button.
+    L.DomEvent.disableClickPropagation(
+      container
+    );
+
+    L.DomEvent.disableScrollPropagation(
+      container
+    );
+
+    container
+      .querySelector("button")
+      .addEventListener(
+        "click",
+        showAllDriverTaskClusters
+      );
+
+    return container;
+  };
+
+previousMapControl.addTo(
+  DRIVER_TASK_MAP
+);
+
+updateDriverTaskMapPreviousButton();
+
   L.tileLayer(
     "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
     {
@@ -4774,7 +4842,38 @@ function focusDriverTaskCluster(cluster) {
   }
 
   // ==========================================
-  // ENTER FOCUS MODE
+  // 🧭 SAVE CURRENT LEVEL BEFORE GOING DEEPER
+  // ==========================================
+
+  const currentKeys =
+    DRIVER_TASK_MAP_FOCUS_KEYS
+      ? Array.from(DRIVER_TASK_MAP_FOCUS_KEYS)
+      : null;
+
+  const newSignature =
+    keys
+      .slice()
+      .sort()
+      .join("|");
+
+  // Only save a history level when we're actually
+  // moving into a different group.
+  if (
+    DRIVER_TASK_MAP_LAST_FOCUS_SIGNATURE !==
+    newSignature
+  ) {
+
+    DRIVER_TASK_MAP_FOCUS_HISTORY.push({
+      keys: currentKeys
+    });
+
+  }
+
+  DRIVER_TASK_MAP_LAST_FOCUS_SIGNATURE =
+    newSignature;
+
+  // ==========================================
+  // ENTER / DEEPEN FOCUS MODE
   // ==========================================
 
   DRIVER_TASK_MAP_FOCUS_KEYS =
@@ -4797,7 +4896,9 @@ function focusDriverTaskCluster(cluster) {
     {
       taskCount: keys.length,
       individualMode:
-        DRIVER_TASK_MAP_FOCUS_INDIVIDUAL
+        DRIVER_TASK_MAP_FOCUS_INDIVIDUAL,
+      historyDepth:
+        DRIVER_TASK_MAP_FOCUS_HISTORY.length
     }
   );
 
@@ -4841,6 +4942,167 @@ function focusDriverTaskCluster(cluster) {
   }
 
   updateTaskMapFocusInfo();
+
+  // ==========================================
+  // UPDATE PREVIOUS BUTTON
+  // ==========================================
+
+  updateDriverTaskMapPreviousButton();
+}
+
+// =====================================================
+// 🗺 DRIVER TASK MAP — GO TO PREVIOUS LEVEL
+// =====================================================
+
+function goToPreviousDriverTaskMapFocus() {
+
+  // Nothing to go back to
+  if (
+    !DRIVER_TASK_MAP_FOCUS_HISTORY.length
+  ) {
+    return;
+  }
+
+  const previous =
+    DRIVER_TASK_MAP_FOCUS_HISTORY.pop();
+
+  console.log(
+    "↩ Previous map level:",
+    previous
+  );
+
+  // ==========================================
+  // RESTORE PREVIOUS FOCUS
+  // ==========================================
+
+  if (
+    previous.keys &&
+    previous.keys.length
+  ) {
+
+    DRIVER_TASK_MAP_FOCUS_KEYS =
+      new Set(previous.keys);
+
+    DRIVER_TASK_MAP_FOCUS_INDIVIDUAL =
+      previous.keys.length <= 20;
+
+  } else {
+
+    // ========================================
+    // RETURN TO ALL TASKS
+    // ========================================
+
+    DRIVER_TASK_MAP_FOCUS_KEYS =
+      null;
+
+    DRIVER_TASK_MAP_FOCUS_INDIVIDUAL =
+      false;
+  }
+
+  // ==========================================
+  // UPDATE SIGNATURE
+  // ==========================================
+
+  DRIVER_TASK_MAP_LAST_FOCUS_SIGNATURE =
+    DRIVER_TASK_MAP_FOCUS_KEYS
+      ? Array.from(
+          DRIVER_TASK_MAP_FOCUS_KEYS
+        )
+          .sort()
+          .join("|")
+      : null;
+
+  // ==========================================
+  // RENDER
+  // ==========================================
+
+  renderDriverTaskMap();
+
+  // ==========================================
+  // FIT MAP TO CURRENT LEVEL
+  // ==========================================
+
+  const tasks =
+    getDriverTaskMapTasks();
+
+  const visibleTasks =
+    DRIVER_TASK_MAP_FOCUS_KEYS
+      ? tasks.filter(task =>
+          DRIVER_TASK_MAP_FOCUS_KEYS.has(
+            task._key
+          )
+        )
+      : tasks;
+
+  const bounds = [];
+
+  visibleTasks.forEach(task => {
+
+    if (!isValidTaskGPS(task)) {
+      return;
+    }
+
+    bounds.push([
+      Number(task.LATITUDE),
+      Number(task.LONGITUDE)
+    ]);
+
+  });
+
+  if (bounds.length) {
+
+    DRIVER_TASK_MAP.fitBounds(
+      bounds,
+      {
+        padding: [60, 60],
+        maxZoom:
+          DRIVER_TASK_MAP_FOCUS_KEYS
+            ? 18
+            : 16,
+        animate: true
+      }
+    );
+
+  }
+
+  updateTaskMapFocusInfo();
+
+  updateDriverTaskMapPreviousButton();
+}
+
+// =====================================================
+// 🗺 DRIVER TASK MAP — PREVIOUS BUTTON UI
+// =====================================================
+
+function updateDriverTaskMapPreviousButton() {
+
+  const btn =
+    document.getElementById(
+      "showAllTaskClustersBtn"
+    );
+
+  if (!btn) {
+    return;
+  }
+
+  const hasHistory =
+    DRIVER_TASK_MAP_FOCUS_HISTORY.length > 0;
+
+  if (hasHistory) {
+
+    btn.style.display = "block";
+
+    btn.innerHTML =
+      "↩ Previous";
+
+    btn.title =
+      "Return to the previous map level";
+
+  } else {
+
+    btn.style.display = "none";
+
+  }
 }
 
 function renderDriverTaskMap() {
