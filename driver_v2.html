@@ -582,7 +582,7 @@ import {
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "V.R.0.0.15.6.9.4";
+const VERSION = "V.R.0.0.15.6.9.5";
 const BILLING_CACHE = {};
 window.BILLING_CACHE = BILLING_CACHE;
 const DRIVER_UI_CACHE = {};
@@ -5379,28 +5379,6 @@ function closeDriverTaskMap() {
   DRIVER_TASK_MAP_VISIBLE = false;
 
   clearFocusedTaskCalloutLines();
-
-  document.getElementById(
-    "driverTaskMapPanel"
-  ).style.display = "none";
-
-  document.getElementById(
-    "openTaskMapBtn"
-  ).style.display = "block";
-
-  document.getElementById(
-    "jobTypeFilter"
-  ).style.display = "block";
-
-  document.getElementById(
-    "searchBox"
-  ).parentElement.style.display =
-    "flex";
-
-  document.getElementById(
-    "taskList"
-  ).style.display = "block";
-}
 
   document.getElementById(
     "driverTaskMapPanel"
