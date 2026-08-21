@@ -621,7 +621,7 @@ import {
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "V.R.0.0.15.6.9.8";
+const VERSION = "V.R.0.0.15.6.9.9";
 const BILLING_CACHE = {};
 window.BILLING_CACHE = BILLING_CACHE;
 const DRIVER_UI_CACHE = {};
@@ -2525,6 +2525,26 @@ cameraInput.onchange = async e => {
     dateKey: dateFilter.value.replace(/-/g, ""),
     deliveryData: latestData // 🔥 IMPORTANT
   }]);
+
+   // ==========================================
+// 🗺 UPDATE IN-MEMORY TASK STATUS
+// ==========================================
+
+const mapTask =
+  CURRENT_RENDER_LIST.find(
+    t => t._key === taskKey
+  );
+
+if (mapTask) {
+
+  mapTask.status =
+    "LOCAL_COMPLETED";
+
+}
+
+updateTaskMapMarkerAfterLocalSubmit(
+  taskKey
+);
     
   const cached = await getTasksFromIndexedDB();
   UPLOAD_QUEUE_COUNT = cached.filter(t =>
@@ -2575,6 +2595,58 @@ cameraInput.onchange = async e => {
   
   return;
   }
+
+// =====================================================
+// 🗺 UPDATE ONE TASK MARKER AFTER LOCAL SUBMISSION
+// =====================================================
+
+function updateTaskMapMarkerAfterLocalSubmit(taskKey) {
+
+  if (
+    !DRIVER_TASK_MAP ||
+    !DRIVER_TASK_MAP_VISIBLE
+  ) {
+    return;
+  }
+
+  const marker =
+    DRIVER_TASK_MARKERS[
+      taskKey
+    ];
+
+  if (!marker) {
+    console.log(
+      "🗺 Marker not currently visible:",
+      taskKey
+    );
+    return;
+  }
+
+  // ==========================================
+  // Change the existing marker to GREEN
+  // ==========================================
+
+  const task =
+    CURRENT_RENDER_LIST.find(
+      t => t._key === taskKey
+    );
+
+  if (!task) {
+    return;
+  }
+
+  marker.setIcon(
+    createExpandedTaskMapIcon(
+      task.SEQUENCE,
+      "SYNC_PENDING"
+    )
+  );
+
+  console.log(
+    "🟢 Map marker updated locally:",
+    taskKey
+  );
+}
 
 /* ===== CAMERA ===== */
 
