@@ -582,7 +582,7 @@ import {
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "V.R.0.0.15.6.9.3";
+const VERSION = "V.R.0.0.15.6.9.4";
 const BILLING_CACHE = {};
 window.BILLING_CACHE = BILLING_CACHE;
 const DRIVER_UI_CACHE = {};
@@ -597,6 +597,8 @@ let LAST_KNOWN_GPS = null;
   // =====================================================
 // 🗺 DRIVER TASK MAP
 // =====================================================
+
+
 
 let DRIVER_TASK_MAP = null;
 let DRIVER_TASK_MARKERS = {};
@@ -615,6 +617,11 @@ let LAST_RENDER_SIGNATURE = "";
 let SYNC_RUNNING = false;
 
 let DRIVER_TASK_MAP_INITIALIZED_VIEW = false;
+// =====================================================
+// 💾 SAVED DRIVER TASK MAP STATE
+// =====================================================
+
+let DRIVER_TASK_MAP_SAVED_STATE = null;
 
 function setTaskWorkLocked(locked) {
 
@@ -5199,16 +5206,94 @@ window.openTaskFromMap =
 
     }, 100);
   };
+// =====================================================
+// 💾 SAVE CURRENT DRIVER TASK MAP STATE
+// =====================================================
 
+function saveDriverTaskMapState() {
+
+  if (!DRIVER_TASK_MAP) {
+    return;
+  }
+
+  const center =
+    DRIVER_TASK_MAP.getCenter();
+
+  DRIVER_TASK_MAP_SAVED_STATE = {
+
+    lat:
+      center.lat,
+
+    lng:
+      center.lng,
+
+    zoom:
+      DRIVER_TASK_MAP.getZoom(),
+
+    focusKeys:
+      DRIVER_TASK_MAP_FOCUS_KEYS
+        ? Array.from(
+            DRIVER_TASK_MAP_FOCUS_KEYS
+          )
+        : null,
+
+    focusIndividual:
+      DRIVER_TASK_MAP_FOCUS_INDIVIDUAL === true
+  };
+
+  console.log(
+    "💾 Driver map state saved:",
+    DRIVER_TASK_MAP_SAVED_STATE
+  );
+}
+
+// =====================================================
+// ♻️ RESTORE DRIVER TASK MAP STATE
+// =====================================================
+
+function restoreDriverTaskMapState() {
+
+  if (
+    !DRIVER_TASK_MAP ||
+    !DRIVER_TASK_MAP_SAVED_STATE
+  ) {
+    return false;
+  }
+
+  const state =
+    DRIVER_TASK_MAP_SAVED_STATE;
+
+  // Restore focused task keys
+  DRIVER_TASK_MAP_FOCUS_KEYS =
+    state.focusKeys
+      ? new Set(state.focusKeys)
+      : null;
+
+  // Restore individual mode
+  DRIVER_TASK_MAP_FOCUS_INDIVIDUAL =
+    state.focusIndividual === true;
+
+  // Restore center + zoom
+  DRIVER_TASK_MAP.setView(
+    [
+      state.lat,
+      state.lng
+    ],
+    state.zoom,
+    {
+      animate: false
+    }
+  );
+
+  console.log(
+    "♻️ Driver map state restored:",
+    state
+  );
+
+  return true;
+}
 
 function openDriverTaskMap() {
-
-  DRIVER_TASK_MAP_FOCUS_KEYS = null;
-
-  // 🔥 Normal map mode
-  DRIVER_TASK_MAP_FOCUS_INDIVIDUAL = false;
-
-  clearFocusedTaskCalloutLines();
 
   if (SYNC_RUNNING) {
 
@@ -5249,7 +5334,35 @@ function openDriverTaskMap() {
 
     DRIVER_TASK_MAP.invalidateSize();
 
+    // ==========================================
+    // 🗺 RENDER MAP
+    // ==========================================
+
     renderDriverTaskMap();
+
+    // ==========================================
+    // ♻️ RESTORE LAST MAP STATE
+    // ==========================================
+
+    if (
+      DRIVER_TASK_MAP_SAVED_STATE
+    ) {
+
+      restoreDriverTaskMapState();
+
+      requestAnimationFrame(() => {
+
+        if (
+          DRIVER_TASK_MAP_FOCUS_INDIVIDUAL
+        ) {
+
+          positionFocusedTaskMarkers();
+
+        }
+
+      });
+
+    }
 
   }, 100);
 }
@@ -5257,8 +5370,37 @@ function openDriverTaskMap() {
 
 function closeDriverTaskMap() {
 
+  // ==========================================
+  // 💾 SAVE MAP STATE BEFORE HIDING
+  // ==========================================
+
+  saveDriverTaskMapState();
+
   DRIVER_TASK_MAP_VISIBLE = false;
+
   clearFocusedTaskCalloutLines();
+
+  document.getElementById(
+    "driverTaskMapPanel"
+  ).style.display = "none";
+
+  document.getElementById(
+    "openTaskMapBtn"
+  ).style.display = "block";
+
+  document.getElementById(
+    "jobTypeFilter"
+  ).style.display = "block";
+
+  document.getElementById(
+    "searchBox"
+  ).parentElement.style.display =
+    "flex";
+
+  document.getElementById(
+    "taskList"
+  ).style.display = "block";
+}
 
   document.getElementById(
     "driverTaskMapPanel"
