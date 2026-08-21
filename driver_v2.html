@@ -582,7 +582,7 @@ import {
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "V.R.0.0.15.6.9.5";
+const VERSION = "V.R.0.0.15.6.9.6";
 const BILLING_CACHE = {};
 window.BILLING_CACHE = BILLING_CACHE;
 const DRIVER_UI_CACHE = {};
@@ -5310,7 +5310,18 @@ function openDriverTaskMap() {
   document.getElementById(
     "driverTaskMapPanel"
   ).style.display = "block";
-
+  
+  // =====================================================
+  // 📜 SCROLL TO MAP
+  // =====================================================
+  
+  document.getElementById(
+    "driverTaskMapPanel"
+  ).scrollIntoView({
+    behavior: "smooth",
+    block: "start"
+  });
+  
   document.getElementById(
     "openTaskMapBtn"
   ).style.display = "none";
