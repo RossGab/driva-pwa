@@ -621,7 +621,7 @@ import {
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "V.R.0.0.15.6.9.9";
+const VERSION = "V.R.0.0.15.6.9.10";
 const BILLING_CACHE = {};
 window.BILLING_CACHE = BILLING_CACHE;
 const DRIVER_UI_CACHE = {};
@@ -1231,17 +1231,7 @@ function applyFiltersOnly() {
   const selectedDate = dateFilter.value;
   if (!selectedDate) return;
 
-  // =====================================================
-  // 🗺 RESET MAP FOCUS WHEN TASK FILTERS CHANGE
-  // =====================================================
   
-  DRIVER_TASK_MAP_FOCUS_HISTORY = [];
-  DRIVER_TASK_MAP_LAST_FOCUS_SIGNATURE = null;
-  
-  DRIVER_TASK_MAP_FOCUS_KEYS = null;
-  DRIVER_TASK_MAP_FOCUS_INDIVIDUAL = false;
-  
-  updateDriverTaskMapPreviousButton();
 
   const dateKey = selectedDate.replace(/-/g, "");
 
@@ -5674,42 +5664,45 @@ function openDriverTaskMap() {
   ).style.display = "none";
 
   initDriverTaskMap();
+   setTimeout(() => {
 
-  setTimeout(() => {
+  DRIVER_TASK_MAP.invalidateSize();
 
-    DRIVER_TASK_MAP.invalidateSize();
+  // ==========================================
+  // ♻️ RESTORE LAST MAP STATE FIRST
+  // ==========================================
 
-    // ==========================================
-    // 🗺 RENDER MAP
-    // ==========================================
+  if (
+    DRIVER_TASK_MAP_SAVED_STATE
+  ) {
 
-    renderDriverTaskMap();
+    restoreDriverTaskMapState();
 
-    // ==========================================
-    // ♻️ RESTORE LAST MAP STATE
-    // ==========================================
+  }
 
-    if (
-      DRIVER_TASK_MAP_SAVED_STATE
-    ) {
+  // ==========================================
+  // 🗺 RENDER USING RESTORED FOCUS
+  // ==========================================
 
-      restoreDriverTaskMapState();
+  renderDriverTaskMap();
 
-      requestAnimationFrame(() => {
+  // ==========================================
+  // 🧭 POSITION FOCUSED TASKS
+  // ==========================================
 
-        if (
-          DRIVER_TASK_MAP_FOCUS_INDIVIDUAL
-        ) {
+  if (
+    DRIVER_TASK_MAP_FOCUS_INDIVIDUAL
+  ) {
 
-          positionFocusedTaskMarkers();
+    requestAnimationFrame(() => {
 
-        }
+      positionFocusedTaskMarkers();
 
-      });
+    });
 
-    }
+  }
 
-  }, 100);
+}, 100);
 }
 
 
