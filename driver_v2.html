@@ -621,7 +621,7 @@ import {
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "V.R.0.0.16.1";
+const VERSION = "V.R.0.0.16.2";
 const BILLING_CACHE = {};
 window.BILLING_CACHE = BILLING_CACHE;
 const DRIVER_UI_CACHE = {};
@@ -1804,13 +1804,40 @@ for (let taskIndex = 0; taskIndex < completed.length; taskIndex++) {
         continue;
       }
     
-      // ✅ DELETE ONLY IF VERIFIED
+      // =====================================================
+      // ✅ DELETE LOCAL DATA ONLY AFTER FIRESTORE VERIFIED
+      // =====================================================
+      
+      // 1️⃣ Delete IndexedDB photos
       for (const p of related) {
         await deletePhotoFromDB(p.id);
       }
-    
+      
+      // 2️⃣ Delete IndexedDB task
       await deleteTaskFromIndexedDB(task._key);
-
+      
+      // 3️⃣ Delete LOCAL_COMPLETED JSON backup
+      const backupDeleted =
+        await deleteLocalCompletedBackup(
+          task._key
+        );
+      
+      if (!backupDeleted) {
+      
+        console.warn(
+          "⚠️ Task synchronized successfully, " +
+          "but LOCAL_COMPLETED JSON backup could not be deleted:",
+          task._key
+        );
+      
+      } else {
+      
+        console.log(
+          "✅ LOCAL_COMPLETED JSON backup removed:",
+          task._key
+        );
+      }
+      
       successful++;
 
       updateSyncProgress({
@@ -6920,6 +6947,79 @@ async function createLocalCompletedBackup(taskKey) {
 
     console.error(
       "❌ LOCAL_COMPLETED JSON backup failed:",
+      taskKey,
+      err
+    );
+
+    return false;
+  }
+}
+
+// =====================================================
+// 🗑 DELETE LOCAL_COMPLETED JSON BACKUP
+// =====================================================
+
+async function deleteLocalCompletedBackup(taskKey) {
+
+  // No backup folder configured
+  if (
+    !LOCAL_BACKUP_READY ||
+    !LOCAL_BACKUP_DIR
+  ) {
+    console.warn(
+      "⚠️ Local backup folder is not configured:",
+      taskKey
+    );
+
+    return false;
+  }
+
+  try {
+
+    const safeTaskKey =
+      String(taskKey)
+        .replace(
+          /[^a-zA-Z0-9_-]/g,
+          "_"
+        );
+
+    const filename =
+      `LOCAL_COMPLETED_${safeTaskKey}.json`;
+
+    // Check if file exists first
+    try {
+
+      await LOCAL_BACKUP_DIR.getFileHandle(
+        filename
+      );
+
+    } catch (err) {
+
+      // File does not exist
+      console.log(
+        "ℹ️ No LOCAL_COMPLETED JSON backup found:",
+        filename
+      );
+
+      return true;
+    }
+
+    // Delete the backup file
+    await LOCAL_BACKUP_DIR.removeEntry(
+      filename
+    );
+
+    console.log(
+      "🗑 LOCAL_COMPLETED JSON backup deleted:",
+      filename
+    );
+
+    return true;
+
+  } catch (err) {
+
+    console.error(
+      "❌ Failed to delete LOCAL_COMPLETED JSON backup:",
       taskKey,
       err
     );
