@@ -621,7 +621,7 @@ import {
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "V.R.0.0.16.1.2";
+const VERSION = "V.R.0.0.16.1.3";
 const BILLING_CACHE = {};
 window.BILLING_CACHE = BILLING_CACHE;
 const DRIVER_UI_CACHE = {};
@@ -1742,11 +1742,20 @@ setTaskWorkLocked(false);
 };
 
 // 🔒 SAFE WRAPPER (DO NOT MODIFY ORIGINAL LOGIC)
-const originalSyncHandler =
-  document.getElementById("syncBtn").onclick;
+// =====================================================
+// 🔒 SYNC ACTION WRAPPER
+// =====================================================
 
-document.getElementById("syncBtn").onclick =
-  async () => {
+const syncButton =
+  document.getElementById("syncBtn");
+
+// Save the ORIGINAL Sync handler
+const originalSyncHandler =
+  syncButton.onclick;
+
+// Replace button handler
+syncButton.onclick =
+  async function (event) {
 
     const choice = prompt(
 `Choose action:
@@ -1757,11 +1766,13 @@ document.getElementById("syncBtn").onclick =
 Enter 1 or 2`
     );
 
-    if (!choice) return;
+    if (!choice) {
+      return;
+    }
 
-    // ==========================================
-    // 2 - EXPORT COMPLETED TASKS
-    // ==========================================
+    // =================================================
+    // OPTION 2 — EXPORT
+    // =================================================
 
     if (choice === "2") {
 
@@ -1770,63 +1781,47 @@ Enter 1 or 2`
       return;
     }
 
-    // ==========================================
-    // 1 - UPLOAD NOW
-    // ==========================================
+    // =================================================
+    // OPTION 1 — ORIGINAL SYNC
+    // =================================================
 
     if (choice === "1") {
 
-      // ----------------------------------------
-      // Check internet first
-      // ----------------------------------------
+      console.log(
+        "🔵 Option 1 selected — starting original Sync"
+      );
 
-      if (!navigator.onLine) {
+      if (
+        typeof originalSyncHandler !==
+        "function"
+      ) {
+
+        console.error(
+          "❌ Original Sync handler is missing:",
+          originalSyncHandler
+        );
 
         alert(
-          "📴 You are offline.\n\n" +
-          "Please connect to the internet before syncing."
+          "❌ Unable to start Sync.\n\n" +
+          "The original Sync handler was not found."
         );
 
         return;
       }
 
-      // ----------------------------------------
-      // Make sure backup folder is available
-      // ----------------------------------------
-
-      if (
-        !LOCAL_BACKUP_READY ||
-        !LOCAL_BACKUP_DIR
-      ) {
-
-        let connected =
-          await reconnectLocalBackupFolder();
-
-        if (!connected) {
-
-          connected =
-            await selectLocalBackupFolder();
-        }
-
-        if (!connected) {
-
-          alert(
-            "⚠️ Sync cancelled.\n\n" +
-            "Please select your Downloads folder."
-          );
-
-          return;
-        }
-      }
-
-      // ----------------------------------------
-      // Run the existing sync logic
-      // ----------------------------------------
-
-      await originalSyncHandler();
+      // Call the original handler
+      // with the SAME button as its context
+      await originalSyncHandler.call(
+        syncButton,
+        event
+      );
 
       return;
     }
+
+    // =================================================
+    // INVALID
+    // =================================================
 
     alert(
       "⚠️ Invalid selection.\n\n" +
