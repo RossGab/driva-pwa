@@ -648,7 +648,7 @@ import {
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "V.R.0.0.16.5";
+const VERSION = "V.R.0.0.16.6";
 const BILLING_CACHE = {};
 window.BILLING_CACHE = BILLING_CACHE;
 const DRIVER_UI_CACHE = {};
@@ -3173,22 +3173,20 @@ cameraInput.onchange = async e => {
     deliveryData: latestData // 🔥 IMPORTANT
   }]);
 
-   // =====================================================
-// 💾 CREATE LOCAL_COMPLETED JSON BACKUP
+
+
 // =====================================================
+// 💾 LOCAL_COMPLETED BACKUP
+// =====================================================
+//
+// Physical JSON backup is created during SYNC.
+// Submit must remain fully offline-safe.
+//
 
-const backupCreated =
-  await createLocalCompletedBackup(taskKey);
-
-if (!backupCreated) {
-
-  console.warn(
-    "⚠️ LOCAL_COMPLETED saved to IndexedDB, " +
-    "but JSON backup was not created:",
-    taskKey
-  );
-
-}
+console.log(
+  "💾 LOCAL_COMPLETED queued for JSON backup during Sync:",
+  taskKey
+);
 
    // ==========================================
 // 🗺 UPDATE IN-MEMORY TASK STATUS
@@ -7229,23 +7227,37 @@ async function exportTasksToFile() {
 
 async function createLocalCompletedBackup(taskKey) {
 
-  // No backup folder configured
-  if (
-    !LOCAL_BACKUP_READY ||
-    !LOCAL_BACKUP_DIR
-  ) {
-    console.warn(
-      "⚠️ Local backup folder is not configured:",
-      taskKey
-    );
-
-    return false;
-  }
-
   try {
 
     // ==========================================
-    // 1. Get the COMPLETE task from IndexedDB
+    // 1. Make sure backup folder is available
+    // ==========================================
+
+    if (
+      !LOCAL_BACKUP_READY ||
+      !LOCAL_BACKUP_DIR
+    ) {
+
+      console.log(
+        "🔄 LOCAL_COMPLETED backup folder not ready."
+      );
+
+      const restored =
+        await restoreLocalBackupFolder();
+
+      if (!restored) {
+
+        console.warn(
+          "⚠️ LOCAL_COMPLETED JSON backup cannot be created:",
+          taskKey
+        );
+
+        return false;
+      }
+    }
+
+    // ==========================================
+    // 2. Get COMPLETE task from IndexedDB
     // ==========================================
 
     const tasks =
@@ -7266,7 +7278,10 @@ async function createLocalCompletedBackup(taskKey) {
       return false;
     }
 
-    // Safety check
+    // ==========================================
+    // 3. Safety check
+    // ==========================================
+
     if (
       task.status !== "LOCAL_COMPLETED"
     ) {
@@ -7281,7 +7296,7 @@ async function createLocalCompletedBackup(taskKey) {
     }
 
     // ==========================================
-    // 2. Get ALL photos from IndexedDB
+    // 4. Get photos for this task
     // ==========================================
 
     const allPhotos =
@@ -7293,7 +7308,7 @@ async function createLocalCompletedBackup(taskKey) {
       );
 
     // ==========================================
-    // 3. Convert photos to Base64
+    // 5. Convert photos to Base64
     // ==========================================
 
     const backupPhotos = [];
@@ -7301,10 +7316,12 @@ async function createLocalCompletedBackup(taskKey) {
     for (const p of relatedPhotos) {
 
       if (!p.blob) {
+
         console.warn(
           "⚠️ Photo has no blob:",
           p.id
         );
+
         continue;
       }
 
@@ -7335,7 +7352,7 @@ async function createLocalCompletedBackup(taskKey) {
     }
 
     // ==========================================
-    // 4. Build backup JSON
+    // 6. Build backup JSON
     // ==========================================
 
     const backupData = {
@@ -7364,18 +7381,7 @@ async function createLocalCompletedBackup(taskKey) {
     };
 
     // ==========================================
-    // 5. Convert to JSON
-    // ==========================================
-
-    const json =
-      JSON.stringify(
-        backupData,
-        null,
-        2
-      );
-
-    // ==========================================
-    // 6. Create task-specific file
+    // 7. Create safe filename
     // ==========================================
 
     const safeTaskKey =
@@ -7388,6 +7394,10 @@ async function createLocalCompletedBackup(taskKey) {
     const filename =
       `LOCAL_COMPLETED_${safeTaskKey}.json`;
 
+    // ==========================================
+    // 8. Create / overwrite JSON file
+    // ==========================================
+
     const fileHandle =
       await LOCAL_BACKUP_DIR.getFileHandle(
         filename,
@@ -7396,25 +7406,41 @@ async function createLocalCompletedBackup(taskKey) {
         }
       );
 
-    // ==========================================
-    // 7. Write JSON file
-    // ==========================================
-
     const writable =
       await fileHandle.createWritable();
 
-    await writable.write(json);
+    await writable.write(
+      JSON.stringify(
+        backupData,
+        null,
+        2
+      )
+    );
 
     await writable.close();
+
+    // ==========================================
+    // 9. Verify file exists
+    // ==========================================
+
+    const verifyHandle =
+      await LOCAL_BACKUP_DIR.getFileHandle(
+        filename
+      );
+
+    if (!verifyHandle) {
+
+      console.error(
+        "❌ Backup verification failed:",
+        filename
+      );
+
+      return false;
+    }
 
     console.log(
       "💾 LOCAL_COMPLETED JSON backup created:",
       filename
-    );
-
-    console.log(
-      "   Task:",
-      taskKey
     );
 
     console.log(
@@ -7427,7 +7453,7 @@ async function createLocalCompletedBackup(taskKey) {
   } catch (err) {
 
     console.error(
-      "❌ LOCAL_COMPLETED JSON backup failed:",
+      "❌ LOCAL_COMPLETED JSON backup creation failed:",
       taskKey,
       err
     );
