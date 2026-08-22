@@ -621,7 +621,7 @@ import {
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "V.R.0.0.16.2";
+const VERSION = "V.R.0.0.16.3";
 const BILLING_CACHE = {};
 window.BILLING_CACHE = BILLING_CACHE;
 const DRIVER_UI_CACHE = {};
@@ -638,7 +638,14 @@ let LOCAL_BACKUP_READY = false;
 const LOCAL_BACKUP_HANDLE_KEY =
   "localCompletedBackupFolder";
 
-   
+const LOCAL_BACKUP_DB_NAME =
+  "DrivaLocalBackupDB";
+
+const LOCAL_BACKUP_DB_VERSION = 1;
+
+const LOCAL_BACKUP_STORE =
+  "settings";
+
 const PHOTO_BUFFER = {};
 const submitLock = {};
 const FORM_CACHE_KEY = "driverFormCache";
@@ -1302,6 +1309,259 @@ searchBox.addEventListener("input", e => {
 });
 
 // =====================================================
+// 💾 PERSIST LOCAL BACKUP FOLDER HANDLE
+// =====================================================
+
+function openLocalBackupSettingsDB() {
+
+  return new Promise((resolve, reject) => {
+
+    const request =
+      indexedDB.open(
+        LOCAL_BACKUP_DB_NAME,
+        LOCAL_BACKUP_DB_VERSION
+      );
+
+    request.onupgradeneeded = () => {
+
+      const db =
+        request.result;
+
+      if (
+        !db.objectStoreNames.contains(
+          LOCAL_BACKUP_STORE
+        )
+      ) {
+
+        db.createObjectStore(
+          LOCAL_BACKUP_STORE
+        );
+      }
+    };
+
+    request.onsuccess = () => {
+      resolve(request.result);
+    };
+
+    request.onerror = () => {
+      reject(request.error);
+    };
+  });
+}
+
+
+// =====================================================
+// SAVE DIRECTORY HANDLE
+// =====================================================
+
+async function saveLocalBackupFolderHandle(handle) {
+
+  const db =
+    await openLocalBackupSettingsDB();
+
+  return new Promise((resolve, reject) => {
+
+    const tx =
+      db.transaction(
+        LOCAL_BACKUP_STORE,
+        "readwrite"
+      );
+
+    const store =
+      tx.objectStore(
+        LOCAL_BACKUP_STORE
+      );
+
+    store.put(
+      handle,
+      LOCAL_BACKUP_HANDLE_KEY
+    );
+
+    tx.oncomplete = () => {
+
+      db.close();
+
+      console.log(
+        "💾 Backup folder handle saved."
+      );
+
+      resolve(true);
+    };
+
+    tx.onerror = () => {
+
+      db.close();
+
+      reject(tx.error);
+    };
+  });
+}
+
+
+// =====================================================
+// LOAD DIRECTORY HANDLE
+// =====================================================
+
+async function loadLocalBackupFolderHandle() {
+
+  try {
+
+    const db =
+      await openLocalBackupSettingsDB();
+
+    return await new Promise(
+      (resolve, reject) => {
+
+        const tx =
+          db.transaction(
+            LOCAL_BACKUP_STORE,
+            "readonly"
+          );
+
+        const store =
+          tx.objectStore(
+            LOCAL_BACKUP_STORE
+          );
+
+        const request =
+          store.get(
+            LOCAL_BACKUP_HANDLE_KEY
+          );
+
+        request.onsuccess = () => {
+
+          const handle =
+            request.result || null;
+
+          db.close();
+
+          resolve(handle);
+        };
+
+        request.onerror = () => {
+
+          db.close();
+
+          reject(request.error);
+        };
+      }
+    );
+
+  } catch (err) {
+
+    console.warn(
+      "⚠️ Could not load saved backup folder:",
+      err
+    );
+
+    return null;
+  }
+}
+
+
+// =====================================================
+// RESTORE BACKUP FOLDER AFTER APP START
+// =====================================================
+
+async function restoreLocalBackupFolder() {
+
+  try {
+
+    const dir =
+      await loadLocalBackupFolderHandle();
+
+    if (!dir) {
+
+      console.log(
+        "💾 No saved LOCAL_COMPLETED backup folder."
+      );
+
+      return false;
+    }
+
+    // Check whether the browser still grants access
+    let permission =
+      await dir.queryPermission({
+        mode: "readwrite"
+      });
+
+    // Permission may need to be requested again
+    if (permission !== "granted") {
+
+      permission =
+        await dir.requestPermission({
+          mode: "readwrite"
+        });
+    }
+
+    if (permission !== "granted") {
+
+      console.warn(
+        "⚠️ Backup folder permission is not currently granted."
+      );
+
+      LOCAL_BACKUP_DIR = null;
+      LOCAL_BACKUP_READY = false;
+
+      return false;
+    }
+
+    LOCAL_BACKUP_DIR = dir;
+    LOCAL_BACKUP_READY = true;
+
+    console.log(
+      "✅ LOCAL_COMPLETED backup folder restored:",
+      dir.name
+    );
+
+    return true;
+
+  } catch (err) {
+
+    console.warn(
+      "⚠️ Failed to restore backup folder:",
+      err
+    );
+
+    LOCAL_BACKUP_DIR = null;
+    LOCAL_BACKUP_READY = false;
+
+    return false;
+  }
+}
+
+// =====================================================
+// 🚀 RESTORE LOCAL BACKUP FOLDER ON APP START
+// =====================================================
+
+restoreLocalBackupFolder()
+  .then(ready => {
+
+    if (ready) {
+
+      console.log(
+        "💾 LOCAL_COMPLETED backup system ready."
+      );
+
+    } else {
+
+      console.log(
+        "💾 LOCAL_COMPLETED backup folder requires setup."
+      );
+
+    }
+
+  })
+  .catch(err => {
+
+    console.warn(
+      "⚠️ Backup folder startup restore failed:",
+      err
+    );
+
+  });
+
+// =====================================================
 // 💾 LOCAL_COMPLETED BACKUP FOLDER
 // =====================================================
 
@@ -1339,7 +1599,10 @@ async function selectLocalBackupFolder() {
     }
 
     LOCAL_BACKUP_DIR = dir;
-    LOCAL_BACKUP_READY = true;
+   LOCAL_BACKUP_READY = true;
+   
+   // 💾 Persist the folder handle
+   await saveLocalBackupFolderHandle(dir);
 
     console.log(
       "💾 LOCAL_COMPLETED backup folder ready:",
