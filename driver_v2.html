@@ -621,7 +621,7 @@ import {
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "V.R.0.0.16.1.3.1";
+const VERSION = "V.R.0.0.16.1.3.2";
 const BILLING_CACHE = {};
 window.BILLING_CACHE = BILLING_CACHE;
 const DRIVER_UI_CACHE = {};
@@ -1747,9 +1747,12 @@ setTaskWorkLocked(false);
 // =====================================================
 
 const syncButton = document.getElementById("syncBtn");
+
+// Save the ORIGINAL Sync handler
 const originalSyncHandler = syncButton.onclick;
 
-syncButton.onclick = async function () {
+// Replace button handler
+syncButton.onclick = async function (event) {
 
   const choice = prompt(
 `Choose action:
@@ -1760,48 +1763,63 @@ syncButton.onclick = async function () {
 Enter 1 or 2`
   );
 
-    if (!choice) {
-      return;
-    }
-
-    // =================================================
-    // OPTION 2 — EXPORT
-    // =================================================
-
-    if (choice === "2") {
-
-      await exportTasksToFile();
-
-      return;
-    }
-
-    // =================================================
-    // OPTION 1 — ORIGINAL SYNC
-    // =================================================
-
-    if (choice === "1") {
-
-      console.log(
-        "🔵 Option 1 selected — starting original Sync"
-      );
-
-       if (choice === "1") {
-    await originalSyncHandler();
+  if (!choice) {
     return;
   }
 
-  alert("Invalid choice.");
-};
+  // =================================================
+  // OPTION 2 — EXPORT
+  // =================================================
 
-    // =================================================
-    // INVALID
-    // =================================================
+  if (choice === "2") {
 
-    alert(
-      "⚠️ Invalid selection.\n\n" +
-      "Please enter 1 or 2."
+    await exportTasksToFile();
+
+    return;
+  }
+
+  // =================================================
+  // OPTION 1 — ORIGINAL SYNC
+  // =================================================
+
+  if (choice === "1") {
+
+    console.log(
+      "🔵 Option 1 selected — starting original Sync"
     );
-  };
+
+    if (typeof originalSyncHandler !== "function") {
+
+      console.error(
+        "❌ Original Sync handler is missing:",
+        originalSyncHandler
+      );
+
+      alert(
+        "❌ Unable to start Sync.\n\n" +
+        "The original Sync handler was not found."
+      );
+
+      return;
+    }
+
+    await originalSyncHandler.call(
+      syncButton,
+      event
+    );
+
+    return;
+  }
+
+  // =================================================
+  // INVALID
+  // =================================================
+
+  alert(
+    "⚠️ Invalid selection.\n\n" +
+    "Please enter 1 or 2."
+  );
+};
   
 function toggleJobTypeFilter(show) {
   const box = document.getElementById("jobTypeFilter");
