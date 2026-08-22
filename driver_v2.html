@@ -331,12 +331,6 @@ img { width:100%;margin-top:8px;border-radius:6px; }
   ">
   🔄 Sync Completed Tasks
 </button>
-<button
-  id="selectBackupFolderBtn"
-  type="button"
->
-  💾 Set Backup Folder
-</button>
 <div id="offlineBanner">⚠ Offline</div>
   <div id="storageBanner"
   style="
@@ -627,7 +621,7 @@ import {
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "V.R.0.0.16";
+const VERSION = "V.R.0.0.15.6.9.10";
 const BILLING_CACHE = {};
 window.BILLING_CACHE = BILLING_CACHE;
 const DRIVER_UI_CACHE = {};
@@ -1380,17 +1374,42 @@ async function loadDriverUI(jobType) {
   return deliveryMethods;
 }
 
-const backupFolderBtn =
-  document.getElementById(
-    "selectBackupFolderBtn"
-  );
+// async function loadDriverUI(jobType) {
+//   // 1️⃣ Memory cache
+//   if (DRIVER_UI_CACHE[jobType]) return DRIVER_UI_CACHE[jobType];
 
-if (backupFolderBtn) {
+//   // 2️⃣ LocalStorage cache (OFFLINE SAFE)
+//   const stored = JSON.parse(
+//     localStorage.getItem(DRIVER_UI_STORAGE_KEY) || "{}"
+//   );
 
-  backupFolderBtn.onclick =
-    selectLocalBackupFolder;
+//   if (stored[jobType]) {
+//     DRIVER_UI_CACHE[jobType] = stored[jobType];
+//     return stored[jobType];
+//   }
 
-}
+//   // 3️⃣ Online fetch ONLY if online
+//   if (!navigator.onLine) {
+//     return {}; // offline + no cache = empty
+//   }
+
+//   const snap = await get(
+//     ref(db, `config/driverUI/jobTypes/${jobType}/deliveryMethods`)
+//   );
+
+//   const data = snap.val() || {};
+
+//   // 4️⃣ Save to memory + localStorage
+//   DRIVER_UI_CACHE[jobType] = data;
+//   stored[jobType] = data;
+
+//   localStorage.setItem(
+//     DRIVER_UI_STORAGE_KEY,
+//     JSON.stringify(stored)
+//   );
+
+//   return data;
+// }
 document.getElementById("syncBtn").onclick = async () => {
 
   if (SYNC_RUNNING) {
@@ -2329,15 +2348,6 @@ function compressImage(file, gps, takenAt) {
 let CURRENT_PHOTO_INDEX = null;
 let BOOT_WATCHDOG_FIRED = false;
 
-// =====================================================
-// 💾 LOCAL_COMPLETED JSON BACKUP
-// =====================================================
-
-let LOCAL_BACKUP_DIR = null;
-let LOCAL_BACKUP_READY = false;
-
-const LOCAL_BACKUP_PREFIX = "LOCAL_COMPLETED_";
-
 // window.startPhoto = async function(index, taskKey) {
 //   if (!(await validateDynamic(taskKey))) return;
 
@@ -2505,24 +2515,6 @@ cameraInput.onchange = async e => {
     dateKey: dateFilter.value.replace(/-/g, ""),
     deliveryData: latestData // 🔥 IMPORTANT
   }]);
-
-   // =====================================================
-// 💾 CREATE LOCAL_COMPLETED JSON BACKUP
-// =====================================================
-
-const backupCreated =
-  await createLocalCompletedBackup(
-    taskKey
-  );
-
-if (!backupCreated) {
-
-  console.warn(
-    "⚠️ JSON backup was not created:",
-    taskKey
-  );
-
-}
 
    // ==========================================
 // 🗺 UPDATE IN-MEMORY TASK STATUS
@@ -6555,287 +6547,6 @@ async function exportTasksToFile() {
   URL.revokeObjectURL(url);
 
   alert("✅ Export complete");
-}
-
-// =====================================================
-// 💾 SELECT LOCAL BACKUP FOLDER
-// =====================================================
-
-async function selectLocalBackupFolder() {
-
-  if (!window.showDirectoryPicker) {
-    alert(
-      "⚠️ Automatic JSON backup is not supported " +
-      "by this browser."
-    );
-    return false;
-  }
-
-  try {
-
-    LOCAL_BACKUP_DIR =
-      await window.showDirectoryPicker({
-        mode: "readwrite"
-      });
-
-    const permission =
-      await LOCAL_BACKUP_DIR.requestPermission({
-        mode: "readwrite"
-      });
-
-    if (permission !== "granted") {
-
-      LOCAL_BACKUP_DIR = null;
-      LOCAL_BACKUP_READY = false;
-
-      alert(
-        "⚠️ Backup folder permission was not granted."
-      );
-
-      return false;
-    }
-
-    LOCAL_BACKUP_READY = true;
-
-    console.log(
-      "💾 Backup folder ready:",
-      LOCAL_BACKUP_DIR.name
-    );
-
-    alert(
-      "✅ Backup folder is ready.\n\n" +
-      "LOCAL_COMPLETED tasks will now create " +
-      "JSON backup files automatically."
-    );
-
-    return true;
-
-  } catch (err) {
-
-    console.warn(
-      "Backup folder selection cancelled:",
-      err
-    );
-
-    return false;
-  }
-}
-
-
-// =====================================================
-// 💾 CREATE JSON BACKUP FOR ONE LOCAL_COMPLETED TASK
-// =====================================================
-
-async function createLocalCompletedBackup(taskKey) {
-
-  if (
-    !LOCAL_BACKUP_READY ||
-    !LOCAL_BACKUP_DIR
-  ) {
-    console.warn(
-      "⚠️ Backup folder not configured:",
-      taskKey
-    );
-
-    return false;
-  }
-
-  try {
-
-    // -----------------------------------------
-    // Get COMPLETE task from IndexedDB
-    // -----------------------------------------
-
-    const tasks =
-      await getTasksFromIndexedDB();
-
-    const task =
-      tasks.find(
-        t => t._key === taskKey
-      );
-
-    if (!task) {
-
-      console.error(
-        "❌ Task not found in IndexedDB:",
-        taskKey
-      );
-
-      return false;
-    }
-
-    // -----------------------------------------
-    // Get photos from IndexedDB
-    // -----------------------------------------
-
-    const allPhotos =
-      await getAllPhotosFromDB();
-
-    const relatedPhotos =
-      allPhotos.filter(
-        p => p.taskKey === taskKey
-      );
-
-    // -----------------------------------------
-    // Convert photos to JSON-safe data
-    // -----------------------------------------
-
-    const backupPhotos = [];
-
-    for (const p of relatedPhotos) {
-
-      backupPhotos.push({
-
-        id: p.id,
-
-        taskKey: p.taskKey,
-
-        photoIndex: p.photoIndex,
-
-        takenAt: p.takenAt,
-
-        gps: p.gps || null,
-
-        submitIntent:
-          p.submitIntent === true,
-
-        base64:
-          await blobToBase64(p.blob)
-
-      });
-
-    }
-
-    // -----------------------------------------
-    // Build complete backup
-    // -----------------------------------------
-
-    const backupData = {
-
-      backupVersion: 1,
-
-      backupType:
-        "LOCAL_COMPLETED",
-
-      createdAt:
-        new Date().toISOString(),
-
-      driverId:
-        DRIVER_ID,
-
-      taskKey:
-        taskKey,
-
-      task: {
-        ...task
-      },
-
-      photos:
-        backupPhotos
-
-    };
-
-    const json =
-      JSON.stringify(
-        backupData,
-        null,
-        2
-      );
-
-    const filename =
-      `${LOCAL_BACKUP_PREFIX}${taskKey}.json`;
-
-    // -----------------------------------------
-    // Create / overwrite JSON file
-    // -----------------------------------------
-
-    const fileHandle =
-      await LOCAL_BACKUP_DIR.getFileHandle(
-        filename,
-        {
-          create: true
-        }
-      );
-
-    const writable =
-      await fileHandle.createWritable();
-
-    await writable.write(json);
-
-    await writable.close();
-
-    console.log(
-      "💾 LOCAL_COMPLETED backup created:",
-      filename
-    );
-
-    return true;
-
-  } catch (err) {
-
-    console.error(
-      "❌ Failed to create LOCAL_COMPLETED backup:",
-      taskKey,
-      err
-    );
-
-    return false;
-  }
-}
-
-
-// =====================================================
-// 🗑 DELETE LOCAL_COMPLETED JSON BACKUP
-// =====================================================
-
-async function deleteLocalCompletedBackup(taskKey) {
-
-  if (
-    !LOCAL_BACKUP_READY ||
-    !LOCAL_BACKUP_DIR
-  ) {
-    return false;
-  }
-
-  const filename =
-    `${LOCAL_BACKUP_PREFIX}${taskKey}.json`;
-
-  try {
-
-    await LOCAL_BACKUP_DIR.removeEntry(
-      filename
-    );
-
-    console.log(
-      "🗑 Deleted LOCAL_COMPLETED backup:",
-      filename
-    );
-
-    return true;
-
-  } catch (err) {
-
-    if (
-      err?.name ===
-      "NotFoundError"
-    ) {
-
-      console.log(
-        "ℹ️ Backup already missing:",
-        filename
-      );
-
-      return true;
-    }
-
-    console.error(
-      "❌ Failed to delete backup:",
-      filename,
-      err
-    );
-
-    return false;
-  }
 }
 
 function blobToBase64(blob) {
