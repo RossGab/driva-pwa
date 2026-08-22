@@ -621,7 +621,7 @@ import {
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "V.R.0.0.16.1.5";
+const VERSION = "V.R.0.0.16.1.3";
 const BILLING_CACHE = {};
 window.BILLING_CACHE = BILLING_CACHE;
 const DRIVER_UI_CACHE = {};
@@ -1743,37 +1743,28 @@ setTaskWorkLocked(false);
 
 // 🔒 SAFE WRAPPER (DO NOT MODIFY ORIGINAL LOGIC)
 // =====================================================
-// 🔒 SYNC MENU
+// 🔒 SYNC ACTION WRAPPER
 // =====================================================
 
-const syncButton = document.getElementById("syncBtn");
-const originalSyncHandler = syncButton.onclick;
+const syncButton =
+  document.getElementById("syncBtn");
 
-syncButton.onclick = async function () {
+// Save the ORIGINAL Sync handler
+const originalSyncHandler =
+  syncButton.onclick;
 
-  const choice = prompt(
+// Replace button handler
+syncButton.onclick =
+  async function (event) {
+
+    const choice = prompt(
 `Choose action:
 
 1 - Upload now
 2 - Export completed tasks
 
 Enter 1 or 2`
-  );
-
-  if (!choice) return;
-
-  if (choice === "2") {
-    await exportTasksToFile();
-    return;
-  }
-
-  if (choice === "1") {
-    await originalSyncHandler();
-    return;
-  }
-
-  alert("Invalid choice.");
-};
+    );
 
     if (!choice) {
       return;
@@ -1796,91 +1787,37 @@ Enter 1 or 2`
 
     if (choice === "1") {
 
-  console.log(
-    "🔵 Option 1 selected — starting original Sync"
-  );
-
-  // ==========================================
-  // 📁 GET ACCESS TO DOWNLOADS
-  // ==========================================
-  //
-  // This is ONLY for allowing the existing
-  // deleteLocalCompletedBackup() function
-  // to remove the downloaded JSON files.
-  //
-  // The upload/sync logic below is unchanged.
-  // ==========================================
-
-  if (
-    !LOCAL_BACKUP_READY ||
-    !LOCAL_BACKUP_DIR
-  ) {
-
-    console.log(
-      "📁 Downloads folder access required for JSON cleanup."
-    );
-
-    let connected =
-      await reconnectLocalBackupFolder();
-
-    if (!connected) {
-
       console.log(
-        "📁 Previous Downloads permission not available."
+        "🔵 Option 1 selected — starting original Sync"
       );
 
-      connected =
-        await selectLocalBackupFolder();
-    }
+      if (
+        typeof originalSyncHandler !==
+        "function"
+      ) {
 
-    if (!connected) {
+        console.error(
+          "❌ Original Sync handler is missing:",
+          originalSyncHandler
+        );
 
-      alert(
-        "⚠️ Sync cancelled.\n\n" +
-        "Please select your Downloads folder " +
-        "so Driva can delete completed JSON backups."
+        alert(
+          "❌ Unable to start Sync.\n\n" +
+          "The original Sync handler was not found."
+        );
+
+        return;
+      }
+
+      // Call the original handler
+      // with the SAME button as its context
+      await originalSyncHandler.call(
+        syncButton,
+        event
       );
 
       return;
     }
-  }
-
-  // ==========================================
-  // 🔎 VERIFY ORIGINAL SYNC HANDLER
-  // ==========================================
-
-  if (
-    typeof originalSyncHandler !==
-    "function"
-  ) {
-
-    console.error(
-      "❌ Original Sync handler is missing:",
-      originalSyncHandler
-    );
-
-    alert(
-      "❌ Unable to start Sync.\n\n" +
-      "The original Sync handler was not found."
-    );
-
-    return;
-  }
-
-  // ==========================================
-  // 🚀 RUN ORIGINAL SYNC
-  // ==========================================
-  //
-  // DO NOT MODIFY THE ORIGINAL SYNC LOGIC.
-  // ==========================================
-
-  await originalSyncHandler.call(
-    syncButton,
-    event
-  );
-
-  return;
-}
 
     // =================================================
     // INVALID
