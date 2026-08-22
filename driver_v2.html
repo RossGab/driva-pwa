@@ -621,7 +621,7 @@ import {
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "V.R.0.0.16.1.1";
+const VERSION = "V.R.0.0.16.1.2";
 const BILLING_CACHE = {};
 window.BILLING_CACHE = BILLING_CACHE;
 const DRIVER_UI_CACHE = {};
@@ -1742,32 +1742,97 @@ setTaskWorkLocked(false);
 };
 
 // 🔒 SAFE WRAPPER (DO NOT MODIFY ORIGINAL LOGIC)
-const originalSyncHandler = document.getElementById("syncBtn").onclick;
+const originalSyncHandler =
+  document.getElementById("syncBtn").onclick;
 
-document.getElementById("syncBtn").onclick = async () => {
+document.getElementById("syncBtn").onclick =
+  async () => {
 
-  const choice = prompt(
+    const choice = prompt(
 `Choose action:
 
 1 - Upload now
 2 - Export completed tasks
 
 Enter 1 or 2`
-  );
+    );
 
-  if (!choice) return;
+    if (!choice) return;
 
-  if (choice === "2") {
-    await exportTasksToFile();
-    return;
-  }
+    // ==========================================
+    // 2 - EXPORT COMPLETED TASKS
+    // ==========================================
 
-  if (choice === "1") {
-    return originalSyncHandler(); // ✅ your original logic
-  }
+    if (choice === "2") {
 
-  alert("Invalid choice.");
-};
+      await exportTasksToFile();
+
+      return;
+    }
+
+    // ==========================================
+    // 1 - UPLOAD NOW
+    // ==========================================
+
+    if (choice === "1") {
+
+      // ----------------------------------------
+      // Check internet first
+      // ----------------------------------------
+
+      if (!navigator.onLine) {
+
+        alert(
+          "📴 You are offline.\n\n" +
+          "Please connect to the internet before syncing."
+        );
+
+        return;
+      }
+
+      // ----------------------------------------
+      // Make sure backup folder is available
+      // ----------------------------------------
+
+      if (
+        !LOCAL_BACKUP_READY ||
+        !LOCAL_BACKUP_DIR
+      ) {
+
+        let connected =
+          await reconnectLocalBackupFolder();
+
+        if (!connected) {
+
+          connected =
+            await selectLocalBackupFolder();
+        }
+
+        if (!connected) {
+
+          alert(
+            "⚠️ Sync cancelled.\n\n" +
+            "Please select your Downloads folder."
+          );
+
+          return;
+        }
+      }
+
+      // ----------------------------------------
+      // Run the existing sync logic
+      // ----------------------------------------
+
+      await originalSyncHandler();
+
+      return;
+    }
+
+    alert(
+      "⚠️ Invalid selection.\n\n" +
+      "Please enter 1 or 2."
+    );
+  };
   
 function toggleJobTypeFilter(show) {
   const box = document.getElementById("jobTypeFilter");
