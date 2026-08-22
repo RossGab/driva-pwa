@@ -621,7 +621,7 @@ import {
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "V.R.0.0.16.1.3.3";
+const VERSION = "V.R.0.0.16.1.3";
 const BILLING_CACHE = {};
 window.BILLING_CACHE = BILLING_CACHE;
 const DRIVER_UI_CACHE = {};
@@ -1655,50 +1655,13 @@ for (let taskIndex = 0; taskIndex < completed.length; taskIndex++) {
         continue;
       }
     
-      // =====================================================
       // ✅ DELETE ONLY IF VERIFIED
-      // =====================================================
-      
-      // 1️⃣ Delete LOCAL_COMPLETED JSON backup
-      const backupDeleted =
-        await deleteLocalCompletedBackup(
-          task._key
-        );
-      
-      if (!backupDeleted) {
-      
-        console.warn(
-          "⚠️ LOCAL_COMPLETED JSON backup could not be deleted. " +
-          "Keeping IndexedDB data for safety:",
-          task._key
-        );
-      
-        failed++;
-      
-        updateSyncProgress({
-          current: taskIndex + 1,
-          total: completed.length,
-          currentTask:
-            `${task._key}${task.CUSTOMERNAME ? " — " + task.CUSTOMERNAME : ""}`,
-          currentPhoto:
-            "❌ JSON deletion failed",
-          successful,
-          failed,
-          message:
-            `⚠️ Task ${taskIndex + 1} of ${completed.length} failed`
-        });
-      
-        continue;
-      }
-      
-      // 2️⃣ Delete IndexedDB photos
       for (const p of related) {
         await deletePhotoFromDB(p.id);
       }
-      
-      // 3️⃣ Delete IndexedDB task
+    
       await deleteTaskFromIndexedDB(task._key);
-      
+
       successful++;
 
       updateSyncProgress({
@@ -1783,80 +1746,88 @@ setTaskWorkLocked(false);
 // 🔒 SYNC ACTION WRAPPER
 // =====================================================
 
-const syncButton = document.getElementById("syncBtn");
+const syncButton =
+  document.getElementById("syncBtn");
 
 // Save the ORIGINAL Sync handler
-const originalSyncHandler = syncButton.onclick;
+const originalSyncHandler =
+  syncButton.onclick;
 
 // Replace button handler
-syncButton.onclick = async function (event) {
+syncButton.onclick =
+  async function (event) {
 
-  const choice = prompt(
+    const choice = prompt(
 `Choose action:
 
 1 - Upload now
 2 - Export completed tasks
 
 Enter 1 or 2`
-  );
-
-  if (!choice) {
-    return;
-  }
-
-  // =================================================
-  // OPTION 2 — EXPORT
-  // =================================================
-
-  if (choice === "2") {
-
-    await exportTasksToFile();
-
-    return;
-  }
-
-  // =================================================
-  // OPTION 1 — ORIGINAL SYNC
-  // =================================================
-
-  if (choice === "1") {
-
-    console.log(
-      "🔵 Option 1 selected — starting original Sync"
     );
 
-    if (typeof originalSyncHandler !== "function") {
+    if (!choice) {
+      return;
+    }
 
-      console.error(
-        "❌ Original Sync handler is missing:",
-        originalSyncHandler
+    // =================================================
+    // OPTION 2 — EXPORT
+    // =================================================
+
+    if (choice === "2") {
+
+      await exportTasksToFile();
+
+      return;
+    }
+
+    // =================================================
+    // OPTION 1 — ORIGINAL SYNC
+    // =================================================
+
+    if (choice === "1") {
+
+      console.log(
+        "🔵 Option 1 selected — starting original Sync"
       );
 
-      alert(
-        "❌ Unable to start Sync.\n\n" +
-        "The original Sync handler was not found."
+      if (
+        typeof originalSyncHandler !==
+        "function"
+      ) {
+
+        console.error(
+          "❌ Original Sync handler is missing:",
+          originalSyncHandler
+        );
+
+        alert(
+          "❌ Unable to start Sync.\n\n" +
+          "The original Sync handler was not found."
+        );
+
+        return;
+      }
+
+      // Call the original handler
+      // with the SAME button as its context
+      await originalSyncHandler.call(
+        syncButton,
+        event
       );
 
       return;
     }
 
-    await originalSyncHandler.call(
-      syncButton,
-      event
+    // =================================================
+    // INVALID
+    // =================================================
+
+    alert(
+      "⚠️ Invalid selection.\n\n" +
+      "Please enter 1 or 2."
     );
-
-    return;
-  }
-
-  // =================================================
-  // INVALID
-  // =================================================
-
-  alert(
-    "⚠️ Invalid selection.\n\n" +
-    "Please enter 1 or 2."
-  );
-};
+  };
   
 function toggleJobTypeFilter(show) {
   const box = document.getElementById("jobTypeFilter");
@@ -6663,77 +6634,6 @@ async function exportTasksToFile() {
 
   alert("✅ Export complete");
 }
-
-
-// =====================================================
-// 🗑 DELETE LOCAL_COMPLETED JSON BACKUP
-// =====================================================
-
-async function deleteLocalCompletedBackup(taskKey) {
-
-  if (
-    !LOCAL_BACKUP_READY ||
-    !LOCAL_BACKUP_DIR
-  ) {
-    console.warn(
-      "⚠️ Local backup folder is not configured:",
-      taskKey
-    );
-
-    return false;
-  }
-
-  try {
-
-    const safeTaskKey =
-      String(taskKey)
-        .replace(
-          /[^a-zA-Z0-9_-]/g,
-          "_"
-        );
-
-    const filename =
-      `LOCAL_COMPLETED_${safeTaskKey}.json`;
-
-    try {
-
-      await LOCAL_BACKUP_DIR.getFileHandle(
-        filename
-      );
-
-    } catch (err) {
-
-      console.log(
-        "ℹ️ LOCAL_COMPLETED JSON not found:",
-        filename
-      );
-
-      return true;
-    }
-
-    await LOCAL_BACKUP_DIR.removeEntry(
-      filename
-    );
-
-    console.log(
-      "🗑 LOCAL_COMPLETED JSON backup deleted:",
-      filename
-    );
-
-    return true;
-
-  } catch (err) {
-
-    console.error(
-      "❌ Failed to delete LOCAL_COMPLETED JSON backup:",
-      taskKey,
-      err
-    );
-
-    return false;
-  }
-}
-
 
 function blobToBase64(blob) {
   return new Promise((resolve, reject) => {
