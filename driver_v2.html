@@ -621,7 +621,7 @@ import {
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "V.R.0.0.16.1.3";
+const VERSION = "V.R.0.0.16.1.4";
 const BILLING_CACHE = {};
 window.BILLING_CACHE = BILLING_CACHE;
 const DRIVER_UI_CACHE = {};
@@ -1787,37 +1787,91 @@ Enter 1 or 2`
 
     if (choice === "1") {
 
+  console.log(
+    "🔵 Option 1 selected — starting original Sync"
+  );
+
+  // ==========================================
+  // 📁 GET ACCESS TO DOWNLOADS
+  // ==========================================
+  //
+  // This is ONLY for allowing the existing
+  // deleteLocalCompletedBackup() function
+  // to remove the downloaded JSON files.
+  //
+  // The upload/sync logic below is unchanged.
+  // ==========================================
+
+  if (
+    !LOCAL_BACKUP_READY ||
+    !LOCAL_BACKUP_DIR
+  ) {
+
+    console.log(
+      "📁 Downloads folder access required for JSON cleanup."
+    );
+
+    let connected =
+      await reconnectLocalBackupFolder();
+
+    if (!connected) {
+
       console.log(
-        "🔵 Option 1 selected — starting original Sync"
+        "📁 Previous Downloads permission not available."
       );
 
-      if (
-        typeof originalSyncHandler !==
-        "function"
-      ) {
+      connected =
+        await selectLocalBackupFolder();
+    }
 
-        console.error(
-          "❌ Original Sync handler is missing:",
-          originalSyncHandler
-        );
+    if (!connected) {
 
-        alert(
-          "❌ Unable to start Sync.\n\n" +
-          "The original Sync handler was not found."
-        );
-
-        return;
-      }
-
-      // Call the original handler
-      // with the SAME button as its context
-      await originalSyncHandler.call(
-        syncButton,
-        event
+      alert(
+        "⚠️ Sync cancelled.\n\n" +
+        "Please select your Downloads folder " +
+        "so Driva can delete completed JSON backups."
       );
 
       return;
     }
+  }
+
+  // ==========================================
+  // 🔎 VERIFY ORIGINAL SYNC HANDLER
+  // ==========================================
+
+  if (
+    typeof originalSyncHandler !==
+    "function"
+  ) {
+
+    console.error(
+      "❌ Original Sync handler is missing:",
+      originalSyncHandler
+    );
+
+    alert(
+      "❌ Unable to start Sync.\n\n" +
+      "The original Sync handler was not found."
+    );
+
+    return;
+  }
+
+  // ==========================================
+  // 🚀 RUN ORIGINAL SYNC
+  // ==========================================
+  //
+  // DO NOT MODIFY THE ORIGINAL SYNC LOGIC.
+  // ==========================================
+
+  await originalSyncHandler.call(
+    syncButton,
+    event
+  );
+
+  return;
+}
 
     // =================================================
     // INVALID
