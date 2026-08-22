@@ -621,12 +621,24 @@ import {
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "V.R.0.0.15.6.9.10";
+const VERSION = "V.R.0.0.16";
 const BILLING_CACHE = {};
 window.BILLING_CACHE = BILLING_CACHE;
 const DRIVER_UI_CACHE = {};
 const DRIVER_UI_STORAGE_KEY = "driverUIConfigCache";
 const selectedJobTypes = new Set();
+
+// =====================================================
+// 💾 LOCAL_COMPLETED BACKUP
+// =====================================================
+
+let LOCAL_BACKUP_DIR = null;
+let LOCAL_BACKUP_READY = false;
+
+const LOCAL_BACKUP_HANDLE_KEY =
+  "localCompletedBackupFolder";
+
+   
 const PHOTO_BUFFER = {};
 const submitLock = {};
 const FORM_CACHE_KEY = "driverFormCache";
@@ -1289,20 +1301,157 @@ searchBox.addEventListener("input", e => {
   }, 120);
 });
 
+// =====================================================
+// 💾 LOCAL_COMPLETED BACKUP FOLDER
+// =====================================================
+
+async function selectLocalBackupFolder() {
+
+  if (!window.showDirectoryPicker) {
+
+    alert(
+      "⚠️ Automatic local JSON backup is not supported " +
+      "by this browser."
+    );
+
+    return false;
+  }
+
+  try {
+
+    const dir =
+      await window.showDirectoryPicker({
+        mode: "readwrite"
+      });
+
+    const permission =
+      await dir.requestPermission({
+        mode: "readwrite"
+      });
+
+    if (permission !== "granted") {
+
+      alert(
+        "⚠️ Backup folder permission was not granted."
+      );
+
+      return false;
+    }
+
+    LOCAL_BACKUP_DIR = dir;
+    LOCAL_BACKUP_READY = true;
+
+    console.log(
+      "💾 LOCAL_COMPLETED backup folder ready:",
+      dir.name
+    );
+
+    alert(
+      "✅ Local task backup folder is ready.\n\n" +
+      "Every LOCAL_COMPLETED task will automatically " +
+      "create a JSON backup in this folder."
+    );
+
+    return true;
+
+  } catch (err) {
+
+    console.warn(
+      "Backup folder selection cancelled:",
+      err
+    );
+
+    return false;
+  }
+}
+
 let DRIVER_ID = localStorage.getItem("driverId");
 while (!DRIVER_ID) DRIVER_ID = prompt("Enter Driver ID");
 localStorage.setItem("driverId", DRIVER_ID);
 
-document.getElementById("settingsBtn").onclick = () => {
-  const current = localStorage.getItem("driverId") || "";
+document.getElementById("settingsBtn").onclick = async () => {
 
-  const next = prompt("Enter new Driver ID", current);
-  if (!next) return;
-  if (next === current) return;
+  if (SYNC_RUNNING) {
 
-  localStorage.setItem("driverId", next);
-  alert("Driver ID changed. Reloading…");
-  location.reload();
+    alert(
+      "⏳ Sync is in progress.\n\n" +
+      "Please wait until synchronization is complete."
+    );
+
+    return;
+  }
+
+  const choice = prompt(
+    "⚙️ Settings\n\n" +
+    "1 - Change Driver ID\n" +
+    "2 - Set Local Task Backup Folder\n\n" +
+    "Enter 1 or 2:"
+  );
+
+  if (!choice) return;
+
+  // ===================================================
+  // 1️⃣ CHANGE DRIVER ID
+  // ===================================================
+
+  if (choice.trim() === "1") {
+
+    const current =
+      localStorage.getItem("driverId") || "";
+
+    const next =
+      prompt(
+        "Enter new Driver ID",
+        current
+      );
+
+    if (!next) return;
+
+    const cleanNext =
+      next.trim();
+
+    if (!cleanNext) {
+
+      alert(
+        "❌ Driver ID cannot be empty."
+      );
+
+      return;
+    }
+
+    if (cleanNext === current) {
+      return;
+    }
+
+    localStorage.setItem(
+      "driverId",
+      cleanNext
+    );
+
+    alert(
+      "Driver ID changed. Reloading…"
+    );
+
+    location.reload();
+
+    return;
+  }
+
+  // ===================================================
+  // 2️⃣ SET LOCAL TASK BACKUP FOLDER
+  // ===================================================
+
+  if (choice.trim() === "2") {
+
+    await selectLocalBackupFolder();
+
+    return;
+  }
+
+  alert(
+    "❌ Invalid selection.\n\n" +
+    "Please choose 1 or 2."
+  );
 };
 
 let gpsWatchId = null;
