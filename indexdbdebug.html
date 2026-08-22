@@ -2,153 +2,215 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>IndexedDB Debug</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Driva IndexedDB Viewer</title>
 <style>
-body {
-  font-family: Arial;
-  background:#f4f4f4;
-  padding:10px;
-}
-h2 {
-  margin-top:20px;
-}
-.card {
-  background:#fff;
-  padding:10px;
-  margin-bottom:8px;
-  border-radius:6px;
-  font-size:13px;
-  border-left:5px solid #3498db;
-}
-.bad {
-  border-left-color:#e74c3c;
-}
-.good {
-  border-left-color:#2ecc71;
-}
+body{font-family:Arial,sans-serif;background:#f4f4f4;margin:0;padding:14px;color:#222}
+h2{margin:0 0 12px}
+.card{background:#fff;border-radius:8px;padding:14px;margin-bottom:12px;box-shadow:0 1px 4px #ccc}
+button{padding:9px 12px;border:0;border-radius:6px;margin:3px;cursor:pointer}
+.primary{background:#3498db;color:#fff}.green{background:#2ecc71;color:#fff}.orange{background:#e67e22;color:#fff}
+.stat{display:inline-block;background:#f8f8f8;border-radius:6px;padding:10px;margin:4px;min-width:130px}
+.stat b{display:block;font-size:22px}
+input{padding:9px;width:100%;box-sizing:border-box;border:1px solid #ccc;border-radius:6px}
+table{width:100%;border-collapse:collapse;font-size:12px;background:#fff}
+th,td{border:1px solid #ddd;padding:6px;text-align:left;vertical-align:top}
+th{background:#eee;position:sticky;top:0}
+.status-LOCAL_COMPLETED{background:#fff3cd}
+.status-PENDING{background:#e8f4fd}
+pre{white-space:pre-wrap;word-break:break-word}
+#msg{margin-top:8px;font-weight:bold}
 </style>
 </head>
-
 <body>
 
-<h1>📦 IndexedDB Debug Viewer</h1>
+<h2>📦 Driva IndexedDB Viewer</h2>
 
-<button onclick="loadData()">🔄 Load Data</button>
-<button onclick="clearTasks()">🧹 Clear Tasks</button>
-<button onclick="clearPhotos()">🧹 Clear Photos</button>
+<div class="card">
+  <b>Database:</b> driver_uploads &nbsp; | &nbsp;
+  <b>Version:</b> 5
+  <br><br>
+  <button class="primary" onclick="openViewer()">🔄 Open / Refresh</button>
+  <button class="green" onclick="exportTasks()">⬇ Export Tasks JSON</button>
+  <button class="orange" onclick="exportPhotos()">⬇ Export Photos Info</button>
+  <div id="msg"></div>
+</div>
 
-<h2>🗂 Tasks</h2>
-<div id="tasks"></div>
+<div class="card">
+  <div class="stat">All Tasks<b id="allTasks">0</b></div>
+  <div class="stat">LOCAL_COMPLETED<b id="localCompleted">0</b></div>
+  <div class="stat">PENDING<b id="pending">0</b></div>
+  <div class="stat">COMPLETED<b id="completed">0</b></div>
+  <div class="stat">Exported<b id="exported">0</b></div>
+  <div class="stat">Photos<b id="photos">0</b></div>
+</div>
 
-<h2>📸 Photos</h2>
-<div id="photos"></div>
+<div class="card">
+  <label><b>Filter</b></label><br><br>
+  <input id="filter" placeholder="Search task key, driver ID, status, customer name..." oninput="render()">
+</div>
+
+<div class="card">
+  <b>Task Records</b>
+  <div style="overflow:auto;max-height:65vh;margin-top:10px">
+    <table>
+      <thead>
+        <tr>
+          <th>_key</th>
+          <th>Status</th>
+          <th>Driver</th>
+          <th>Date</th>
+          <th>Exported</th>
+          <th>Customer</th>
+          <th>Delivery Data</th>
+        </tr>
+      </thead>
+      <tbody id="taskBody"></tbody>
+    </table>
+  </div>
+</div>
 
 <script>
 const DB_NAME = "driver_uploads";
-const STORE = "photos";
+const DB_VERSION = 5;
 const TASK_STORE = "tasks";
+const PHOTO_STORE = "photos";
 
-function openDB() {
-  return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME);
+let db = null;
+let tasks = [];
+let photos = [];
 
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
-  });
+function msg(text, error=false){
+  const el=document.getElementById("msg");
+  el.textContent=text;
+  el.style.color=error ? "#b00020" : "#222";
 }
 
-async function loadData() {
-  const db = await openDB();
+function openViewer(){
+  const req=indexedDB.open(DB_NAME, DB_VERSION);
 
-  // ===== TASKS =====
-  const taskDiv = document.getElementById("tasks");
-  taskDiv.innerHTML = "Loading...";
+  req.onerror=()=>{
+    msg("❌ Cannot open IndexedDB: " + (req.error?.message || req.error), true);
+  };
 
-  const tx1 = db.transaction(TASK_STORE, "readonly");
-  const req1 = tx1.objectStore(TASK_STORE).getAll();
+  req.onupgradeneeded=()=>{
+    msg("⚠ Database upgrade event detected. No changes are made by this viewer.");
+  };
 
-  req1.onsuccess = () => {
-    const tasks = req1.result || [];
+  req.onsuccess=()=>{
+    db=req.result;
 
-    taskDiv.innerHTML = `<b>Total: ${tasks.length}</b><br><br>`;
+    const stores=[...db.objectStoreNames];
+    msg("✅ Database opened. Stores: " + stores.join(", "));
 
-    tasks.forEach(t => {
-      const div = document.createElement("div");
+    if(!stores.includes(TASK_STORE)){
+      msg("⚠ tasks store does not exist.", true);
+      tasks=[];
+      photos=[];
+      render();
+      return;
+    }
 
-      const isBlocked = t.status === "LOCAL_COMPLETED";
+    const tx=db.transaction(
+      stores.includes(PHOTO_STORE) ? [TASK_STORE,PHOTO_STORE] : [TASK_STORE],
+      "readonly"
+    );
 
-      div.className = "card " + (isBlocked ? "bad" : "good");
-
-      div.innerHTML = `
-        <b>Key:</b> ${t._key}<br>
-        <b>Status:</b> ${t.status}<br>
-        <b>Driver:</b> "${t.driverId}"<br>
-        <b>DateKey:</b> ${t.dateKey}<br>
-      `;
-
-      if (isBlocked) {
-        div.innerHTML += `<b style="color:red;">⚠ LOCAL_COMPLETED (will be hidden)</b>`;
+    tx.objectStore(TASK_STORE).getAll().onsuccess=e=>{
+      tasks=e.target.result || [];
+      if(stores.includes(PHOTO_STORE)){
+        tx.objectStore(PHOTO_STORE).getAll().onsuccess=e=>{
+          photos=e.target.result || [];
+          render();
+        };
+      }else{
+        photos=[];
+        render();
       }
+    };
 
-      taskDiv.appendChild(div);
-    });
-  };
-
-  // ===== PHOTOS =====
-  const photoDiv = document.getElementById("photos");
-  photoDiv.innerHTML = "Loading...";
-
-  const tx2 = db.transaction(STORE, "readonly");
-  const req2 = tx2.objectStore(STORE).getAll();
-
-  req2.onsuccess = () => {
-    const photos = req2.result || [];
-
-    photoDiv.innerHTML = `<b>Total: ${photos.length}</b><br><br>`;
-
-    photos.forEach(p => {
-      const div = document.createElement("div");
-
-      div.className = "card";
-
-      div.innerHTML = `
-        <b>ID:</b> ${p.id}<br>
-        <b>Task:</b> ${p.taskKey}<br>
-        <b>Photo Index:</b> ${p.photoIndex}<br>
-        <b>Submit Intent:</b> ${p.submitIntent}<br>
-      `;
-
-      photoDiv.appendChild(div);
-    });
+    tx.onerror=()=>{
+      msg("❌ IndexedDB read failed.", true);
+    };
   };
 }
 
-async function clearTasks() {
-  if (!confirm("Delete ALL tasks?")) return;
+function render(){
+  const q=(document.getElementById("filter").value||"").toLowerCase();
 
-  const db = await openDB();
-  const tx = db.transaction(TASK_STORE, "readwrite");
-  tx.objectStore(TASK_STORE).clear();
+  document.getElementById("allTasks").textContent=tasks.length;
+  document.getElementById("localCompleted").textContent=
+    tasks.filter(t=>t.status==="LOCAL_COMPLETED").length;
+  document.getElementById("pending").textContent=
+    tasks.filter(t=>t.status==="PENDING").length;
+  document.getElementById("completed").textContent=
+    tasks.filter(t=>t.status==="COMPLETED").length;
+  document.getElementById("exported").textContent=
+    tasks.filter(t=>t.exported===true).length;
+  document.getElementById("photos").textContent=photos.length;
 
-  tx.oncomplete = () => {
-    alert("Tasks cleared");
-    loadData();
-  };
+  const filtered=tasks.filter(t=>{
+    if(!q) return true;
+    return JSON.stringify(t).toLowerCase().includes(q);
+  });
+
+  document.getElementById("taskBody").innerHTML=filtered.map(t=>{
+    const delivery=t.deliveryData
+      ? JSON.stringify(t.deliveryData,null,2)
+      : "";
+
+    return `<tr class="status-${escapeHtml(t.status||"")}">
+      <td>${escapeHtml(t._key)}</td>
+      <td><b>${escapeHtml(t.status||"")}</b></td>
+      <td>${escapeHtml(t.driverId||"")}</td>
+      <td>${escapeHtml(t.dateKey||"")}</td>
+      <td>${t.exported ? "YES" : "NO"}</td>
+      <td>${escapeHtml(t.CUSTOMERNAME||"")}</td>
+      <td><pre>${escapeHtml(delivery)}</pre></td>
+    </tr>`;
+  }).join("");
 }
 
-async function clearPhotos() {
-  if (!confirm("Delete ALL photos?")) return;
-
-  const db = await openDB();
-  const tx = db.transaction(STORE, "readwrite");
-  tx.objectStore(STORE).clear();
-
-  tx.oncomplete = () => {
-    alert("Photos cleared");
-    loadData();
-  };
+function escapeHtml(v){
+  return String(v ?? "")
+    .replaceAll("&","&amp;")
+    .replaceAll("<","&lt;")
+    .replaceAll(">","&gt;")
+    .replaceAll('"',"&quot;");
 }
+
+function download(name, content){
+  const blob=new Blob([content],{type:"application/json"});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement("a");
+  a.href=url;
+  a.download=name;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function exportTasks(){
+  download("driva_indexeddb_tasks_"+Date.now()+".json",
+    JSON.stringify(tasks,null,2));
+}
+
+function exportPhotos(){
+  const info=photos.map(p=>({
+    id:p.id,
+    taskKey:p.taskKey,
+    photoIndex:p.photoIndex,
+    takenAt:p.takenAt,
+    gps:p.gps,
+    submitIntent:p.submitIntent,
+    blobSize:p.blob?.size || 0,
+    blobType:p.blob?.type || ""
+  }));
+
+  download("driva_indexeddb_photos_"+Date.now()+".json",
+    JSON.stringify(info,null,2));
+}
+
+openViewer();
 </script>
-
 </body>
 </html>
