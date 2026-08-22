@@ -621,7 +621,7 @@ import {
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "V.R.0.0.15.6.9.10";
+const VERSION = "V.R.0.0.16.1.1";
 const BILLING_CACHE = {};
 window.BILLING_CACHE = BILLING_CACHE;
 const DRIVER_UI_CACHE = {};
@@ -2515,6 +2515,32 @@ cameraInput.onchange = async e => {
     dateKey: dateFilter.value.replace(/-/g, ""),
     deliveryData: latestData // 🔥 IMPORTANT
   }]);
+
+   // ==============================
+// 💾 AUTO-DOWNLOAD LOCAL COMPLETED JSON
+// ==============================
+try {
+  const taskData = {
+    _key: taskKey,
+    status: "LOCAL_COMPLETED",
+    driverId: DRIVER_ID,
+    dateKey: dateFilter.value.replace(/-/g, ""),
+    deliveryData: latestData
+  };
+
+  const jsonBlob = new Blob(
+    [JSON.stringify(taskData, null, 2)],
+    { type: "application/json" }
+  );
+
+  const filename = `LOCAL_COMPLETED_${taskKey}.json`;
+
+  saveToGallery(jsonBlob, filename);
+
+  console.log("✅ LOCAL_COMPLETED JSON downloaded:", filename);
+} catch (err) {
+  console.error("❌ Failed to create LOCAL_COMPLETED JSON:", err);
+}
 
    // ==========================================
 // 🗺 UPDATE IN-MEMORY TASK STATUS
