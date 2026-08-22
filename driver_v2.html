@@ -621,7 +621,7 @@ import {
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "V.R.0.0.16";
+const VERSION = "V.R.0.0.16.1";
 const BILLING_CACHE = {};
 window.BILLING_CACHE = BILLING_CACHE;
 const DRIVER_UI_CACHE = {};
@@ -2664,6 +2664,23 @@ cameraInput.onchange = async e => {
     dateKey: dateFilter.value.replace(/-/g, ""),
     deliveryData: latestData // 🔥 IMPORTANT
   }]);
+
+   // =====================================================
+// 💾 CREATE LOCAL_COMPLETED JSON BACKUP
+// =====================================================
+
+const backupCreated =
+  await createLocalCompletedBackup(taskKey);
+
+if (!backupCreated) {
+
+  console.warn(
+    "⚠️ LOCAL_COMPLETED saved to IndexedDB, " +
+    "but JSON backup was not created:",
+    taskKey
+  );
+
+}
 
    // ==========================================
 // 🗺 UPDATE IN-MEMORY TASK STATUS
@@ -6696,6 +6713,219 @@ async function exportTasksToFile() {
   URL.revokeObjectURL(url);
 
   alert("✅ Export complete");
+}
+
+// =====================================================
+// 💾 CREATE LOCAL_COMPLETED JSON BACKUP
+// =====================================================
+
+async function createLocalCompletedBackup(taskKey) {
+
+  // No backup folder configured
+  if (
+    !LOCAL_BACKUP_READY ||
+    !LOCAL_BACKUP_DIR
+  ) {
+    console.warn(
+      "⚠️ Local backup folder is not configured:",
+      taskKey
+    );
+
+    return false;
+  }
+
+  try {
+
+    // ==========================================
+    // 1. Get the COMPLETE task from IndexedDB
+    // ==========================================
+
+    const tasks =
+      await getTasksFromIndexedDB();
+
+    const task =
+      tasks.find(
+        t => t._key === taskKey
+      );
+
+    if (!task) {
+
+      console.error(
+        "❌ Cannot create backup. Task not found:",
+        taskKey
+      );
+
+      return false;
+    }
+
+    // Safety check
+    if (
+      task.status !== "LOCAL_COMPLETED"
+    ) {
+
+      console.error(
+        "❌ Backup rejected. Task is not LOCAL_COMPLETED:",
+        taskKey,
+        task.status
+      );
+
+      return false;
+    }
+
+    // ==========================================
+    // 2. Get ALL photos from IndexedDB
+    // ==========================================
+
+    const allPhotos =
+      await getAllPhotosFromDB();
+
+    const relatedPhotos =
+      allPhotos.filter(
+        p => p.taskKey === taskKey
+      );
+
+    // ==========================================
+    // 3. Convert photos to Base64
+    // ==========================================
+
+    const backupPhotos = [];
+
+    for (const p of relatedPhotos) {
+
+      if (!p.blob) {
+        console.warn(
+          "⚠️ Photo has no blob:",
+          p.id
+        );
+        continue;
+      }
+
+      backupPhotos.push({
+
+        id:
+          p.id,
+
+        taskKey:
+          p.taskKey,
+
+        photoIndex:
+          p.photoIndex,
+
+        takenAt:
+          p.takenAt,
+
+        gps:
+          p.gps || null,
+
+        submitIntent:
+          p.submitIntent === true,
+
+        base64:
+          await blobToBase64(p.blob)
+
+      });
+    }
+
+    // ==========================================
+    // 4. Build backup JSON
+    // ==========================================
+
+    const backupData = {
+
+      backupVersion: 1,
+
+      backupType:
+        "LOCAL_COMPLETED_TASK",
+
+      createdAt:
+        new Date().toISOString(),
+
+      driverId:
+        DRIVER_ID,
+
+      taskKey:
+        taskKey,
+
+      task: {
+        ...task
+      },
+
+      photos:
+        backupPhotos
+
+    };
+
+    // ==========================================
+    // 5. Convert to JSON
+    // ==========================================
+
+    const json =
+      JSON.stringify(
+        backupData,
+        null,
+        2
+      );
+
+    // ==========================================
+    // 6. Create task-specific file
+    // ==========================================
+
+    const safeTaskKey =
+      String(taskKey)
+        .replace(
+          /[^a-zA-Z0-9_-]/g,
+          "_"
+        );
+
+    const filename =
+      `LOCAL_COMPLETED_${safeTaskKey}.json`;
+
+    const fileHandle =
+      await LOCAL_BACKUP_DIR.getFileHandle(
+        filename,
+        {
+          create: true
+        }
+      );
+
+    // ==========================================
+    // 7. Write JSON file
+    // ==========================================
+
+    const writable =
+      await fileHandle.createWritable();
+
+    await writable.write(json);
+
+    await writable.close();
+
+    console.log(
+      "💾 LOCAL_COMPLETED JSON backup created:",
+      filename
+    );
+
+    console.log(
+      "   Task:",
+      taskKey
+    );
+
+    console.log(
+      "   Photos:",
+      backupPhotos.length
+    );
+
+    return true;
+
+  } catch (err) {
+
+    console.error(
+      "❌ LOCAL_COMPLETED JSON backup failed:",
+      taskKey,
+      err
+    );
+
+    return false;
+  }
 }
 
 function blobToBase64(blob) {
