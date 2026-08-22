@@ -1002,7 +1002,7 @@ textarea{
   <div>
 
     <h1>
-      🚚 Driva Delivery Template Maker V.R.0.0.17.1
+      🚚 Driva Delivery Template Maker V.R.0.0.17.2
     </h1>
 
     <p>
@@ -2323,6 +2323,23 @@ function renderFields(){
                   Required
           
                 </label>
+          
+          
+                <label class="req">
+          
+                  <input
+                    data-numbers-only
+                    type="checkbox"
+                    ${
+                      f.numbersOnly
+                        ? "checked"
+                        : ""
+                    }
+                  >
+          
+                  Numbers only
+          
+                </label>
               `
               : ""
           }
@@ -2420,6 +2437,7 @@ function renderFields(){
         );
       
       
+      
       if(requiredCheckbox){
       
         requiredCheckbox.onchange =
@@ -2436,6 +2454,28 @@ function renderFields(){
           };
       
       }
+
+      const numbersOnlyCheckbox =
+      card.querySelector(
+        "[data-numbers-only]"
+      );
+    
+    
+    if(numbersOnlyCheckbox){
+    
+      numbersOnlyCheckbox.onchange =
+        e => {
+    
+          f.numbersOnly =
+            e.target.checked;
+    
+          renderPreview();
+    
+          renderJSON();
+    
+        };
+    
+    }
 
       card.querySelector(
         "[data-up]"
@@ -3273,11 +3313,13 @@ window.addField =
     m.fields[key] = {
 
       label,
-
+    
       type,
-
-      required:false
-
+    
+      required:false,
+    
+      numbersOnly:false
+    
     };
 
 
@@ -3375,14 +3417,29 @@ function createDriverField(
       document.createElement(
         "input"
       );
-
-
+    
+    
     input.type =
-      "text";
-
-
+      field.numbersOnly
+        ? "number"
+        : "text";
+    
+    
     input.className =
       "driver-input";
+    
+    
+    if(
+      field.numbersOnly
+    ){
+    
+      input.inputMode =
+        "numeric";
+    
+      input.pattern =
+        "[0-9]*";
+    
+    }
 
 
     wrap.appendChild(
@@ -3519,22 +3576,50 @@ function createConditionalField(
      ======================================================= */
 
   if(
-    field.type === "textarea"
-  ){
-
-    const textarea =
-      document.createElement(
-        "textarea"
+      field.type === "textarea"
+    ){
+    
+      const textarea =
+        document.createElement(
+          "textarea"
+        );
+    
+      textarea.className =
+        "driver-textarea";
+    
+    
+      if(
+        field.numbersOnly
+      ){
+    
+        textarea.inputMode =
+          "numeric";
+    
+        textarea.pattern =
+          "[0-9]*";
+    
+    
+        textarea.addEventListener(
+          "input",
+          () => {
+    
+            textarea.value =
+              textarea.value.replace(
+                /[^0-9]/g,
+                ""
+              );
+    
+          }
+        );
+    
+      }
+    
+    
+      wrap.appendChild(
+        textarea
       );
-
-    textarea.className =
-      "driver-textarea";
-
-    wrap.appendChild(
-      textarea
-    );
-
-  }
+    
+    }
 
 
   /* =======================================================
