@@ -621,7 +621,7 @@ import {
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "V.R.0.0.16.1.3";
+const VERSION = "V.R.0.0.16.1.3.1";
 const BILLING_CACHE = {};
 window.BILLING_CACHE = BILLING_CACHE;
 const DRIVER_UI_CACHE = {};
@@ -1746,25 +1746,19 @@ setTaskWorkLocked(false);
 // 🔒 SYNC ACTION WRAPPER
 // =====================================================
 
-const syncButton =
-  document.getElementById("syncBtn");
+const syncButton = document.getElementById("syncBtn");
+const originalSyncHandler = syncButton.onclick;
 
-// Save the ORIGINAL Sync handler
-const originalSyncHandler =
-  syncButton.onclick;
+syncButton.onclick = async function () {
 
-// Replace button handler
-syncButton.onclick =
-  async function (event) {
-
-    const choice = prompt(
+  const choice = prompt(
 `Choose action:
 
 1 - Upload now
 2 - Export completed tasks
 
 Enter 1 or 2`
-    );
+  );
 
     if (!choice) {
       return;
@@ -1791,33 +1785,13 @@ Enter 1 or 2`
         "🔵 Option 1 selected — starting original Sync"
       );
 
-      if (
-        typeof originalSyncHandler !==
-        "function"
-      ) {
+       if (choice === "1") {
+    await originalSyncHandler();
+    return;
+  }
 
-        console.error(
-          "❌ Original Sync handler is missing:",
-          originalSyncHandler
-        );
-
-        alert(
-          "❌ Unable to start Sync.\n\n" +
-          "The original Sync handler was not found."
-        );
-
-        return;
-      }
-
-      // Call the original handler
-      // with the SAME button as its context
-      await originalSyncHandler.call(
-        syncButton,
-        event
-      );
-
-      return;
-    }
+  alert("Invalid choice.");
+};
 
     // =================================================
     // INVALID
