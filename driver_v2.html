@@ -274,6 +274,32 @@ img { width:100%;margin-top:8px;border-radius:6px; }
 </head>
 
 <body>
+<div id="localBackupStatus"
+     style="
+       display:flex;
+       align-items:center;
+       gap:7px;
+       font-size:12px;
+       cursor:pointer;
+       user-select:none;
+     ">
+
+  <span id="localBackupStatusDot"
+        style="
+          width:9px;
+          height:9px;
+          border-radius:50%;
+          background:#dc2626;
+          display:inline-block;
+          flex-shrink:0;
+        ">
+  </span>
+
+  <span id="localBackupStatusText">
+    Please set local backup folder
+  </span>
+
+</div>
 <button id="settingsBtn"
   style="
     position: fixed;
@@ -290,6 +316,7 @@ img { width:100%;margin-top:8px;border-radius:6px; }
   ">
   ⚙️
 </button>
+
 
 <div id="appVersion"></div>
 <div id="gpsStatus"
@@ -621,7 +648,7 @@ import {
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "V.R.0.0.16.4";
+const VERSION = "V.R.0.0.16.5";
 const BILLING_CACHE = {};
 window.BILLING_CACHE = BILLING_CACHE;
 const DRIVER_UI_CACHE = {};
@@ -1349,6 +1376,51 @@ function openLocalBackupSettingsDB() {
   });
 }
 
+// =====================================================
+// 💾 UPDATE LOCAL BACKUP STATUS UI
+// =====================================================
+
+function updateLocalBackupStatus() {
+
+  const status =
+    document.getElementById("localBackupStatus");
+
+  const dot =
+    document.getElementById("localBackupStatusDot");
+
+  const text =
+    document.getElementById("localBackupStatusText");
+
+  if (!status || !dot || !text) {
+    return;
+  }
+
+  if (
+    LOCAL_BACKUP_READY &&
+    LOCAL_BACKUP_DIR
+  ) {
+
+    dot.style.background = "#16a34a";
+
+    text.innerText =
+      "Local backup ready";
+
+    status.title =
+      "Local backup folder: " +
+      LOCAL_BACKUP_DIR.name;
+
+  } else {
+
+    dot.style.background = "#dc2626";
+
+    text.innerText =
+      "Please set local backup folder";
+
+    status.title =
+      "Local backup folder is not configured";
+  }
+}
+
 
 // =====================================================
 // SAVE DIRECTORY HANDLE
@@ -1458,9 +1530,8 @@ async function loadLocalBackupFolderHandle() {
   }
 }
 
-
 // =====================================================
-// RESTORE BACKUP FOLDER AFTER APP START
+// RESTORE LOCAL BACKUP FOLDER AFTER APP START
 // =====================================================
 
 async function restoreLocalBackupFolder() {
@@ -1472,49 +1543,83 @@ async function restoreLocalBackupFolder() {
 
     if (!dir) {
 
-      console.log(
-        "💾 No saved LOCAL_COMPLETED backup folder."
-      );
+        console.log(
+          "💾 No saved LOCAL_COMPLETED backup folder."
+        );
+      
+        updateLocalBackupStatus();
+      
+        return false;
+      }
 
-      return false;
-    }
+    // ==========================================
+    // Check existing permission
+    // ==========================================
 
-    // Check whether the browser still grants access
-    let permission =
+    const permission =
       await dir.queryPermission({
         mode: "readwrite"
       });
 
-    // Permission may need to be requested again
-    if (permission !== "granted") {
+    // ==========================================
+    // Permission already granted
+    // ==========================================
 
-      permission =
-        await dir.requestPermission({
-          mode: "readwrite"
-        });
-    }
+    if (permission === "granted") {
 
-    if (permission !== "granted") {
+        LOCAL_BACKUP_DIR = dir;
+        LOCAL_BACKUP_READY = true;
+      
+        updateLocalBackupStatus();
+      
+        console.log(
+          "✅ LOCAL_COMPLETED backup folder restored:",
+          dir.name
+        );
+      
+        return true;
+      }
 
-      console.warn(
-        "⚠️ Backup folder permission is not currently granted."
-      );
+    // ==========================================
+    // Permission is "prompt"
+    //
+    // IMPORTANT:
+    // Do NOT call requestPermission() here.
+    // Browser requires a user gesture after refresh.
+    // Keep the handle so it can be re-authorized
+    // when the user clicks the reconnect button.
+    // ==========================================
 
-      LOCAL_BACKUP_DIR = null;
-      LOCAL_BACKUP_READY = false;
+    if (permission === "prompt") {
 
-      return false;
-    }
+        LOCAL_BACKUP_DIR = dir;
+        LOCAL_BACKUP_READY = false;
+      
+        updateLocalBackupStatus();
+      
+        console.log(
+          "🔐 LOCAL_COMPLETED folder found but permission " +
+          "requires user confirmation:",
+          dir.name
+        );
+      
+        return false;
+      }
 
-    LOCAL_BACKUP_DIR = dir;
-    LOCAL_BACKUP_READY = true;
+    // ==========================================
+    // Permission denied
+    // ==========================================
 
-    console.log(
-      "✅ LOCAL_COMPLETED backup folder restored:",
-      dir.name
+    console.warn(
+      "⚠️ LOCAL_COMPLETED backup folder permission denied."
     );
 
-    return true;
+    LOCAL_BACKUP_DIR = null;
+    LOCAL_BACKUP_READY = false;
+
+    updateLocalBackupStatus();
+
+    return false;
 
   } catch (err) {
 
@@ -1525,6 +1630,83 @@ async function restoreLocalBackupFolder() {
 
     LOCAL_BACKUP_DIR = null;
     LOCAL_BACKUP_READY = false;
+
+    updateLocalBackupStatus();
+
+    return false;
+  }
+}
+
+// =====================================================
+// 🔐 RECONNECT SAVED LOCAL BACKUP FOLDER
+// =====================================================
+
+async function reconnectLocalBackupFolder() {
+
+  try {
+
+    // If we don't have the handle in memory,
+    // load it from IndexedDB.
+    if (!LOCAL_BACKUP_DIR) {
+
+      LOCAL_BACKUP_DIR =
+        await loadLocalBackupFolderHandle();
+    }
+
+    if (!LOCAL_BACKUP_DIR) {
+
+      alert(
+        "⚠️ No saved LOCAL_COMPLETED backup folder.\n\n" +
+        "Please select the folder first."
+      );
+
+      return false;
+    }
+
+    const permission =
+      await LOCAL_BACKUP_DIR.requestPermission({
+        mode: "readwrite"
+      });
+
+    if (permission !== "granted") {
+
+        LOCAL_BACKUP_READY = false;
+      
+        updateLocalBackupStatus();
+      
+        alert(
+          "⚠️ Permission to access the backup folder " +
+          "was not granted."
+        );
+      
+        return false;
+      }
+
+    LOCAL_BACKUP_READY = true;
+    updateLocalBackupStatus();
+
+    console.log(
+      "✅ LOCAL_COMPLETED backup folder reconnected:",
+      LOCAL_BACKUP_DIR.name
+    );
+
+    alert(
+      "✅ LOCAL_COMPLETED backup folder connected.\n\n" +
+      "Folder: " +
+      LOCAL_BACKUP_DIR.name
+    );
+
+    return true;
+
+  } catch (err) {
+
+    console.error(
+      "❌ Failed to reconnect backup folder:",
+      err
+    );
+
+    LOCAL_BACKUP_READY = false;
+     updateLocalBackupStatus();
 
     return false;
   }
@@ -1600,6 +1782,9 @@ async function selectLocalBackupFolder() {
 
     LOCAL_BACKUP_DIR = dir;
    LOCAL_BACKUP_READY = true;
+
+   // 💾 Update UI
+   updateLocalBackupStatus();
    
    // 💾 Persist the folder handle
    await saveLocalBackupFolderHandle(dir);
