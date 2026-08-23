@@ -628,7 +628,7 @@ import {
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "V.R.0.0.16.1.3.5";
+const VERSION = "V.R.0.0.16.1.3.6";
 const BILLING_CACHE = {};
 window.BILLING_CACHE = BILLING_CACHE;
 const DRIVER_UI_CACHE = {};
@@ -1191,14 +1191,6 @@ async function recoverTasksFromFiles() {
                 }
               );
             
-              continue;
-            }
-
-          if (
-              !photo.base64 ||
-              photo.photoIndex === undefined ||
-              photo.photoIndex === null
-            ) {
               continue;
             }
 
