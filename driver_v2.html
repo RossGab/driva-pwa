@@ -599,6 +599,13 @@ img { width:100%;margin-top:8px;border-radius:6px; }
   <div id="scrollSentinel"></div>
 </div>
 <input type="file" id="cameraInput" accept="image/*" capture="environment" hidden>
+<input
+  type="file"
+  id="recoveryFileInput"
+  accept=".json,application/json"
+  multiple
+  hidden
+>
 <script src="https://unpkg.com/html5-qrcode"></script>
 
 <script type="module">
@@ -621,7 +628,7 @@ import {
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "V.R.0.0.16.1.3";
+const VERSION = "V.R.0.0.16.1.3.1";
 const BILLING_CACHE = {};
 window.BILLING_CACHE = BILLING_CACHE;
 const DRIVER_UI_CACHE = {};
@@ -898,6 +905,265 @@ async function getTasksFromIndexedDB() {
     const req = tx.objectStore(TASK_STORE).getAll();
     req.onsuccess = () => resolve(req.result || []);
   });
+}
+
+// =====================================================
+// ♻️ RECOVER LOCAL COMPLETED TASKS
+// =====================================================
+
+async function recoverTasksFromFiles() {
+
+  if (SYNC_RUNNING) {
+    alert(
+      "⏳ Sync is currently running.\n\n" +
+      "Please wait until synchronization is complete."
+    );
+    return;
+  }
+
+  const input =
+    document.getElementById("recoveryFileInput");
+
+  if (!input) {
+    alert("❌ Recovery file input not found.");
+    return;
+  }
+
+  // Reset so the same files can be selected again
+  input.value = "";
+
+  input.onchange = async () => {
+
+    const files =
+      Array.from(input.files || []);
+
+    if (!files.length) {
+      return;
+    }
+
+    let recovered = 0;
+    let skipped = 0;
+
+    try {
+
+      for (const file of files) {
+
+        // Only accept LOCAL_COMPLETED backups
+        if (
+          !file.name.startsWith(
+            "LOCAL_COMPLETED_"
+          )
+        ) {
+          console.warn(
+            "⏭️ Skipping non-recovery file:",
+            file.name
+          );
+          skipped++;
+          continue;
+        }
+
+        let backup;
+
+        try {
+          backup =
+            JSON.parse(
+              await file.text()
+            );
+        } catch (err) {
+
+          console.error(
+            "❌ Invalid recovery JSON:",
+            file.name,
+            err
+          );
+
+          skipped++;
+          continue;
+        }
+
+        // ==========================================
+        // REQUIRED FIELDS
+        // ==========================================
+
+        if (!backup._key) {
+
+          console.warn(
+            "⏭️ Recovery file has no task key:",
+            file.name
+          );
+
+          skipped++;
+          continue;
+        }
+
+        if (!backup.dateKey) {
+
+          console.warn(
+            "⏭️ Recovery file has no dateKey:",
+            file.name
+          );
+
+          skipped++;
+          continue;
+        }
+
+        // ==========================================
+        // RESTORE TASK TO INDEXEDDB
+        // ==========================================
+
+        await saveTasksToIndexedDB([
+          {
+            ...backup,
+
+            _key:
+              backup._key,
+
+            status:
+              "LOCAL_COMPLETED",
+
+            driverId:
+              backup.driverId || DRIVER_ID,
+
+            dateKey:
+              backup.dateKey,
+
+            deliveryData:
+              backup.deliveryData || {},
+
+            exported:
+              false
+          }
+        ]);
+
+        // ==========================================
+        // RESTORE PHOTOS IF INCLUDED
+        // ==========================================
+
+        if (
+          Array.isArray(
+            backup.photos
+          )
+        ) {
+
+          for (
+            const photo of backup.photos
+          ) {
+
+            if (
+              !photo.base64 ||
+              !photo.photoIndex
+            ) {
+              continue;
+            }
+
+            try {
+
+              const response =
+                await fetch(
+                  photo.base64
+                );
+
+              const blob =
+                await response.blob();
+
+              await savePhotoToDB({
+
+                id:
+                  photo.id ||
+                  `${backup._key}_${photo.photoIndex}`,
+
+                taskKey:
+                  backup._key,
+
+                photoIndex:
+                  photo.photoIndex,
+
+                blob,
+
+                takenAt:
+                  photo.takenAt ||
+                  new Date().toISOString(),
+
+                gps:
+                  photo.gps || null,
+
+                submitIntent:
+                  true
+              });
+
+            } catch (photoErr) {
+
+              console.error(
+                "❌ Failed to restore photo:",
+                {
+                  taskKey:
+                    backup._key,
+
+                  photoIndex:
+                    photo.photoIndex,
+
+                  error:
+                    photoErr
+                }
+              );
+
+            }
+          }
+        }
+
+        recovered++;
+
+        console.log(
+          "♻️ Task recovered:",
+          backup._key
+        );
+      }
+
+      // ==========================================
+      // REFRESH UPLOAD COUNTER
+      // ==========================================
+
+      const tasks =
+        await getTasksFromIndexedDB();
+
+      UPLOAD_QUEUE_COUNT =
+        tasks.filter(t =>
+          t.status === "LOCAL_COMPLETED" &&
+          !t.exported &&
+          String(
+            t.driverId || ""
+          ).trim().toUpperCase() ===
+          String(
+            DRIVER_ID
+          ).trim().toUpperCase()
+        ).length;
+
+      updateUploadCounter();
+
+      await loadTasks();
+
+      alert(
+        `♻️ Recovery complete!\n\n` +
+        `Recovered: ${recovered}\n` +
+        `Skipped: ${skipped}`
+      );
+
+    } catch (err) {
+
+      console.error(
+        "❌ Task recovery failed:",
+        err
+      );
+
+      alert(
+        "❌ Task recovery failed.\n\n" +
+        (err?.message ||
+          "Unknown error.")
+      );
+    }
+  };
+
+  input.click();
 }
 
 // =============================
@@ -1293,16 +1559,79 @@ let DRIVER_ID = localStorage.getItem("driverId");
 while (!DRIVER_ID) DRIVER_ID = prompt("Enter Driver ID");
 localStorage.setItem("driverId", DRIVER_ID);
 
-document.getElementById("settingsBtn").onclick = () => {
-  const current = localStorage.getItem("driverId") || "";
+document.getElementById("settingsBtn").onclick = async () => {
 
-  const next = prompt("Enter new Driver ID", current);
-  if (!next) return;
-  if (next === current) return;
+  const choice = prompt(
+`Settings
 
-  localStorage.setItem("driverId", next);
-  alert("Driver ID changed. Reloading…");
-  location.reload();
+1 - Change Driver ID
+2 - Recover Tasks
+
+Enter 1 or 2`
+  );
+
+  if (!choice) {
+    return;
+  }
+
+  // ==========================================
+  // 1 — CHANGE DRIVER ID
+  // ==========================================
+
+  if (choice === "1") {
+
+    const current =
+      localStorage.getItem("driverId") || "";
+
+    const next =
+      prompt(
+        "Enter new Driver ID",
+        current
+      );
+
+    if (!next) return;
+
+    if (next === current) return;
+
+    localStorage.setItem(
+      "driverId",
+      next
+    );
+
+    alert(
+      "Driver ID changed. Reloading…"
+    );
+
+    location.reload();
+
+    return;
+  }
+
+  // ==========================================
+  // 2 — RECOVER TASKS
+  // ==========================================
+
+  if (choice === "2") {
+
+    if (
+      !confirm(
+        "♻️ Recover completed tasks?\n\n" +
+        "Select the LOCAL_COMPLETED JSON files " +
+        "from your Downloads folder.\n\n" +
+        "The files will NOT be deleted."
+      )
+    ) {
+      return;
+    }
+
+    await recoverTasksFromFiles();
+
+    return;
+  }
+
+  alert(
+    "⚠️ Invalid selection."
+  );
 };
 
 let gpsWatchId = null;
@@ -2576,31 +2905,112 @@ cameraInput.onchange = async e => {
     deliveryData: latestData // 🔥 IMPORTANT
   }]);
 
+  // ==============================
+   // 💾 AUTO-DOWNLOAD LOCAL COMPLETED JSON
    // ==============================
-// 💾 AUTO-DOWNLOAD LOCAL COMPLETED JSON
-// ==============================
-try {
-  const taskData = {
-    _key: taskKey,
-    status: "LOCAL_COMPLETED",
-    driverId: DRIVER_ID,
-    dateKey: dateFilter.value.replace(/-/g, ""),
-    deliveryData: latestData
-  };
-
-  const jsonBlob = new Blob(
-    [JSON.stringify(taskData, null, 2)],
-    { type: "application/json" }
-  );
-
-  const filename = `LOCAL_COMPLETED_${taskKey}.json`;
-
-  saveToGallery(jsonBlob, filename);
-
-  console.log("✅ LOCAL_COMPLETED JSON downloaded:", filename);
-} catch (err) {
-  console.error("❌ Failed to create LOCAL_COMPLETED JSON:", err);
-}
+   try {
+   
+     const taskPhotos =
+       Object.values(
+         PHOTO_BUFFER[taskKey] || {}
+       );
+   
+     const backupPhotos = [];
+   
+     for (const photo of taskPhotos) {
+   
+       const base64 =
+         await blobToBase64(
+           photo.blob
+         );
+   
+       backupPhotos.push({
+   
+         id:
+           `${taskKey}_${photo.photoIndex}`,
+   
+         taskKey,
+   
+         photoIndex:
+           photo.photoIndex,
+   
+         takenAt:
+           photo.takenAt,
+   
+         gps:
+           photo.gps || null,
+   
+         base64
+       });
+     }
+   
+     const taskData = {
+   
+       _key:
+         taskKey,
+   
+       status:
+         "LOCAL_COMPLETED",
+   
+       driverId:
+         DRIVER_ID,
+   
+       dateKey:
+         dateFilter.value.replace(
+           /-/g,
+           ""
+         ),
+   
+       deliveryData:
+         latestData,
+   
+       photos:
+         backupPhotos
+     };
+   
+     const jsonBlob =
+       new Blob(
+         [
+           JSON.stringify(
+             taskData,
+             null,
+             2
+           )
+         ],
+         {
+           type:
+             "application/json"
+         }
+       );
+   
+     const filename =
+       `LOCAL_COMPLETED_${taskKey}.json`;
+   
+     saveToGallery(
+       jsonBlob,
+       filename
+     );
+   
+     console.log(
+       "✅ LOCAL_COMPLETED recovery backup downloaded:",
+       {
+         filename,
+         taskKey,
+         dateKey:
+           taskData.dateKey,
+         photos:
+           backupPhotos.length
+       }
+     );
+   
+   } catch (err) {
+   
+     console.error(
+       "❌ Failed to create LOCAL_COMPLETED JSON:",
+       err
+     );
+   
+   }
 
    // ==========================================
 // 🗺 UPDATE IN-MEMORY TASK STATUS
