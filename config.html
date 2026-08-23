@@ -542,6 +542,7 @@ textarea{
     minmax(0,1fr)
     92px
     auto
+    auto
     27px;
 
   align-items:center;
@@ -1002,7 +1003,7 @@ textarea{
   <div>
 
     <h1>
-      🚚 Driva Delivery Template Maker V.R.0.0.17.3
+      🚚 Driva Delivery Template Maker V.R.0.0.17.4
     </h1>
 
     <p>
@@ -1194,15 +1195,19 @@ textarea{
               <option value="text">
                 Text
               </option>
-
+            
               <option value="textarea">
                 Textarea
               </option>
-
+            
+              <option value="dropdown">
+                Dropdown
+              </option>
+            
               <option value="radio">
                 Radio Group
               </option>
-
+            
             </select>
 
           </div>
@@ -2286,6 +2291,16 @@ function renderFields(){
                   Textarea
                 </option>
 
+                <option
+                  value="dropdown"
+                  ${
+                    f.type === "dropdown"
+                      ? "selected"
+                      : ""
+                  }
+                >
+                  Dropdown
+                </option>
 
                 <option
                   value="radio"
@@ -2341,6 +2356,12 @@ function renderFields(){
           
                 </label>
               `
+              : ""
+          }
+
+          ${
+            f.type === "dropdown"
+              ? dropdownEditor(f)
               : ""
           }
 
@@ -2410,19 +2431,41 @@ function renderFields(){
           if(
             f.type === "radio"
           ){
-
+          
             f.fields ||= {
-
+          
               _order:[],
-
+          
               options:{}
-
+          
             };
-
-          }else{
-
+          
+          
+            delete f.options;
+          
+            f.numbersOnly = false;
+          
+          }
+          
+          else if(
+            f.type === "dropdown"
+          ){
+          
             delete f.fields;
-
+          
+            f.options ||=
+              [];
+          
+            f.numbersOnly = false;
+          
+          }
+          
+          else{
+          
+            delete f.fields;
+          
+            delete f.options;
+          
           }
 
 
@@ -2548,10 +2591,196 @@ function renderFields(){
         key
       );
 
+      wireDropdownEditor(
+        card,
+        f
+      );
+
 
       list.appendChild(
         card
       );
+
+    }
+  );
+
+}
+
+/* =========================================================
+   DROPDOWN EDITOR
+   ========================================================= */
+
+function dropdownEditor(
+  field
+){
+
+  field.options ||=
+    [];
+
+
+  return `
+
+    <div class="radio-editor">
+
+      <div class="radio-title">
+        DROPDOWN OPTIONS
+      </div>
+
+
+      <div
+        class="note"
+        style="margin-bottom:7px"
+      >
+        Add the choices that the driver can select.
+      </div>
+
+
+      ${
+        field.options
+          .map(
+            (option,index) => `
+
+              <div
+                style="
+                  display:grid;
+                  grid-template-columns:1fr 27px;
+                  gap:5px;
+                  margin-bottom:5px;
+                "
+              >
+
+                <input
+                  data-dropdown-option="${index}"
+                  value="${esc(option)}"
+                  placeholder="Option"
+                >
+
+
+                <button
+                  class="icon"
+                  data-dropdown-remove="${index}"
+                  title="Remove option"
+                >
+                  ×
+                </button>
+
+              </div>
+
+            `
+          )
+          .join("")
+      }
+
+
+      <button
+        class="btn small"
+        data-dropdown-add
+      >
+        ＋ Add Dropdown Option
+      </button>
+
+    </div>
+
+  `;
+
+}
+
+/* =========================================================
+   WIRE DROPDOWN EDITOR
+   ========================================================= */
+
+function wireDropdownEditor(
+  card,
+  field
+){
+
+  if(
+    field.type !== "dropdown"
+  ){
+
+    return;
+
+  }
+
+
+  field.options ||=
+    [];
+
+
+  const addButton =
+    card.querySelector(
+      "[data-dropdown-add]"
+    );
+
+
+  if(addButton){
+
+    addButton.onclick =
+      () => {
+
+        field.options.push(
+          `Option ${field.options.length + 1}`
+        );
+
+
+        render();
+
+      };
+
+  }
+
+
+  card.querySelectorAll(
+    "[data-dropdown-option]"
+  ).forEach(
+    input => {
+
+      input.onchange =
+        () => {
+
+          const index =
+            Number(
+              input.dataset.dropdownOption
+            );
+
+
+          field.options[index] =
+            input.value.trim();
+
+
+          renderPreview();
+
+          renderJSON();
+
+        };
+
+    }
+  );
+
+
+  card.querySelectorAll(
+    "[data-dropdown-remove]"
+  ).forEach(
+    button => {
+
+      button.onclick =
+        () => {
+
+          const index =
+            Number(
+              button.dataset.dropdownRemove
+            );
+
+
+          field.options.splice(
+            index,
+            1
+          );
+
+
+          render();
+
+        };
 
     }
   );
@@ -3390,6 +3619,15 @@ window.addField =
       };
 
     }
+    
+    if(
+      type === "dropdown"
+    ){
+    
+      m.fields[key].options =
+        [];
+    
+    }
 
 
     $("newFieldLabel")
@@ -3448,6 +3686,71 @@ function createDriverField(
 
 
   if(
+  field.type === "dropdown"
+){
+
+  const select =
+    document.createElement(
+      "select"
+    );
+
+
+  select.className =
+    "driver-input";
+
+
+  const emptyOption =
+    document.createElement(
+      "option"
+    );
+
+
+  emptyOption.value =
+    "";
+
+  emptyOption.textContent =
+    "-- Select --";
+
+
+  select.appendChild(
+    emptyOption
+  );
+
+
+  (
+    field.options ||
+    []
+  ).forEach(
+    optionValue => {
+
+      const option =
+        document.createElement(
+          "option"
+        );
+
+
+      option.value =
+        optionValue;
+
+      option.textContent =
+        optionValue;
+
+
+      select.appendChild(
+        option
+      );
+
+    }
+  );
+
+
+  wrap.appendChild(
+    select
+  );
+
+}
+
+else if(
   field.type === "textarea"
 ){
 
