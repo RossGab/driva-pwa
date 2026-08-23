@@ -628,7 +628,7 @@ import {
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "V.R.0.0.16.1.3.4";
+const VERSION = "V.R.0.0.16.1.3.5";
 const BILLING_CACHE = {};
 window.BILLING_CACHE = BILLING_CACHE;
 const DRIVER_UI_CACHE = {};
@@ -1172,11 +1172,35 @@ async function recoverTasksFromFiles() {
         ) {
 
           if (
-            !photo.base64 ||
-            !photo.photoIndex
-          ) {
-            continue;
-          }
+              photo.photoIndex === undefined ||
+              photo.photoIndex === null
+            ) {
+            
+              alert(
+                "⚠️ OLD RECOVERY FILE\n\n" +
+                "Task: " + backup._key + "\n\n" +
+                "This backup was created before photoIndex was added.\n" +
+                "Its photo cannot be restored correctly."
+              );
+            
+              console.warn(
+                "⚠️ Recovery photo has no photoIndex:",
+                {
+                  taskKey: backup._key,
+                  photoId: photo.id
+                }
+              );
+            
+              continue;
+            }
+
+          if (
+              !photo.base64 ||
+              photo.photoIndex === undefined ||
+              photo.photoIndex === null
+            ) {
+              continue;
+            }
 
           try {
 
@@ -1925,26 +1949,75 @@ for (let taskIndex = 0; taskIndex < completed.length; taskIndex++) {
   });
   const related = photos.filter(p => p.taskKey === task._key);
 
+   if (related.length === 0) {
+
+        failed++;
+      
+        updateSyncProgress({
+          current: taskIndex + 1,
+          total: completed.length,
+          currentTask:
+            `${task._key}${task.CUSTOMERNAME ? " — " + task.CUSTOMERNAME : ""}`,
+          currentPhoto:
+            "❌ No recovered photos",
+          successful,
+          failed,
+          message:
+            "❌ Recovery file contains no usable photo records"
+        });
+      
+        alert(
+          "❌ CANNOT UPLOAD RECOVERED TASK\n\n" +
+          "Task: " +
+          task._key +
+          "\n\n" +
+          "No usable photos were restored.\n\n" +
+          "This usually means the JSON was created before the photoIndex fix."
+        );
+      
+        continue;
+      }
+
     let allUploaded = true;
 
     for (let i = 0; i < related.length; i++) {
 
     const p = related[i];
-  
-    updateSyncProgress({
-      current: taskIndex,
-      total: completed.length,
-      currentTask:
-        `${task._key}${task.CUSTOMERNAME ? " — " + task.CUSTOMERNAME : ""}`,
-      currentPhoto:
-        `📸 Uploading photo ${i + 1} of ${related.length}`,
-      successful,
-      failed,
-      message:
-        `🔄 Processing task ${taskIndex + 1} of ${completed.length}`
-    });
+
+   updateSyncProgress({
+        current: taskIndex,
+        total: completed.length,
+        currentTask:
+          `${task._key}${task.CUSTOMERNAME ? " — " + task.CUSTOMERNAME : ""}`,
+        currentPhoto:
+          `📸 Photo ${i + 1}/${related.length} | index=${p.photoIndex}`,
+        successful,
+        failed,
+        message:
+          `🔍 Checking recovered photo...`
+      });
   
     try {
+
+        if (
+           !(p.blob instanceof Blob) ||
+           p.blob.size === 0
+         ) {
+         
+           alert(
+             "❌ INVALID RECOVERED PHOTO\n\n" +
+             "Task: " +
+             task._key +
+             "\n" +
+             "Photo: " +
+             p.photoIndex +
+             "\n\n" +
+             "The recovered photo Blob is missing or empty."
+           );
+         
+           allUploaded = false;
+           break;
+         }
 
         const latestData = task.deliveryData || {};
 
@@ -3066,13 +3139,13 @@ cameraInput.onchange = async e => {
    try {
    
      const taskPhotos =
-       Object.values(
-         PHOTO_BUFFER[taskKey] || {}
-       );
-   
-     const backupPhotos = [];
-   
-     for (const photo of taskPhotos) {
+        Object.entries(
+          PHOTO_BUFFER[taskKey] || {}
+        );
+      
+      const backupPhotos = [];
+      
+      for (const [photoIndex, photo] of taskPhotos) {
    
        const base64 =
          await blobToBase64(
@@ -3082,12 +3155,12 @@ cameraInput.onchange = async e => {
        backupPhotos.push({
    
          id:
-           `${taskKey}_${photo.photoIndex}`,
-   
+           `${taskKey}_${photoIndex}`,
+         
          taskKey,
-   
+         
          photoIndex:
-           photo.photoIndex,
+           Number(photoIndex),
    
          takenAt:
            photo.takenAt,
@@ -3440,15 +3513,31 @@ async function uploadNow(
       blob
     );
 
-  } catch (err) {
+  } } catch (err) {
 
-    console.error(
-      "❌ Storage upload failed:",
-      err
-    );
+  console.error(
+    "❌ Storage upload failed:",
+    err
+  );
 
-    return false;
-  }
+  alert(
+    "❌ FIREBASE STORAGE ERROR\n\n" +
+    "Task: " +
+    taskKey +
+    "\n" +
+    "Photo: " +
+    photoIndex +
+    "\n\n" +
+    "Error:\n" +
+    (
+      err?.code ||
+      err?.message ||
+      String(err)
+    )
+  );
+
+  return false;
+}
 
   // ==========================================
   // 4. GET DOWNLOAD URL
@@ -3545,13 +3634,26 @@ async function uploadNow(
 
   } catch (err) {
 
-    console.error(
-      "❌ Firestore TASK update failed:",
-      err
-    );
+  console.error(
+    "❌ Firestore TASK update failed:",
+    err
+  );
 
-    return false;
-  }
+  alert(
+    "❌ FIRESTORE UPDATE ERROR\n\n" +
+    "Task: " +
+    taskKey +
+    "\n\n" +
+    "Error:\n" +
+    (
+      err?.code ||
+      err?.message ||
+      String(err)
+    )
+  );
+
+  return false;
+}
 
   // ==========================================
   // 8. VERIFY FIRESTORE IMMEDIATELY
