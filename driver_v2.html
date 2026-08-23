@@ -628,7 +628,7 @@ import {
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "V.R.0.0.16.1.3.2";
+const VERSION = "V.R.0.0.16.1.3.3";
 const BILLING_CACHE = {};
 window.BILLING_CACHE = BILLING_CACHE;
 const DRIVER_UI_CACHE = {};
@@ -1053,31 +1053,103 @@ async function recoverTasksFromFiles() {
       // ==========================================
       // RESTORE TASK
       // ==========================================
-
-      await saveTasksToIndexedDB([
-        {
-          ...backup,
-
-          _key:
+      
+      let recoveredTask = {
+        ...backup
+      };
+      
+      // ==========================================
+      // 🔥 RECOVER ORIGINAL TASK DATA
+      // ==========================================
+      // If the backup was created before we started
+      // saving the complete task, get the original
+      // task from Firestore using the task key.
+      
+      if (navigator.onLine) {
+      
+        try {
+      
+          const taskRef =
+            fsDoc(
+              firestore,
+              "TASK",
+              backup._key
+            );
+      
+          const taskSnap =
+            await getDoc(taskRef);
+      
+          if (taskSnap.exists()) {
+      
+            const firestoreData =
+              taskSnap.data();
+      
+            const firestoreTask =
+              normalizeFirestoreTask(
+                firestoreData,
+                backup._key,
+                backup.dateKey
+              );
+      
+            // Firestore task data first,
+            // then restore local completion data.
+            recoveredTask = {
+      
+              ...firestoreTask,
+      
+              ...backup,
+      
+              // Keep normalized task fields
+              _key:
+                backup._key,
+      
+              dateKey:
+                backup.dateKey,
+      
+              // Local state MUST remain LOCAL_COMPLETED
+              status:
+                "LOCAL_COMPLETED",
+      
+              driverId:
+                backup.driverId ||
+                firestoreTask.driverId ||
+                DRIVER_ID,
+      
+              deliveryData:
+                backup.deliveryData ||
+                {},
+      
+              exported:
+                false
+            };
+      
+            console.log(
+              "♻️ Original Firestore task restored:",
+              recoveredTask
+            );
+      
+          } else {
+      
+            console.warn(
+              "⚠️ Firestore task not found:",
+              backup._key
+            );
+      
+          }
+      
+        } catch (err) {
+      
+          console.warn(
+            "⚠️ Could not restore task metadata from Firestore:",
             backup._key,
-
-          status:
-            "LOCAL_COMPLETED",
-
-          driverId:
-            backup.driverId ||
-            DRIVER_ID,
-
-          dateKey:
-            backup.dateKey,
-
-          deliveryData:
-            backup.deliveryData ||
-            {},
-
-          exported:
-            false
+            err
+          );
+      
         }
+      }
+      
+      await saveTasksToIndexedDB([
+        recoveredTask
       ]);
 
       console.log(
@@ -2940,6 +3012,14 @@ cameraInput.onchange = async e => {
   const latestData =
   BILLING_CACHE[taskKey] || {};
 
+  const currentTasks =
+     await getTasksFromIndexedDB();
+   
+   const originalTask =
+     currentTasks.find(
+       t => t._key === taskKey
+     ) || {};
+
   await saveTasksToIndexedDB([{
     _key: taskKey,
     status: "LOCAL_COMPLETED",
@@ -2987,29 +3067,33 @@ cameraInput.onchange = async e => {
        });
      }
    
-     const taskData = {
-   
-       _key:
-         taskKey,
-   
-       status:
-         "LOCAL_COMPLETED",
-   
-       driverId:
-         DRIVER_ID,
-   
-       dateKey:
-         dateFilter.value.replace(
-           /-/g,
-           ""
-         ),
-   
-       deliveryData:
-         latestData,
-   
-       photos:
-         backupPhotos
-     };
+    const taskData = {
+
+        // 🔥 KEEP THE COMPLETE ORIGINAL TASK
+        ...originalTask,
+      
+        // 🔥 LOCAL COMPLETION STATE
+        _key:
+          taskKey,
+      
+        status:
+          "LOCAL_COMPLETED",
+      
+        driverId:
+          DRIVER_ID,
+      
+        dateKey:
+          dateFilter.value.replace(
+            /-/g,
+            ""
+          ),
+      
+        deliveryData:
+          latestData,
+      
+        photos:
+          backupPhotos
+      };
    
      const jsonBlob =
        new Blob(
