@@ -146,7 +146,8 @@ button.capture {
 }
 
 .delivery-fields input,
-.delivery-fields textarea {
+.delivery-fields textarea,
+.delivery-fields select {
   width: 100%;
   padding: 8px;
   font-size: 14px;
@@ -2687,7 +2688,7 @@ function syncDynamicFields(taskKey) {
 
   if (!BILLING_CACHE[taskKey]) return;
 
-  const inputs = box.querySelectorAll("input, textarea");
+  const inputs = box.querySelectorAll("input[data-key], textarea[data-key], select[data-key]");
 
   const allowedKeys = new Set();
 
@@ -2709,6 +2710,7 @@ function syncDynamicFields(taskKey) {
     const fieldKey = el.getAttribute("data-key");
     if (!fieldKey) return;
 
+    if (el.type === "radio" && !el.checked) return;
     BILLING_CACHE[taskKey][fieldKey] = el.value.trim();
   });
   // ✅ PERSIST FORM STATE
@@ -7054,7 +7056,7 @@ function markTaskCompletedInCache(taskKey) {
 }
 
 
-window.handleDeliveryMethod = async function(taskKey, jobType, method) {
+window.handleDeliveryMethodLegacy = async function(taskKey, jobType, method) {
   if (!BILLING_CACHE[taskKey]) BILLING_CACHE[taskKey] = {};
     BILLING_CACHE[taskKey].deliveryType = method;
 
@@ -7116,7 +7118,7 @@ window.handleDeliveryMethod = async function(taskKey, jobType, method) {
 });
 };
 
-window.handleRadioTrigger = async function(taskKey, jobType, method, radioKey) {
+window.handleRadioTriggerLegacy = async function(taskKey, jobType, method, radioKey) {
 
   if (!BILLING_CACHE[taskKey]) {
     BILLING_CACHE[taskKey] = {};
@@ -7211,6 +7213,105 @@ window.handleRadioTrigger = async function(taskKey, jobType, method, radioKey) {
     ...loadFormCache(),
     [taskKey]: BILLING_CACHE[taskKey]
   });
+};
+
+function escapeDeliveryHTML(value) {
+  return String(value ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#039;");
+}
+
+function deliveryFieldHTML(key, field, radioName = "") {
+  const safeKey = escapeDeliveryHTML(key);
+  const label = escapeDeliveryHTML(field.label || key);
+  const required = field.required ? " *" : "";
+  const numeric = field.numbersOnly ? ' inputmode="numeric" pattern="[0-9]*" data-numbers-only' : "";
+
+  if (field.type === "radio") {
+    return `<label><input type="radio" name="${escapeDeliveryHTML(radioName)}" data-key="${safeKey}" value="${safeKey}"> ${label}${required}</label>`;
+  }
+  if (field.type === "textarea") {
+    return `<div class="delivery-fields"><label>${label}${required}</label><textarea data-key="${safeKey}"${numeric}></textarea></div>`;
+  }
+  if (field.type === "dropdown") {
+    const options = (field.options || []).map(value => {
+      const safeValue = escapeDeliveryHTML(value);
+      return `<option value="${safeValue}">${safeValue}</option>`;
+    }).join("");
+    return `<div class="delivery-fields"><label>${label}${required}</label><select data-key="${safeKey}"><option value="">-- Select --</option>${options}</select></div>`;
+  }
+  return `<div class="delivery-fields"><label>${label}${required}</label><input type="text" data-key="${safeKey}"${numeric}></div>`;
+}
+
+function hydrateDeliveryFields(box, taskKey) {
+  const saved = BILLING_CACHE[taskKey] || {};
+  box.querySelectorAll("[data-key]").forEach(el => {
+    const key = el.dataset.key;
+    if (el.type === "radio") el.checked = saved[key] === el.value;
+    else if (saved[key] !== undefined) el.value = saved[key];
+    el.addEventListener("input", () => {
+      if (el.hasAttribute("data-numbers-only")) el.value = el.value.replace(/[^0-9]/g, "");
+      if (el.type !== "radio" || el.checked) saved[key] = el.value;
+    });
+    el.addEventListener("change", () => syncDynamicFields(taskKey));
+  });
+}
+
+window.handleDeliveryMethod = async function(taskKey, jobType, method) {
+  if (!BILLING_CACHE[taskKey]) BILLING_CACHE[taskKey] = {};
+  const saved = BILLING_CACHE[taskKey];
+  if (saved.deliveryType && saved.deliveryType !== method) delete saved.deliverytype_2nd;
+  saved.deliveryType = method;
+
+  const cfg = await loadDriverUI(jobType);
+  const block = cfg?.[method];
+  const box = document.getElementById(`dyn_${taskKey}`);
+  if (!box || !block) return;
+
+  let html = "";
+  const radioFields = [];
+  for (const key of block._order || []) {
+    const field = block.fields?.[key];
+    if (!field) continue;
+    if (field.type === "radio") radioFields.push({ key, field });
+    else html += deliveryFieldHTML(key, field);
+  }
+  for (const { key, field } of radioFields) {
+    html += `<div class="radio-group"><label><input type="radio" name="radio_${escapeDeliveryHTML(taskKey)}" value="${escapeDeliveryHTML(key)}"> ${escapeDeliveryHTML(field.label || key)}</label></div>`;
+  }
+  html += `<div id="sub_${escapeDeliveryHTML(taskKey)}"></div>`;
+  box.innerHTML = html;
+  hydrateDeliveryFields(box, taskKey);
+
+  const statusRadios = box.querySelectorAll(`input[name="radio_${CSS.escape(taskKey)}"]`);
+  statusRadios.forEach(radio => radio.addEventListener("change", () => {
+    if (radio.checked) handleRadioTrigger(taskKey, jobType, method, radio.value);
+  }));
+  const selected = radioFields.some(item => item.key === saved.deliverytype_2nd)
+    ? saved.deliverytype_2nd : radioFields[0]?.key;
+  if (selected) {
+    const radio = [...statusRadios].find(item => item.value === selected);
+    if (radio) radio.checked = true;
+    await handleRadioTrigger(taskKey, jobType, method, selected);
+  } else syncDynamicFields(taskKey);
+};
+
+window.handleRadioTrigger = async function(taskKey, jobType, method, radioKey) {
+  if (!BILLING_CACHE[taskKey]) BILLING_CACHE[taskKey] = {};
+  syncDynamicFields(taskKey);
+  BILLING_CACHE[taskKey].deliverytype_2nd = radioKey;
+  const cfg = await loadDriverUI(jobType);
+  const radioBlock = cfg?.[method]?.fields?.[radioKey];
+  const box = document.getElementById(`sub_${taskKey}`);
+  if (!box) return;
+
+  let html = "";
+  for (const key of radioBlock?.fields?._order || []) {
+    const field = radioBlock.fields.options?.[key];
+    if (field) html += deliveryFieldHTML(key, field, `conditional_${taskKey}_${radioKey}`);
+  }
+  box.innerHTML = html;
+  hydrateDeliveryFields(box, taskKey);
+  syncDynamicFields(taskKey);
 };
 
 async function exportTasksToFile() {
