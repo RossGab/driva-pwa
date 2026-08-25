@@ -629,7 +629,7 @@ import {
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   
-const VERSION = "V.R.0.0.16.1.3.8";
+const VERSION = "V.R.0.0.16.1.3.9";
 const BILLING_CACHE = {};
 window.BILLING_CACHE = BILLING_CACHE;
 const DRIVER_UI_CACHE = {};
@@ -6237,49 +6237,13 @@ window.openTaskFromMap =
       return;
     }
 
-    // Close map
+    // Close the map and replace the list with the selected task.
+    // CURRENT_RENDER_LIST is intentionally left unchanged so reopening
+    // the map still shows the complete filtered task set.
     closeDriverTaskMap();
 
-    // Make this task the active capture task
-    // only if your existing task-open behavior
-    // requires it.
-    const target =
-      document.querySelector(
-        `[data-task-key="${taskKey}"]`
-      );
-
-    if (target) {
-
-      target.scrollIntoView({
-        behavior: "smooth",
-        block: "center"
-      });
-
-      return;
-    }
-
-    // Fallback:
-    // re-render the list and scroll after rendering.
-    renderWithPagination(
-      CURRENT_RENDER_LIST
-    );
-
-    setTimeout(() => {
-
-      const el =
-        document.querySelector(
-          `[data-task-key="${taskKey}"]`
-        );
-
-      if (el) {
-
-        el.scrollIntoView({
-          behavior: "smooth",
-          block: "center"
-        });
-      }
-
-    }, 100);
+    taskList.innerHTML = "";
+    renderOneTask(task);
   };
 // =====================================================
 // 💾 SAVE CURRENT DRIVER TASK MAP STATE
